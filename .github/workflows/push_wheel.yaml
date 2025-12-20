@@ -1,0 +1,61 @@
+name: Push wheel
+
+# https://help.github.com/en/actions/reference/events-that-trigger-workflows
+on:  # Trigger the workflow on push or pull request, but only for the main branch
+  push:
+    branches: [main, "release/*"]
+    tags: ["*"]
+  pull_request:
+    branches: [main]
+  release:
+    types: [published]
+
+
+jobs:
+  # based on https://github.com/pypa/gh-action-pypi-publish
+  build-package:
+    runs-on: "ubuntu-22.04"
+    timeout-minutes: 10
+    steps:
+    - uses: actions/checkout@v5
+    - uses: actions/setup-python@v5
+      with:
+        python-version: "3.8"
+        cache: "pip"
+
+    - name: Install dependencies
+      run: pip install -U setuptools wheel build
+
+    - name: Overview Readme for release
+      run: echo "# Lit Logger" > README.md
+
+    - name: Build packages
+      run: |
+        # todo: add sdist once public
+        python -m build --wheel
+        ls -lh dist/
+
+    - name: Upload to release
+      if: ${{ github.event_name == 'release' }}
+      continue-on-error: true
+      uses: AButler/upload-release-assets@v3.0
+      with:
+        files: "dist/*"
+        repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+    # We do this, since failures on test.pypi aren't that bad
+    - name: Publish to Test PyPI
+      if: startsWith(github.event.ref, 'refs/tags')
+      uses: pypa/gh-action-pypi-publish@v1.12.4
+      with:
+        user: __token__
+        password: ${{ secrets.test_pypi_password }}
+        repository_url: https://test.pypi.org/legacy/
+        verbose: true
+
+    - name: Publish distribution 📦 to PyPI
+      if: startsWith(github.event.ref, 'refs/tags')
+      uses: pypa/gh-action-pypi-publish@v1.12.4
+      with:
+        user: __token__
+        password: ${{ secrets.pypi_password }}

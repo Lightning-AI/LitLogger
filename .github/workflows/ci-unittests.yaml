@@ -1,0 +1,94 @@
+name: UnitTest
+
+on:
+  push:
+    branches: ["main"]
+  release:
+    types:
+      - created
+  pull_request:
+    types: [ opened, reopened, ready_for_review, synchronize ]  # added `ready_for_review` since draft is skipped
+  schedule:
+    - cron: "0 0 * * *"  # every day at midnight UTC
+
+jobs:
+  pytester:
+    runs-on: ${{ matrix.os }}
+    if: github.event.pull_request.draft == false
+    strategy:
+      fail-fast: false
+      matrix:
+        os: ["ubuntu-latest", "macos-latest", "windows-latest"]
+        python-version: ["3.10", "3.11", "3.12", "3.13"]
+        dependency: ["lightning"]
+        requires: ["latest"]
+        include:
+            - { os: "ubuntu-latest", python-version: "3.10", dependency: "lightning", requires: "oldest" }
+    timeout-minutes: 20
+    env:
+      LIGHTNING_CLOUD_URL: https://staging.gridai.dev
+      UV_TORCH_BACKEND: cpu
+
+    steps:
+    - uses: actions/checkout@v5
+    - name: Install uv and setup python
+      uses: astral-sh/setup-uv@v6
+      with:
+        activate-environment: true
+        python-version: ${{ matrix.python-version }}
+        enable-cache: true
+
+    - name: Set min. dependencies
+      if: matrix.requires == 'oldest'
+      run: |
+        uv pip install 'lightning-utilities[cli]>=0.15.1'
+        uv run python -m lightning_utilities.cli requirements set-oldest --req_files=pyproject.toml
+
+    - name: Adjust lightning dependency
+      if: matrix.dependency != 'lightning'
+      run: |
+        uv pip install 'lightning-utilities[cli]>=0.15.2'
+        uv run python -m lightning_utilities.cli requirements replace-pkg --req_files=pyproject.toml \
+            --old_package=lightning --new_package=${{ matrix.dependency }}
+
+    - name: Install package & dependencies
+      run: |
+        uv sync --group tests
+        uv pip list
+        # validate that the dependency is installed
+        uv run python -c "import ${{ matrix.dependency }}"
+
+    - name: simulate missing git folder (posix)
+      if: matrix.os != 'windows-latest'
+      run: rm -rf .git
+    - name: simulate missing git folder (windows)
+      if: matrix.os == 'windows-latest'
+      run: rm -r -fo .git
+
+    - name: Tests
+      working-directory: tests/
+      run: |
+        # NOTE: do not include coverage report here, see: https://github.com/nedbat/coveragepy/issues/1003
+        uv run coverage run --source litlogger -m pytest unittests/ -vv -s
+      env: # the following values are just dummies since the actual http calls are mocked out
+        LIGHTNING_USER_ID: ${{ secrets.LIGHTNING_STAGING_USER_ID }}
+        LIGHTNING_API_KEY: ${{ secrets.LIGHTNING_STAGING_API_KEY }}
+    - name: Statistics
+      working-directory: tests/
+      run: |
+        coverage report
+        coverage xml
+
+  guardian-unittest:
+    runs-on: ubuntu-latest
+    needs: pytester
+    if: always()
+    steps:
+    - run: echo "${{ needs.pytester.result }}"
+    - name: failing...
+      if: needs.pytester.result == 'failure'
+      run: exit 1
+    - name: cancelled or skipped...
+      if: contains(fromJSON('["cancelled", "skipped"]'), needs.pytester.result)
+      timeout-minutes: 1
+      run: sleep 90

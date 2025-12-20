@@ -1,0 +1,57 @@
+name: examples
+
+on:
+  push:
+    branches: ["main"]
+  release:
+    types:
+      - created
+  pull_request:
+    types: [ opened, reopened, ready_for_review, synchronize ]
+
+jobs:
+  run-examples:
+    runs-on: ${{ matrix.os }}
+    if: github.event.pull_request.draft == false
+    strategy:
+      fail-fast: false
+      matrix:
+        os: ["ubuntu-latest"]
+        auth_mode: ["guest", "user"]
+        example: ["standalone_usage.py", "lightning_autoencoder.py"]
+        python-version: ["3.10"]
+
+    timeout-minutes: 15
+    env:
+      LIGHTNING_CLOUD_URL: https://staging.gridai.dev
+      UV_TORCH_BACKEND: cpu
+
+    steps:
+    - uses: actions/checkout@v5
+    - name: Install uv and setup python
+      uses: astral-sh/setup-uv@v6
+      with:
+        activate-environment: true
+        python-version: ${{ matrix.python-version }}
+        enable-cache: true
+
+    - name: Install dependencies
+      run: |
+        uv sync --group tests
+        uv pip list
+
+    - name: Enable Guest Mode
+      if: matrix.auth_mode == 'guest'
+      shell: bash
+      run: echo "TEST_GUEST_MODE=1" >> $GITHUB_ENV
+
+    - name: Set Auth Credentials
+      if: matrix.auth_mode == 'user'
+      shell: bash
+      run: |
+        echo "LIGHTNING_USER_ID=${{ secrets.LIGHTNING_STAGING_USER_ID }}" >> $GITHUB_ENV
+        echo "LIGHTNING_API_KEY=${{ secrets.LIGHTNING_STAGING_API_KEY }}" >> $GITHUB_ENV
+
+    - name: Run example
+      run: |
+        uv run python examples/${{ matrix.example }}

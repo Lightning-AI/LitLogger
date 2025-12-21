@@ -152,7 +152,7 @@ litlogger.finalize()
 </details>
 
 # Community
-LitLogger is a community project accepting contributions - Let's make the world's most advanced AI experiment manager.
+LitLogger accepts community contributions - Let's make the world's most advanced AI experiment manager.
 
 💬 [Get help on Discord](https://discord.com/invite/XncpTy7DSt)    
 📋 [License: Apache 2.0](https://github.com/Lightning-AI/litlogger/blob/main/LICENSE)    

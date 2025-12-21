@@ -5,9 +5,10 @@
 **Log, track, compare, and share AI model experiments**
 
 <pre>
-✅ Lightweight      ✅ Zero-setup           ✅ Any Python code  
-✅ Artifacts        ✅ Machine metadata     ✅ Cloud or on-prem 
-✅ Fine-grain RBAC  ✅ Training, inference  ✅ Free tier        
+✅ Lightweight      ✅ Zero-setup           ✅ Any Python code    
+✅ Artifacts        ✅ Machine metadata     ✅ Cloud or on-prem   
+✅ Training         ✅ Inference            ✅ Agents, multi-modal
+✅ Fine-grain RBAC  ✅ Share experiments    ✅ Free tier          
 </pre>
 
 ______________________________________________________________________

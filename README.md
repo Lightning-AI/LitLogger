@@ -41,9 +41,7 @@ Use LitLogger with any Python code (PyTorch, vLLM, LangChain, etc), and any usec
 ```python
 from litlogger import LightningLogger
 
-logger = LightningLogger()
-
-logger.log_metadata({"my_metadata": "anything"})
+logger = LightningLogger(metadata={"my_metadata": "anything"})
 
 for i in range(10):
     logger.log_metrics({"my_metric": i}, step=i)

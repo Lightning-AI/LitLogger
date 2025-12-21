@@ -36,8 +36,7 @@ pip install litlogger
 ```
 
 ### Hello world example
-LitLogger works with any Python code, not just model training. Use it with PyTorch, vLLM, LangChain, custom scripts, batch jobs, or live services to track metrics and results consistently. Use the simple functional API for scripts and services, or the object-based logger for framework integrations.
-
+LitLogger works with any Python code (PyTorch, vLLM, LangChain, any script) and supports both scripts and framework integrations.
 ```python
 import litlogger
 

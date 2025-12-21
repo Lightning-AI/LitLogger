@@ -53,7 +53,13 @@ for i in range(10):
 logger.finalize()
 ```
 
-### Model training example
+### More examples:
+
+<details>
+<summary>Model training</summary>
+    
+Add LitLogger to any training framework, PyTorch, Jax, TensorFlow, Numpy, SKLearn, etc...
+
 ```python
 import litlogger
 
@@ -84,14 +90,13 @@ litlogger.log_file("/path/to/config.txt")
 # Finalize the experiment
 litlogger.finalize()
 ```
-
 </details>
 
-### PyTorch Lightning example
+<details>
+<summary>PyTorch Lightning</summary> 
+     
 PyTorch Lightning now comes with LitLogger natively built in. It's also built by the PyTorch Lightning team for guaranteed fast performance at multi-node GPU scale.
 
-<details>
-<summary>Python code</summary>
 ```python
 from lightning import Trainer
 from lightning.pytorch.demos.boring_classes import BoringDataModule, BoringModel
@@ -115,11 +120,11 @@ trainer = Trainer(max_epochs=10, logger=LightningLogger(), log_every_n_steps=10)
 trainer.fit(LoggingBoringModel(), BoringDataModule())
 ```
 
-### Example 3: long-running experiment simulator
-This is a fun example that simulates a long model training run.
+</details>
 
 <details>
-<summary>Python code</summary>
+<summary>Example: Long-running experiment simulator</summary>
+This is a fun example that simulates a long model training run.
 
 ```python
 import random

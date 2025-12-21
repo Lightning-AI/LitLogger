@@ -70,7 +70,7 @@ litlogger.finalize()
 ```
 
 ### PyTorch Lightning example
-PyTorch Lightning now comes with LitLogger natively built in. It's also built by the PyTorch Lightning team for guaranteed fast performance at 10,000+ GPU scale.
+PyTorch Lightning now comes with LitLogger natively built in. It's also built by the PyTorch Lightning team for guaranteed fast performance at multi-node GPU scale.
 
 ```python
 from lightning import Trainer

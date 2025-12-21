@@ -15,6 +15,7 @@ ______________________________________________________________________
 
 <p align="center">
   <a href="#quick-start">Quick start</a> •
+  <a href="#examples">Examples</a> •
   <a href="https://lightning.ai/docs/overview/experiment-management">Docs</a>
 </p>
 
@@ -36,7 +37,7 @@ pip install litlogger
 ```
 
 ### Hello world example
-Use LitLogger with any Python code (PyTorch, vLLM, LangChain, etc), and any usecase (training, inference, agents, etc).
+Use LitLogger with any Python code (PyTorch, vLLM, LangChain, etc).
 
 ```python
 from litlogger import LightningLogger
@@ -53,7 +54,8 @@ for i in range(10):
 logger.finalize()
 ```
 
-### More examples:
+# Examples
+Use LitLogger for any usecase (training, inference, agents, etc).
 
 <details>
 <summary>Model training</summary>
@@ -89,6 +91,63 @@ litlogger.log_file("/path/to/config.txt")
 
 # Finalize the experiment
 litlogger.finalize()
+```
+</details>
+
+<details>
+<summary>Model inference</summary>
+    
+Add LitLogger to any inference engine, LitServe, vLLM, FastAPI, etc...
+
+<div align='center'>
+
+<img alt="LitServe" src="https://github.com/user-attachments/assets/ac454da2-0825-4fcf-b422-c6d3a1526cf0" width="800px" style="max-width: 100%;">
+
+&nbsp; 
+</div>
+
+```python
+import time
+import litserve as ls
+from litlogger import LightningLogger
+
+class InferenceEngine(ls.LitAPI):
+    def setup(self, device):
+        # initialize your models here
+        self.text_model = lambda x: x**2
+        self.vision_model = lambda x: x**3
+        # initialize LightningLogger
+        self.logger = LightningLogger(metadata={"service_name": "InferenceEngine", "device": device})
+
+    def predict(self, request):
+        start_time = time.time()
+        x = request["input"]    
+        
+        # perform calculations using both models
+        a = self.text_model(x)
+        b = self.vision_model(x)
+        c = a + b
+        output = {"output": c}
+
+        end_time = time.time()
+        latency = end_time - start_time
+
+        # log inference metrics
+        self.logger.log_metrics({
+            "input_value": x,
+            "output_value": c,
+            "prediction_latency_ms": latency * 1000,
+        })
+        
+        return output
+
+    def teardown(self):
+        # ensure the logger is finalized when the service shuts down
+        self.logger.finalize()
+
+if __name__ == "__main__":
+    server = ls.LitServer(InferenceEngine(max_batch_size=1), accelerator="auto")
+    server.run(port=8000)
 ```
 </details>
 

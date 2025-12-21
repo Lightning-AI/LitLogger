@@ -48,8 +48,10 @@ logger.log_metadata({"my_metadata": "anything"})
 for i in range(10):
     logger.log_metrics({"my_metric": i}, step=i)
 
-# also log files
+# log more than just metrics (files, text, artifacts, model weights)
 # logger.log_file("/path/to/config.txt")
+# logger.log_model(torch.nnModule)
+# logger.log_model_artifact('/path/to/artifact')
 logger.finalize()
 ```
 

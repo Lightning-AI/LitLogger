@@ -95,7 +95,7 @@ trainer = Trainer(max_epochs=10, logger=LightningLogger(), log_every_n_steps=10)
 trainer.fit(LoggingBoringModel(), BoringDataModule())
 ```
 
-### Example 3: loss simulator
+### Example 3: long-running experiment simulator
 This is a fun example that simulates a long model training run.
 
 <details>

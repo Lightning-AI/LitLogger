@@ -91,8 +91,6 @@ else:
             root_dir: _PATH | None = None,
             teamspace: str | None = None,
             metadata: Dict[str, str] | None = None,
-            store_step: bool | None = False,
-            store_created_at: bool | None = False,
             log_model: bool = False,
             save_logs: bool = False,
             checkpoint_name: str | None = None,
@@ -144,8 +142,6 @@ else:
             self._fs = get_filesystem(root_dir)
             self._step = -1
             self._metadata = metadata or {}
-            self._store_step = store_step
-            self._store_created_at = store_created_at
             self._is_ready = False
             self._log_model = log_model
             self._save_logs = save_logs
@@ -220,8 +216,8 @@ else:
                 version=self.version,
                 teamspace=self._teamspace,
                 metadata={k: str(v) for k, v in self._metadata.items()},
-                store_step=self._store_step,
-                store_created_at=self._store_created_at,
+                store_step=True,
+                store_created_at=True,
                 log_dir=self.log_dir,
                 save_logs=self._save_logs,
             )

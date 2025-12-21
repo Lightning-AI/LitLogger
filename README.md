@@ -149,6 +149,14 @@ if __name__ == "__main__":
     server = ls.LitServer(InferenceEngine(max_batch_size=1), accelerator="auto")
     server.run(port=8000)
 ```
+
+Ping the server from the terminal to have it generate some metrics
+```bash
+curl -X POST http://127.0.0.1:8000/predict -H "Content-Type: application/json" -d '{"input": 4.0}'
+curl -X POST http://127.0.0.1:8000/predict -H "Content-Type: application/json" -d '{"input": 5.5}'
+curl -X POST http://127.0.0.1:8000/predict -H "Content-Type: application/json" -d '{"input": 2.1}'
+```
+
 </details>
 
 <details>

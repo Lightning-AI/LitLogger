@@ -36,7 +36,8 @@ pip install litlogger
 ```
 
 ### Hello world example
-LitLogger works with any Python code (PyTorch, vLLM, LangChain, any script). Use it for anything - training, inference, agents, etc.
+LitLogger works with any Python code (PyTorch, vLLM, LangChain, etc). Use it for anything (train, inference, agents, etc.)
+
 ```python
 import litlogger
 

@@ -37,16 +37,6 @@ repos:
         args: ["--maxkb=500", "--enforce-all"]
       - id: detect-private-key
 
-  - repo: https://github.com/executablebooks/mdformat
-    rev: 0.7.17
-    hooks:
-      - id: mdformat
-        args: ["--number"]
-        additional_dependencies:
-          - mdformat-gfm
-          #- mdformat-black
-          - mdformat_frontmatter
-
   - repo: https://github.com/pre-commit/pygrep-hooks
     rev: v1.10.0
     hooks:

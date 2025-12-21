@@ -5,10 +5,10 @@
 **Log, track, compare, and share AI model experiments**
 
 <pre>
-✅ Lightweight      ✅ Zero-setup           ✅ Any Python code
-✅ Artifacts        ✅ Machine metadata     ✅ Cloud or on-prem
+✅ Lightweight      ✅ Zero-setup           ✅ Any Python code    
+✅ Artifacts        ✅ Machine metadata     ✅ Cloud or on-prem   
 ✅ Training         ✅ Inference            ✅ Agents, multi-modal
-✅ Fine-grain RBAC  ✅ Share experiments    ✅ Free tier
+✅ Fine-grain RBAC  ✅ Share experiments    ✅ Free tier          
 </pre>
 
 ______________________________________________________________________
@@ -22,14 +22,13 @@ ______________________________________________________________________
 </div>
 
 # Why LitLogger?
-
 Reproducible model building is hard. As teams iterate on models, data, or prompts, it quickly becomes difficult to track what changed and why results improved or regressed. LitLogger is a ***lightweight, minimal*** experiment logger that tracks every run, including inputs, metrics, prompts, and model outputs, so teams can trace changes, compare results, and audit decisions over time without feature bloat or re-running everything from scratch.
 
 LitLogger is free for developers and built into [Lightning AI](https://lightning.ai/), an independent platform trusted by enterprises. It runs in the cloud or on-prem, giving teams long-term stability, clear auditability, and control over experiment history.
 
 <img width="3024" height="1716" alt="image" src="https://github.com/user-attachments/assets/27f9d8f1-2a13-4080-a64f-374d957712fa" />
 
-# Quick start
+#  Quick start
 
 Install LitLogger with pip.
 
@@ -38,7 +37,6 @@ pip install litlogger
 ```
 
 ### Hello world example
-
 Use LitLogger with any Python code (PyTorch, vLLM, LangChain, etc).
 
 ```python
@@ -57,20 +55,18 @@ logger.finalize()
 ```
 
 # Examples
-
 Use LitLogger for any usecase (training, inference, agents, etc).
 
 <details>
 <summary>Model training</summary>
-
+    
 Add LitLogger to any training framework, PyTorch, Jax, TensorFlow, Numpy, SKLearn, etc...
 
 <div align='center'>
 
 <img alt="LitServe" src="https://github.com/user-attachments/assets/50d9a2f7-17d0-4448-ad21-6be600ab53fc" width="800px" style="max-width: 100%;">
 
-&#160;
-
+&nbsp; 
 </div>
 
 ```python
@@ -128,7 +124,7 @@ def train():
         f.write(f"num_epochs: {num_epochs}\n")
     logger.log_model_artifact("model_config.txt")
     print("model config artifact logged.")
-
+    
     # Clean up the dummy artifact file after logging
     os.remove("model_config.txt")
 
@@ -139,20 +135,18 @@ def train():
 if __name__ == "__main__":
     train()
 ```
-
 </details>
 
 <details>
 <summary>Model inference</summary>
-
+    
 Add LitLogger to any inference engine, LitServe, vLLM, FastAPI, etc...
 
 <div align='center'>
 
 <img alt="LitServe" src="https://github.com/user-attachments/assets/ac454da2-0825-4fcf-b422-c6d3a1526cf0" width="800px" style="max-width: 100%;">
 
-&#160;
-
+&nbsp; 
 </div>
 
 ```python
@@ -170,8 +164,8 @@ class InferenceEngine(ls.LitAPI):
 
     def predict(self, request):
         start_time = time.time()
-        x = request["input"]
-
+        x = request["input"]    
+        
         # perform calculations using both models
         a = self.text_model(x)
         b = self.vision_model(x)
@@ -187,7 +181,7 @@ class InferenceEngine(ls.LitAPI):
             "output_value": c,
             "prediction_latency_ms": latency * 1000,
         })
-
+        
         return output
 
     def teardown(self):
@@ -200,7 +194,6 @@ if __name__ == "__main__":
 ```
 
 Ping the server from the terminal to have it generate some metrics
-
 ```bash
 curl -X POST http://127.0.0.1:8000/predict -H "Content-Type: application/json" -d '{"input": 4.0}'
 curl -X POST http://127.0.0.1:8000/predict -H "Content-Type: application/json" -d '{"input": 5.5}'
@@ -210,8 +203,8 @@ curl -X POST http://127.0.0.1:8000/predict -H "Content-Type: application/json" -
 </details>
 
 <details>
-<summary>PyTorch Lightning</summary>
-
+<summary>PyTorch Lightning</summary> 
+     
 PyTorch Lightning now comes with LitLogger natively built in. It's also built by the PyTorch Lightning team for guaranteed fast performance at multi-node GPU scale.
 
 ```python
@@ -247,8 +240,7 @@ This is a fun example that simulates a long model training run.
 
 <img alt="LitServe" src="https://github.com/user-attachments/assets/fd15aa32-2b56-4324-81b6-c87c86db8a3b" width="800px" style="max-width: 100%;">
 
-&#160;
-
+&nbsp; 
 </div>
 
 ```python
@@ -302,8 +294,8 @@ litlogger.finalize()
 </details>
 
 # Community
-
 LitLogger accepts community contributions - Let's make the world's most advanced AI experiment manager.
 
-💬 [Get help on Discord](https://discord.com/invite/XncpTy7DSt)
-📋 [License: Apache 2.0](https://github.com/Lightning-AI/litlogger/blob/main/LICENSE)
+💬 [Get help on Discord](https://discord.com/invite/XncpTy7DSt)    
+📋 [License: Apache 2.0](https://github.com/Lightning-AI/litlogger/blob/main/LICENSE)    
+

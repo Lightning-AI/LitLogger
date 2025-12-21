@@ -39,6 +39,22 @@ pip install litlogger
 Use LitLogger with any Python code (PyTorch, vLLM, LangChain, etc), and any usecase (training, inference, agents, etc).
 
 ```python
+from litlogger import LightningLogger
+
+logger = LightningLogger()
+
+logger.log_metadata({"my_metadata": "anything"})
+
+for i in range(10):
+    logger.log_metrics({"my_metric": i}, step=i)
+
+# also log files
+# logger.log_file("/path/to/config.txt")
+logger.finalize()
+```
+
+### Model training example
+```python
 import litlogger
 
 # Initialize experiment with name and metadata
@@ -69,9 +85,13 @@ litlogger.log_file("/path/to/config.txt")
 litlogger.finalize()
 ```
 
+</details>
+
 ### PyTorch Lightning example
 PyTorch Lightning now comes with LitLogger natively built in. It's also built by the PyTorch Lightning team for guaranteed fast performance at multi-node GPU scale.
 
+<details>
+<summary>Python code</summary>
 ```python
 from lightning import Trainer
 from lightning.pytorch.demos.boring_classes import BoringDataModule, BoringModel

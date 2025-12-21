@@ -1,26 +1,31 @@
 <div align="center">
 
-# ⚡ Lightning Logger
+# ⚡ LitLogger
 
-**Log your metrics from anywhere and view them on Lightning.AI**
+**Log, track, compare, and share AI model experiments**
 
-✅ fast      ✅ cloud persistent      ✅ accessible from everywhere      ✅ easy to share      ✅ easy to use
+<pre>
+✅ Any Python code      ✅ Zero-setup           ✅ Cloud or on-prem 
+✅ Fine-grain controls  ✅ Training, inference  ✅ Free tier        
+</pre>
 
 ______________________________________________________________________
 
 <p align="center">
-  <a href="https://lightning.ai/">Lightning AI</a> •
-  <a href="https://lightning.ai/docs">Docs</a> •
-  <a href="#quick-start">Quick start</a>
+  <a href="#quick-start">Quick start</a> •
+  <a href="https://lightning.ai/docs/overview/experiment-management">Docs</a>
 </p>
 
 </div>
 
-# Log & view your metrics on Lightning.AI
+# Why LitLogger?
+Reproducible model building is hard. As teams iterate on models, data, or prompts, it quickly becomes difficult to track what changed and why results improved or regressed. LitLogger automatically keeps a complete history of every run, including inputs, metrics, and model outputs, so teams can trace changes, compare results, and audit decisions over time instead of re-running everything from scratch.
 
-The Lightning Logger is a python library to log your metrics to the Lightning.AI platform.
+LitLogger is free for developers and built into [Lightning AI](https://lightning.ai/), an independent platform trusted by enterprises. It runs in the cloud or fully on-prem, giving teams long-term stability, clear auditability, and control over their experiment history.
 
-### Install Lightning Logger
+<img width="2323" height="1072" alt="image" src="https://github.com/user-attachments/assets/669e8f8e-9d68-473d-8625-6f80d7733cba" />
+
+#  Quick start
 
 Install Lightning Logger with pip.
 
@@ -28,10 +33,8 @@ Install Lightning Logger with pip.
 pip install litlogger
 ```
 
-### Quick start
-
-Once installed, you can dive right in with our quick start guide. This example shows how to log metadata and metrics using the standalone API.
-It's designed to be simple enough for beginners yet robust enough to handle more advanced use cases.
+### Hello world example
+LitLogger works with any Python code, not just model training. Use it with PyTorch, vLLM, LangChain, custom scripts, batch jobs, or live services to track metrics and results consistently.
 
 ```python
 import litlogger
@@ -64,10 +67,8 @@ litlogger.log_file("/path/to/config.txt")
 litlogger.finalize()
 ```
 
-### Lightning AI Boring Model
-
-Integrate Lightning Logger into your model training process with ease.
-The example below extends a basic model to log both training and validation metrics, giving you clear insights into model performance with every step.
+### PyTorch Lightning example
+PyTorch Lightning now comes with LitLogger natively built in. It's also built by the PyTorch Lightning team for guaranteed fast performance at 10,000+ GPU scale.
 
 ```python
 from lightning import Trainer
@@ -92,11 +93,8 @@ trainer = Trainer(max_epochs=10, logger=LightningLogger(), log_every_n_steps=10)
 trainer.fit(LoggingBoringModel(), BoringDataModule())
 ```
 
-### Loss simulator
-
-This detailed example illustrates how to simulate a changing loss value during training.
-It logs metric updates at intervals, so you can see how your loss fluctuates over time.
-This practical demonstration shows you the flexibility of Lightning Logger in handling real-world training scenarios.
+### Example 3: loss simulator
+This is a fun example that simulates a long model training run.
 
 <details>
 <summary>Python code</summary>
@@ -151,5 +149,9 @@ litlogger.finalize()
 
 </details>
 
-Enjoy exploring Lightning Logger and watch your project's metrics come to life on [lightning.ai](lightning.ai)!
-This library is designed to simplify your workflow while providing you with clear, insightful data that drives smarter decisions in your development process.
+# Community
+LitLogger is a community project accepting contributions - Let's make the world's most advanced AI experiment manager.
+
+💬 [Get help on Discord](https://discord.com/invite/XncpTy7DSt)    
+📋 [License: Apache 2.0](https://github.com/Lightning-AI/litlogger/blob/main/LICENSE)    
+

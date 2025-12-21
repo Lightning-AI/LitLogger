@@ -62,35 +62,78 @@ Use LitLogger for any usecase (training, inference, agents, etc).
     
 Add LitLogger to any training framework, PyTorch, Jax, TensorFlow, Numpy, SKLearn, etc...
 
+<div align='center'>
+
+<img alt="LitServe" src="https://github.com/user-attachments/assets/50d9a2f7-17d0-4448-ad21-6be600ab53fc" width="800px" style="max-width: 100%;">
+
+&nbsp; 
+</div>
+
 ```python
-import litlogger
+import torch
+import torch.nn as nn
+import torch.optim as optim
+from litlogger import LightningLogger
+import os
 
-# Initialize experiment with name and metadata
-litlogger.init(
-    name="my-experiment",
-    metadata={
-        "learning_rate": "0.001",
-        "batch_size": "32",
-        "model": "resnet50",
-    },
-)
+# define a simple neural network
+class SimpleModel(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.linear = nn.Linear(10, 1)
 
-# Simulate a training loop
-for step in range(100):
-    loss = 1.0 / (step + 1)
-    accuracy = min(0.95, step / 100.0)
+    def forward(self, x):
+        return self.linear(x)
 
-    # Log metrics
-    litlogger.log(
-        {"train/loss": loss, "train/accuracy": accuracy},
-        step=step,
-    )
+def train():
+    # initialize LightningLogger
+    logger = LightningLogger(metadata={"task": "model_training", "model_name": "SimpleModel"})
 
-# Optionally log a file
-litlogger.log_file("/path/to/config.txt")
+    # hyperparameters
+    num_epochs = 10
+    learning_rate = 0.01
 
-# Finalize the experiment
-litlogger.finalize()
+    # model, loss, and optimizer
+    model = SimpleModel()
+    criterion = nn.MSELoss()
+    optimizer = optim.SGD(model.parameters(), lr=learning_rate)
+
+    # dummy data
+    X_train = torch.randn(100, 10)
+    y_train = torch.randn(100, 1)
+
+    # training loop
+    for epoch in range(num_epochs):
+        optimizer.zero_grad()
+        outputs = model(X_train)
+        loss = criterion(outputs, y_train)
+        loss.backward()
+        optimizer.step()
+
+        # log training loss
+        logger.log_metrics({"train_loss": loss.item()}, step=epoch)
+        print(f"Epoch [{epoch+1}/{num_epochs}], Loss: {loss.item():.4f}")
+
+    # log the trained model
+    logger.log_model(model)
+    print("model logged.")
+
+    # create a dummy artifact file and log it
+    with open("model_config.txt", "w") as f:
+        f.write(f"learning_rate: {learning_rate}\n")
+        f.write(f"num_epochs: {num_epochs}\n")
+    logger.log_model_artifact("model_config.txt")
+    print("model config artifact logged.")
+    
+    # Clean up the dummy artifact file after logging
+    os.remove("model_config.txt")
+
+    # finalize the logger when training is done
+    logger.finalize()
+    print("training complete and logger finalized.")
+
+if __name__ == "__main__":
+    train()
 ```
 </details>
 
@@ -193,6 +236,13 @@ trainer.fit(LoggingBoringModel(), BoringDataModule())
 <summary>Example: Long-running experiment simulator</summary>
 This is a fun example that simulates a long model training run.
 
+<div align='center'>
+
+<img alt="LitServe" src="https://github.com/user-attachments/assets/fd15aa32-2b56-4324-81b6-c87c86db8a3b" width="800px" style="max-width: 100%;">
+
+&nbsp; 
+</div>
+
 ```python
 import random
 from time import sleep
@@ -205,7 +255,7 @@ litlogger.init(name="loss-simulator")
 current_loss = 0.09
 
 # Total number of steps
-total_steps = 1000000
+total_steps = 10000
 
 for i in range(total_steps):
     if (i + 1) % 5 == 0:

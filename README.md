@@ -27,7 +27,7 @@ LitLogger is free for developers and built into [Lightning AI](https://lightning
 
 #  Quick start
 
-Install Lightning Logger with pip.
+Install LitLogger with pip.
 
 ```bash
 pip install litlogger

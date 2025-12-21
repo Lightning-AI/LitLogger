@@ -26,7 +26,7 @@ Reproducible model building is hard. As teams iterate on models, data, or prompt
 
 LitLogger is free for developers and built into [Lightning AI](https://lightning.ai/), an independent platform trusted by enterprises. It runs in the cloud or on-prem, giving teams long-term stability, clear auditability, and control over experiment history.
 
-<img width="2323" height="1072" alt="image" src="https://github.com/user-attachments/assets/669e8f8e-9d68-473d-8625-6f80d7733cba" />
+<img width="3024" height="1716" alt="image" src="https://github.com/user-attachments/assets/27f9d8f1-2a13-4080-a64f-374d957712fa" />
 
 #  Quick start
 

@@ -2,7 +2,7 @@
 
 # ⚡ LitLogger - A minimal logger for AI experiments
 
-**Log, track, and share inputs, outputs, metrics, prompts, and artifacts from any Python code so you can see what changed and why.**
+**Log and share inputs, outputs, metrics, prompts, and artifacts from any Python code so you can see what changed and why.**
 
 <pre>
 ✅ Lightweight      ✅ Zero-setup           ✅ Any Python code    

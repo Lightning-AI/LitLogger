@@ -1,8 +1,8 @@
 <div align="center">
 
-# ⚡ LitLogger - The lightweight AI experiment manager
+# ⚡ LitLogger - A minimal logger for AI experiments
 
-**Log, track, compare, and share AI experiments**
+**Log, track, and share inputs, outputs, metrics, prompts, and artifacts from any Python code so you can see what changed and why.**
 
 <pre>
 ✅ Lightweight      ✅ Zero-setup           ✅ Any Python code    
@@ -22,9 +22,9 @@ ______________________________________________________________________
 </div>
 
 # Why LitLogger?
-Tracking everything you try when building AI is hard. As you iterate on models, agents, data, or prompts, it quickly becomes unclear what changed or why results improved or regressed. LitLogger is a ***lightweight, minimal*** experiment logger that tracks every run, including inputs, metrics, prompts, and model outputs, so teams can see what changed, compare results, and understand outcomes without re-running everything from scratch.
+When building AI, you change many things at once: code, data, prompts, models. After a few runs, it becomes unclear what actually caused results to improve or regress. LitLogger records every run as it happens. It logs inputs, metrics, prompts, model outputs, and files, without requiring a framework, config files, or a workflow change. You can compare and share runs later instead of rerunning everything from scratch.
 
-LitLogger is free for developers and built into [Lightning AI](https://lightning.ai/), the AI platform trusted by enterprises and 380k+ devs. It runs in the cloud or on-prem, and gives teams a stable, auditable record of their experiment history.
+LitLogger runs locally (coming soon), in the cloud, or on-prem. It is free for developers and integrates with [Lightning AI](https://lightning.ai/), but works without logging in.
 
 <img width="3024" height="1716" alt="image" src="https://github.com/user-attachments/assets/27f9d8f1-2a13-4080-a64f-374d957712fa" />
 

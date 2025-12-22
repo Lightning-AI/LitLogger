@@ -2,7 +2,7 @@
 
 # ⚡ LitLogger - The lightweight AI experiment manager
 
-**Log, track, compare, and share AI model experiments**
+**Log, track, compare, and share AI experiments**
 
 <pre>
 ✅ Lightweight      ✅ Zero-setup           ✅ Any Python code    

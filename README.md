@@ -22,9 +22,9 @@ ______________________________________________________________________
 </div>
 
 # Why LitLogger?
-Reproducible model building is hard. As teams iterate on models, data, or prompts, it quickly becomes difficult to track what changed and why results improved or regressed. LitLogger is a ***lightweight, minimal*** experiment logger that tracks every run, including inputs, metrics, prompts, and model outputs, so teams can trace changes, compare results, and audit decisions over time without feature bloat or re-running everything from scratch.
+Reproducible AI is hard. As teams iterate on models, agents, data, or prompts, it becomes difficult to track what changed and why results improved or regressed. LitLogger is a ***lightweight, minimal*** experiment logger that tracks every run, including inputs, metrics, prompts, and model outputs, so teams can trace changes, compare results, and audit decisions over time without re-running everything from scratch.
 
-LitLogger is free for developers and built into [Lightning AI](https://lightning.ai/), an independent platform trusted by enterprises. It runs in the cloud or on-prem, giving teams long-term stability, clear auditability, and control over experiment history.
+LitLogger is free for developers and built into [Lightning AI](https://lightning.ai/), the AI platform trusted by enterprises and 380k+ devs. It runs in the cloud or on-prem, giving teams long-term stability, clear auditability, and control over experiment history.
 
 <img width="3024" height="1716" alt="image" src="https://github.com/user-attachments/assets/27f9d8f1-2a13-4080-a64f-374d957712fa" />
 

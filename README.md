@@ -207,6 +207,13 @@ curl -X POST http://127.0.0.1:8000/predict -H "Content-Type: application/json" -
      
 PyTorch Lightning now comes with LitLogger natively built in. It's also built by the PyTorch Lightning team for guaranteed fast performance at multi-node GPU scale.
 
+<div align='center'>
+
+<img alt="LitServe" src="https://github.com/user-attachments/assets/43071433-c319-4fc1-ac5a-03a5c5598a88" width="800px" style="max-width: 100%;">
+
+&nbsp; 
+</div>
+
 ```python
 from lightning import Trainer
 from lightning.pytorch.demos.boring_classes import BoringDataModule, BoringModel
@@ -233,7 +240,7 @@ trainer.fit(LoggingBoringModel(), BoringDataModule())
 </details>
 
 <details>
-<summary>Example: Long-running experiment simulator</summary>
+<summary>Long-running experiment simulator</summary>
 This is a fun example that simulates a long model training run.
 
 <div align='center'>

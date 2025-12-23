@@ -1,8 +1,8 @@
 <div align="center">
 
-# ⚡ LitLogger - The lightweight AI experiment manager
+# ⚡ LitLogger - A minimal logger for AI experiments
 
-**Log, track, compare, and share AI model experiments**
+**Log and share inputs, outputs, metrics, prompts, and artifacts from any Python code so you can see what changed and why.**
 
 <pre>
 ✅ Lightweight      ✅ Zero-setup           ✅ Any Python code    
@@ -22,9 +22,9 @@ ______________________________________________________________________
 </div>
 
 # Why LitLogger?
-Reproducible model building is hard. As teams iterate on models, data, or prompts, it quickly becomes difficult to track what changed and why results improved or regressed. LitLogger is a ***lightweight, minimal*** experiment logger that tracks every run, including inputs, metrics, prompts, and model outputs, so teams can trace changes, compare results, and audit decisions over time without feature bloat or re-running everything from scratch.
+When building AI, you change many things at once: code, data, prompts, models. After a few runs, it becomes unclear what actually caused results to improve or regress. LitLogger records every run as it happens. It logs inputs, metrics, prompts, model outputs, and files, without requiring a framework, config files, or a workflow change. You can compare and share runs later instead of rerunning everything from scratch.
 
-LitLogger is free for developers and built into [Lightning AI](https://lightning.ai/), an independent platform trusted by enterprises. It runs in the cloud or on-prem, giving teams long-term stability, clear auditability, and control over experiment history.
+LitLogger runs locally (coming soon), in the cloud, or on-prem. It is free for developers and integrates with [Lightning AI](https://lightning.ai/), but works without logging in.
 
 <img width="3024" height="1716" alt="image" src="https://github.com/user-attachments/assets/27f9d8f1-2a13-4080-a64f-374d957712fa" />
 
@@ -207,6 +207,13 @@ curl -X POST http://127.0.0.1:8000/predict -H "Content-Type: application/json" -
      
 PyTorch Lightning now comes with LitLogger natively built in. It's also built by the PyTorch Lightning team for guaranteed fast performance at multi-node GPU scale.
 
+<div align='center'>
+
+<img alt="LitServe" src="https://github.com/user-attachments/assets/43071433-c319-4fc1-ac5a-03a5c5598a88" width="800px" style="max-width: 100%;">
+
+&nbsp; 
+</div>
+
 ```python
 from lightning import Trainer
 from lightning.pytorch.demos.boring_classes import BoringDataModule, BoringModel
@@ -233,7 +240,7 @@ trainer.fit(LoggingBoringModel(), BoringDataModule())
 </details>
 
 <details>
-<summary>Example: Long-running experiment simulator</summary>
+<summary>Long-running experiment simulator</summary>
 This is a fun example that simulates a long model training run.
 
 <div align='center'>

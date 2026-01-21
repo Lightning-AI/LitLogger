@@ -117,15 +117,15 @@ class Experiment:
         self._teamspace = _resolve_teamspace(teamspace)
 
         # Create metrics stream using API
-        self._metrics_store = self._metrics_api.create_experiment_metrics(
+        self._metrics_store, _ = self._metrics_api.get_or_create_experiment_metrics(
             teamspace_id=self._teamspace.id,
             name=self.name,
             version=self.version,
             metadata=metadata,
             light_color=light_color,
             dark_color=dark_color,
-            store_step=store_step,
-            store_created_at=store_created_at,
+            store_step=bool(store_step),
+            store_created_at=bool(store_created_at),
         )
 
         # Build URLs using API - use version_number from metrics store for clean URLs

@@ -24,6 +24,164 @@ class TestMetricsApi:
         api = MetricsApi(client=mock_client)
         assert api.client is mock_client
 
+    def test_get_experiment_metrics_by_name(self):
+        """Test fetching an experiment by name."""
+        mock_client = MagicMock()
+        mock_stream = MagicMock()
+        mock_stream.id = "ms-123"
+        mock_stream.name = "my-experiment"
+        mock_stream.version_number = 1
+        mock_response = MagicMock()
+        mock_response.metrics_streams = [mock_stream]
+        mock_client.lit_logger_service_list_metrics_streams.return_value = mock_response
+        api = MetricsApi(client=mock_client)
+
+        result = api.get_experiment_metrics_by_name(
+            teamspace_id="ts-123",
+            name="my-experiment",
+        )
+
+        mock_client.lit_logger_service_list_metrics_streams.assert_called_once_with(
+            project_id="ts-123",
+        )
+        assert result.id == "ms-123"
+        assert result.name == "my-experiment"
+
+    def test_get_experiment_metrics_by_name_returns_latest_version(self):
+        """Test that get_experiment_metrics_by_name returns the latest version when multiple exist."""
+        mock_client = MagicMock()
+        mock_stream_v1 = MagicMock()
+        mock_stream_v1.id = "ms-123"
+        mock_stream_v1.name = "my-experiment"
+        mock_stream_v1.version_number = 1
+        mock_stream_v2 = MagicMock()
+        mock_stream_v2.id = "ms-456"
+        mock_stream_v2.name = "my-experiment"
+        mock_stream_v2.version_number = 2
+        mock_response = MagicMock()
+        mock_response.metrics_streams = [mock_stream_v1, mock_stream_v2]
+        mock_client.lit_logger_service_list_metrics_streams.return_value = mock_response
+        api = MetricsApi(client=mock_client)
+
+        result = api.get_experiment_metrics_by_name(
+            teamspace_id="ts-123",
+            name="my-experiment",
+        )
+
+        assert result.id == "ms-456"
+        assert result.version_number == 2
+
+    def test_get_experiment_metrics_by_name_with_version(self):
+        """Test fetching a specific version of an experiment by name."""
+        mock_client = MagicMock()
+        mock_stream_v1 = MagicMock()
+        mock_stream_v1.id = "ms-123"
+        mock_stream_v1.name = "my-experiment"
+        mock_stream_v1.version_number = 1
+        mock_stream_v2 = MagicMock()
+        mock_stream_v2.id = "ms-456"
+        mock_stream_v2.name = "my-experiment"
+        mock_stream_v2.version_number = 2
+        mock_response = MagicMock()
+        mock_response.metrics_streams = [mock_stream_v1, mock_stream_v2]
+        mock_client.lit_logger_service_list_metrics_streams.return_value = mock_response
+        api = MetricsApi(client=mock_client)
+
+        result = api.get_experiment_metrics_by_name(
+            teamspace_id="ts-123",
+            name="my-experiment",
+            version_number=1,
+        )
+
+        assert result.id == "ms-123"
+        assert result.version_number == 1
+
+    def test_get_experiment_metrics_by_name_not_found(self):
+        """Test that get_experiment_metrics_by_name returns None when experiment not found."""
+        mock_client = MagicMock()
+        mock_response = MagicMock()
+        mock_response.metrics_streams = []
+        mock_client.lit_logger_service_list_metrics_streams.return_value = mock_response
+        api = MetricsApi(client=mock_client)
+
+        result = api.get_experiment_metrics_by_name(
+            teamspace_id="ts-123",
+            name="nonexistent",
+        )
+
+        assert result is None
+
+    def test_get_experiment_metrics_by_name_version_not_found(self):
+        """Test that get_experiment_metrics_by_name returns None when specific version not found."""
+        mock_client = MagicMock()
+        mock_stream = MagicMock()
+        mock_stream.id = "ms-123"
+        mock_stream.name = "my-experiment"
+        mock_stream.version_number = 1
+        mock_response = MagicMock()
+        mock_response.metrics_streams = [mock_stream]
+        mock_client.lit_logger_service_list_metrics_streams.return_value = mock_response
+        api = MetricsApi(client=mock_client)
+
+        result = api.get_experiment_metrics_by_name(
+            teamspace_id="ts-123",
+            name="my-experiment",
+            version_number=99,
+        )
+
+        assert result is None
+
+    def test_get_or_create_experiment_metrics_creates_new(self):
+        """Test get_or_create_experiment_metrics creates a new experiment when none exists."""
+        mock_client = MagicMock()
+        # First call to list returns empty (no existing experiment)
+        mock_list_response = MagicMock()
+        mock_list_response.metrics_streams = []
+        mock_client.lit_logger_service_list_metrics_streams.return_value = mock_list_response
+        # Create returns a new experiment
+        mock_created = MagicMock()
+        mock_created.id = "ms-new"
+        mock_created.name = "my-experiment"
+        mock_client.lit_logger_service_create_metrics_stream.return_value = mock_created
+        api = MetricsApi(client=mock_client)
+
+        with (
+            patch("litlogger.api.metrics_api._create_colors", return_value=("#abc", "#def")),
+            patch("litlogger.api.metrics_api.collect_system_info", return_value={}),
+        ):
+            result, created = api.get_or_create_experiment_metrics(
+                teamspace_id="ts-123",
+                name="my-experiment",
+                version="v1",
+            )
+
+        assert created is True
+        assert result.id == "ms-new"
+        mock_client.lit_logger_service_create_metrics_stream.assert_called_once()
+
+    def test_get_or_create_experiment_metrics_returns_existing(self):
+        """Test get_or_create_experiment_metrics returns existing experiment without creating."""
+        mock_client = MagicMock()
+        # List returns an existing experiment
+        mock_existing = MagicMock()
+        mock_existing.id = "ms-existing"
+        mock_existing.name = "my-experiment"
+        mock_existing.version_number = 1
+        mock_list_response = MagicMock()
+        mock_list_response.metrics_streams = [mock_existing]
+        mock_client.lit_logger_service_list_metrics_streams.return_value = mock_list_response
+        api = MetricsApi(client=mock_client)
+
+        result, created = api.get_or_create_experiment_metrics(
+            teamspace_id="ts-123",
+            name="my-experiment",
+            version="v1",
+        )
+
+        assert created is False
+        assert result.id == "ms-existing"
+        mock_client.lit_logger_service_create_metrics_stream.assert_not_called()
+
     def test_init_without_client(self):
         """Test initialization creates a default client."""
         with patch("litlogger.api.metrics_api.LitRestClient") as mock_client_class:

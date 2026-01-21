@@ -124,8 +124,8 @@ class Experiment:
             metadata=metadata,
             light_color=light_color,
             dark_color=dark_color,
-            store_step=store_step,
-            store_created_at=store_created_at,
+            store_step=bool(store_step),
+            store_created_at=bool(store_created_at),
         )
 
         # Build URLs using API - use version_number from metrics store for clean URLs

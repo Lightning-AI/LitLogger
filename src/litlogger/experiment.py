@@ -117,7 +117,7 @@ class Experiment:
         self._teamspace = _resolve_teamspace(teamspace)
 
         # Create metrics stream using API
-        self._metrics_store = self._metrics_api.create_experiment_metrics(
+        self._metrics_store, _ = self._metrics_api.get_or_create_experiment_metrics(
             teamspace_id=self._teamspace.id,
             name=self.name,
             version=self.version,

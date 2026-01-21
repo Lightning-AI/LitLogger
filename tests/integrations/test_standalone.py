@@ -12,13 +12,12 @@ from contextlib import redirect_stderr, redirect_stdout
 from io import StringIO
 from time import sleep
 
+import litlogger
 import pytest
 import torch
 import torch.nn as nn
 from lightning_sdk.lightning_cloud.openapi.models import LitLoggerServiceDeleteMetricsStreamBody
 from lightning_sdk.utils.resolve import _get_cloud_url
-
-import litlogger
 from litlogger.api.client import LitRestClient
 from litlogger.experiment import Experiment
 
@@ -678,8 +677,8 @@ def test_get_or_create_experiment_metrics():
     assert experiment.id == original_id
     assert experiment.name == experiment_name
 
-    # Also test get_experiment_by_name directly
-    fetched = api.get_experiment_by_name(
+    # Also test get_experiment_metrics_by_name directly
+    fetched = api.get_experiment_metrics_by_name(
         teamspace_id=teamspace_id,
         name=experiment_name,
     )

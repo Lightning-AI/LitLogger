@@ -11,7 +11,6 @@ from lightning_sdk.lightning_cloud.openapi import (
     V1MetricValue,
     V1PhaseType,
 )
-
 from litlogger.api.metrics_api import MetricsApi
 from litlogger.types import MetricsTracker, PhaseType
 
@@ -25,7 +24,7 @@ class TestMetricsApi:
         api = MetricsApi(client=mock_client)
         assert api.client is mock_client
 
-    def test_get_experiment_by_name(self):
+    def test_get_experiment_metrics_by_name(self):
         """Test fetching an experiment by name."""
         mock_client = MagicMock()
         mock_stream = MagicMock()
@@ -37,7 +36,7 @@ class TestMetricsApi:
         mock_client.lit_logger_service_list_metrics_streams.return_value = mock_response
         api = MetricsApi(client=mock_client)
 
-        result = api.get_experiment_by_name(
+        result = api.get_experiment_metrics_by_name(
             teamspace_id="ts-123",
             name="my-experiment",
         )
@@ -48,8 +47,8 @@ class TestMetricsApi:
         assert result.id == "ms-123"
         assert result.name == "my-experiment"
 
-    def test_get_experiment_by_name_returns_latest_version(self):
-        """Test that get_experiment_by_name returns the latest version when multiple exist."""
+    def test_get_experiment_metrics_by_name_returns_latest_version(self):
+        """Test that get_experiment_metrics_by_name returns the latest version when multiple exist."""
         mock_client = MagicMock()
         mock_stream_v1 = MagicMock()
         mock_stream_v1.id = "ms-123"
@@ -64,7 +63,7 @@ class TestMetricsApi:
         mock_client.lit_logger_service_list_metrics_streams.return_value = mock_response
         api = MetricsApi(client=mock_client)
 
-        result = api.get_experiment_by_name(
+        result = api.get_experiment_metrics_by_name(
             teamspace_id="ts-123",
             name="my-experiment",
         )
@@ -72,7 +71,7 @@ class TestMetricsApi:
         assert result.id == "ms-456"
         assert result.version_number == 2
 
-    def test_get_experiment_by_name_with_version(self):
+    def test_get_experiment_metrics_by_name_with_version(self):
         """Test fetching a specific version of an experiment by name."""
         mock_client = MagicMock()
         mock_stream_v1 = MagicMock()
@@ -88,7 +87,7 @@ class TestMetricsApi:
         mock_client.lit_logger_service_list_metrics_streams.return_value = mock_response
         api = MetricsApi(client=mock_client)
 
-        result = api.get_experiment_by_name(
+        result = api.get_experiment_metrics_by_name(
             teamspace_id="ts-123",
             name="my-experiment",
             version_number=1,
@@ -97,23 +96,23 @@ class TestMetricsApi:
         assert result.id == "ms-123"
         assert result.version_number == 1
 
-    def test_get_experiment_by_name_not_found(self):
-        """Test that get_experiment_by_name returns None when experiment not found."""
+    def test_get_experiment_metrics_by_name_not_found(self):
+        """Test that get_experiment_metrics_by_name returns None when experiment not found."""
         mock_client = MagicMock()
         mock_response = MagicMock()
         mock_response.metrics_streams = []
         mock_client.lit_logger_service_list_metrics_streams.return_value = mock_response
         api = MetricsApi(client=mock_client)
 
-        result = api.get_experiment_by_name(
+        result = api.get_experiment_metrics_by_name(
             teamspace_id="ts-123",
             name="nonexistent",
         )
 
         assert result is None
 
-    def test_get_experiment_by_name_version_not_found(self):
-        """Test that get_experiment_by_name returns None when specific version not found."""
+    def test_get_experiment_metrics_by_name_version_not_found(self):
+        """Test that get_experiment_metrics_by_name returns None when specific version not found."""
         mock_client = MagicMock()
         mock_stream = MagicMock()
         mock_stream.id = "ms-123"
@@ -124,7 +123,7 @@ class TestMetricsApi:
         mock_client.lit_logger_service_list_metrics_streams.return_value = mock_response
         api = MetricsApi(client=mock_client)
 
-        result = api.get_experiment_by_name(
+        result = api.get_experiment_metrics_by_name(
             teamspace_id="ts-123",
             name="my-experiment",
             version_number=99,
@@ -146,13 +145,15 @@ class TestMetricsApi:
         mock_client.lit_logger_service_create_metrics_stream.return_value = mock_created
         api = MetricsApi(client=mock_client)
 
-        with patch("litlogger.api.metrics_api._create_colors", return_value=("#abc", "#def")):
-            with patch("litlogger.api.metrics_api.collect_system_info", return_value={}):
-                result, created = api.get_or_create_experiment_metrics(
-                    teamspace_id="ts-123",
-                    name="my-experiment",
-                    version="v1",
-                )
+        with (
+            patch("litlogger.api.metrics_api._create_colors", return_value=("#abc", "#def")),
+            patch("litlogger.api.metrics_api.collect_system_info", return_value={}),
+        ):
+            result, created = api.get_or_create_experiment_metrics(
+                teamspace_id="ts-123",
+                name="my-experiment",
+                version="v1",
+            )
 
         assert created is True
         assert result.id == "ms-new"

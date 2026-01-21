@@ -642,3 +642,62 @@ def test_console_output():
         project_id=project_id,
         body=LitLoggerServiceDeleteMetricsStreamBody(ids=[stream_id]),
     )
+
+
+@pytest.mark.cloud()
+def test_get_or_create_experiment_metrics():
+    """Test get_or_create_experiment_metrics returns existing experiment on second call."""
+    from litlogger.api.metrics_api import MetricsApi
+
+    experiment_name = f"standalone_get_or_create-{uuid.uuid4().hex}"
+
+    # Use litlogger.init to create the first experiment and get teamspace_id
+    exp = litlogger.init(name=experiment_name, teamspace="oss-litlogger")
+    litlogger.finalize()
+
+    teamspace_id = exp._teamspace.id
+    original_id = exp._metrics_store.id
+
+    # Now use the API to test get_or_create
+    api = MetricsApi()
+    client = LitRestClient()
+
+    from datetime import datetime, timezone
+
+    version = datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
+
+    # get_or_create should return the existing experiment (created by litlogger.init)
+    experiment, created = api.get_or_create_experiment_metrics(
+        teamspace_id=teamspace_id,
+        name=experiment_name,
+        version=version,
+    )
+
+    assert created is False
+    assert experiment.id == original_id
+    assert experiment.name == experiment_name
+
+    # Also test get_experiment_metrics_by_name directly
+    fetched = api.get_experiment_metrics_by_name(
+        teamspace_id=teamspace_id,
+        name=experiment_name,
+    )
+    assert fetched is not None
+    assert fetched.id == original_id
+
+    # Now test creating a new experiment with a different name
+    new_experiment_name = f"standalone_get_or_create_new-{uuid.uuid4().hex}"
+    new_experiment, new_created = api.get_or_create_experiment_metrics(
+        teamspace_id=teamspace_id,
+        name=new_experiment_name,
+        version=version,
+    )
+
+    assert new_created is True
+    assert new_experiment.name == new_experiment_name
+
+    # Cleanup both experiments
+    client.lit_logger_service_delete_metrics_stream(
+        project_id=teamspace_id,
+        body=LitLoggerServiceDeleteMetricsStreamBody(ids=[original_id, new_experiment.id]),
+    )

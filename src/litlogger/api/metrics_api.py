@@ -134,6 +134,86 @@ class MetricsApi:
         """
         self.client = client or LitRestClient(max_retries=5)
 
+    def get_experiment_metrics_by_name(
+        self,
+        teamspace_id: str,
+        name: str,
+        version_number: int | None = None,
+    ) -> Any | None:
+        """Fetch an experiment (metrics stream) by name.
+
+        Args:
+            teamspace_id: The teamspace ID.
+            name: The experiment name.
+            version_number: Optional version number. If not specified, returns the latest version.
+
+        Returns:
+            The metrics stream object for the experiment, or None if not found.
+        """
+        response = self.client.lit_logger_service_list_metrics_streams(project_id=teamspace_id)
+
+        if not response.metrics_streams:
+            return None
+
+        # Filter by name
+        matching = [ms for ms in response.metrics_streams if ms.name == name]
+
+        if not matching:
+            return None
+
+        # If version_number specified, find that specific version
+        if version_number is not None:
+            for ms in matching:
+                if ms.version_number == version_number:
+                    return ms
+            return None
+
+        # Return the latest version (highest version_number)
+        return max(matching, key=lambda ms: ms.version_number)
+
+    def get_or_create_experiment_metrics(
+        self,
+        teamspace_id: str,
+        name: str,
+        version: str,
+        metadata: Dict[str, str] | None = None,
+        light_color: str | None = None,
+        dark_color: str | None = None,
+        store_step: bool = True,
+        store_created_at: bool = False,
+    ) -> tuple[Any, bool]:
+        """Get an existing experiment by name, or create a new one if it doesn't exist.
+
+        Args:
+            teamspace_id: The teamspace ID.
+            name: Experiment name.
+            version: Experiment version (used only when creating).
+            metadata: Optional metadata tags (used only when creating).
+            light_color: Light mode color (used only when creating).
+            dark_color: Dark mode color (used only when creating).
+            store_step: Whether to store step values (used only when creating).
+            store_created_at: Whether to store timestamps (used only when creating).
+
+        Returns:
+            A tuple of (metrics_store, created) where created is True if a new
+            experiment was created, False if an existing one was returned.
+        """
+        existing = self.get_experiment_metrics_by_name(teamspace_id=teamspace_id, name=name)
+        if existing is not None:
+            return existing, False
+
+        new_experiment = self.create_experiment_metrics(
+            teamspace_id=teamspace_id,
+            name=name,
+            version=version,
+            metadata=metadata,
+            light_color=light_color,
+            dark_color=dark_color,
+            store_step=store_step,
+            store_created_at=store_created_at,
+        )
+        return new_experiment, True
+
     def create_experiment_metrics(
         self,
         teamspace_id: str,

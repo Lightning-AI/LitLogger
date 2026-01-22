@@ -18,7 +18,6 @@ import contextlib
 import os
 import signal
 import sys
-from collections.abc import Mapping
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from multiprocessing import JoinableQueue
@@ -165,6 +164,7 @@ class Experiment:
             store_created_at=store_created_at,
             rate_limiting_interval=rate_limiting_interval,
             max_batch_size=max_batch_size,
+            trackers_init=self._metrics_api.get_trackers_from_metrics_store(self._metrics_store),
         )
 
         self._manager.start()
@@ -201,7 +201,7 @@ class Experiment:
         """
         return self._teamspace
 
-    def log_metrics(self, metrics: Mapping[str, float], step: int | None = None) -> None:
+    def log_metrics(self, metrics: Dict[str, float], step: int | None = None, **kwargs: float) -> None:
         """Log metrics to the experiment with background uploading.
 
         Metrics are buffered locally and uploaded to the cloud in batches to optimize performance.
@@ -211,6 +211,8 @@ class Experiment:
             metrics: Dictionary mapping metric names to numeric values. Example: {"loss": 0.5, "accuracy": 0.95}.
             step: Optional step number for this data point (e.g., training step, epoch).
                 If None and store_step=True, no step is recorded.
+            kwargs: Additional metric values. Can be used to provide metrics more natural.
+                Example: loss=0.5, accuracy: 0.95.
 
         Raises:
             RuntimeError: If the background thread encountered an error.
@@ -219,6 +221,8 @@ class Experiment:
             raise self._manager.exception
 
         batch: Dict[str, Metrics] = {}
+
+        metrics.update(kwargs)
         for name, value in metrics.items():
             created_at = None
             if self.store_created_at:

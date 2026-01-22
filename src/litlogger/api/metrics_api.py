@@ -103,6 +103,21 @@ def _to_v1_metrics_tracker(tracker: MetricsTracker) -> V1MetricsTracker:
     return V1MetricsTracker(**kwargs)
 
 
+def _from_v1_metrics_tracker(v1_tracker: V1MetricsTracker) -> MetricsTracker:
+    """Convert V1MetricsTracker from API response to user-facing MetricsTracker."""
+    return MetricsTracker(
+        name=v1_tracker.name,
+        num_rows=v1_tracker.num_rows or 0,
+        min_value=v1_tracker.min_value,
+        max_value=v1_tracker.max_value,
+        min_index=v1_tracker.min_index,
+        max_index=v1_tracker.max_index,
+        last_value=v1_tracker.last_value,
+        last_index=v1_tracker.last_index,
+        max_user_step=v1_tracker.max_user_step,
+    )
+
+
 def _to_v1_phase_type(phase: PhaseType) -> str:
     """Convert user-facing PhaseType to V1PhaseType string.
 
@@ -332,3 +347,17 @@ class MetricsApi:
                 trackers=v1_trackers,
             ),
         )
+
+    def get_trackers_from_metrics_store(self, metrics_store: Any) -> Dict[str, MetricsTracker] | None:
+        """Extract and convert trackers from a metrics store object.
+
+        Args:
+            metrics_store: The metrics store object from the API.
+
+        Returns:
+            Dictionary of MetricsTracker objects, or None if no trackers exist.
+        """
+        if not hasattr(metrics_store, "trackers") or not metrics_store.trackers:
+            return None
+
+        return {name: _from_v1_metrics_tracker(v1_tracker) for name, v1_tracker in metrics_store.trackers.items()}

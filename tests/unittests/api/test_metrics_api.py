@@ -8,10 +8,11 @@ from unittest.mock import MagicMock, patch
 
 from lightning_sdk.lightning_cloud.openapi import (
     V1Metrics,
+    V1MetricsTracker,
     V1MetricValue,
     V1PhaseType,
 )
-from litlogger.api.metrics_api import MetricsApi
+from litlogger.api.metrics_api import MetricsApi, _from_v1_metrics_tracker
 from litlogger.types import MetricsTracker, PhaseType
 
 
@@ -428,3 +429,136 @@ class TestMetricsApi:
         call_args = mock_client.lit_logger_service_update_metrics_stream.call_args
         assert call_args.kwargs["body"].persisted is False
         assert call_args.kwargs["body"].phase == V1PhaseType.RUNNING
+
+
+class TestFromV1MetricsTracker:
+    """Test the _from_v1_metrics_tracker helper function."""
+
+    def test_converts_full_tracker(self):
+        """Test converting a V1MetricsTracker with all fields set."""
+        v1_tracker = V1MetricsTracker(
+            name="loss",
+            num_rows=100,
+            min_value=0.1,
+            max_value=1.0,
+            min_index=50,
+            max_index=0,
+            last_value=0.2,
+            last_index=99,
+            max_user_step=99,
+        )
+
+        result = _from_v1_metrics_tracker(v1_tracker)
+
+        assert isinstance(result, MetricsTracker)
+        assert result.name == "loss"
+        assert result.num_rows == 100
+        assert result.min_value == 0.1
+        assert result.max_value == 1.0
+        assert result.min_index == 50
+        assert result.max_index == 0
+        assert result.last_value == 0.2
+        assert result.last_index == 99
+        assert result.max_user_step == 99
+
+    def test_converts_minimal_tracker(self):
+        """Test converting a V1MetricsTracker with only required fields."""
+        v1_tracker = MagicMock()
+        v1_tracker.name = "accuracy"
+        v1_tracker.num_rows = None
+        v1_tracker.min_value = None
+        v1_tracker.max_value = None
+        v1_tracker.min_index = None
+        v1_tracker.max_index = None
+        v1_tracker.last_value = None
+        v1_tracker.last_index = None
+        v1_tracker.max_user_step = None
+
+        result = _from_v1_metrics_tracker(v1_tracker)
+
+        assert isinstance(result, MetricsTracker)
+        assert result.name == "accuracy"
+        assert result.num_rows == 0  # Defaults to 0 when None
+        assert result.min_value is None
+        assert result.max_value is None
+
+    def test_converts_tracker_with_zero_num_rows(self):
+        """Test converting a tracker with explicit zero num_rows."""
+        v1_tracker = V1MetricsTracker(
+            name="metric",
+            num_rows=0,
+        )
+
+        result = _from_v1_metrics_tracker(v1_tracker)
+
+        assert result.num_rows == 0
+
+
+class TestGetTrackersFromMetricsStore:
+    """Test the get_trackers_from_metrics_store method."""
+
+    def test_returns_none_when_no_trackers_attribute(self):
+        """Test returns None when metrics store has no trackers attribute."""
+        mock_client = MagicMock()
+        api = MetricsApi(client=mock_client)
+
+        mock_metrics_store = MagicMock(spec=[])  # No attributes
+
+        result = api.get_trackers_from_metrics_store(mock_metrics_store)
+
+        assert result is None
+
+    def test_returns_none_when_trackers_is_none(self):
+        """Test returns None when metrics store trackers is None."""
+        mock_client = MagicMock()
+        api = MetricsApi(client=mock_client)
+
+        mock_metrics_store = MagicMock()
+        mock_metrics_store.trackers = None
+
+        result = api.get_trackers_from_metrics_store(mock_metrics_store)
+
+        assert result is None
+
+    def test_returns_none_when_trackers_is_empty(self):
+        """Test returns None when metrics store trackers is empty dict."""
+        mock_client = MagicMock()
+        api = MetricsApi(client=mock_client)
+
+        mock_metrics_store = MagicMock()
+        mock_metrics_store.trackers = {}
+
+        result = api.get_trackers_from_metrics_store(mock_metrics_store)
+
+        assert result is None
+
+    def test_converts_trackers_from_metrics_store(self):
+        """Test successfully converts trackers from metrics store."""
+        mock_client = MagicMock()
+        api = MetricsApi(client=mock_client)
+
+        mock_metrics_store = MagicMock()
+        mock_metrics_store.trackers = {
+            "loss": V1MetricsTracker(
+                name="loss",
+                num_rows=100,
+                min_value=0.1,
+                max_value=1.0,
+            ),
+            "accuracy": V1MetricsTracker(
+                name="accuracy",
+                num_rows=50,
+                min_value=0.8,
+                max_value=0.99,
+            ),
+        }
+
+        result = api.get_trackers_from_metrics_store(mock_metrics_store)
+
+        assert result is not None
+        assert len(result) == 2
+        assert "loss" in result
+        assert "accuracy" in result
+        assert isinstance(result["loss"], MetricsTracker)
+        assert result["loss"].num_rows == 100
+        assert result["accuracy"].num_rows == 50

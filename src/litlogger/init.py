@@ -141,3 +141,20 @@ def finish(status: str | None = None) -> None:
         raise RuntimeError("You must call litlogger.init() before litlogger.finish()")
 
     litlogger.experiment.finalize(status)
+
+
+def get_metadata() -> Dict[str, str]:
+    """Get the metadata associated with the current experiment.
+
+    Returns:
+        Dict[str, str]: The metadata dictionary with key-value pairs from the metrics stream.
+
+    Raises:
+        RuntimeError: If litlogger.init() has not been called.
+    """
+    import litlogger
+
+    if litlogger.experiment is None:
+        raise RuntimeError("You must call litlogger.init() before litlogger.get_metadata()")
+
+    return litlogger.experiment.metadata

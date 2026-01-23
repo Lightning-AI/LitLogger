@@ -92,7 +92,6 @@ class Experiment:
         self._finalized = False
         self.store_step = store_step
         self.store_created_at = store_created_at
-        self._metadata = metadata
 
         # Initialize printer and stats tracking
         self._printer = Printer(verbose=verbose)
@@ -200,6 +199,16 @@ class Experiment:
             Teamspace: The teamspace object.
         """
         return self._teamspace
+
+    @property
+    def metadata(self) -> Dict[str, str]:
+        """Get the metadata associated with this experiment from the metrics stream.
+
+        Returns:
+            Dict[str, str]: The metadata dictionary with key-value pairs from code-defined tags.
+        """
+        tags = getattr(self._metrics_store, "tags", None) or []
+        return {tag.name: tag.value for tag in tags if tag.from_code}
 
     def log_metrics(self, metrics: Dict[str, float], step: int | None = None, **kwargs: float) -> None:
         """Log metrics to the experiment with background uploading.
@@ -559,5 +568,5 @@ class Experiment:
             teamspace=self._teamspace.name,
             url=self._url,
             version=self.version,
-            metadata=self._metadata,
+            metadata=self.metadata,
         )

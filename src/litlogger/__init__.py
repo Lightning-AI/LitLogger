@@ -26,7 +26,7 @@ from litlogger._preinit import pre_init_callable
 from litlogger.experiment import Experiment
 
 # Import SDK functions
-from litlogger.init import finish, init
+from litlogger.init import finish, get_metadata, init
 
 # Global variables
 experiment: Experiment | None = None
@@ -54,6 +54,7 @@ __all__ = [
     "log_model_artifact",
     "get_model_artifact",
     "finalize",
+    "get_metadata",
 ]
 
 try:

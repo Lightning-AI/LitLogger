@@ -13,7 +13,11 @@
 # limitations under the License.
 """Pre-initialization wrappers for litlogger to provide helpful error messages."""
 
-from typing import Any, Callable
+from typing import Any, Callable, Concatenate, ParamSpec, TypeVar, overload
+
+P = ParamSpec("P")
+R = TypeVar("R")
+T = TypeVar("T")
 
 
 class PreInitObject:
@@ -42,14 +46,28 @@ class PreInitObject:
         raise AttributeError
 
 
-def pre_init_callable(name: str, destination: Any | None = None) -> Callable:
-    """Create a callable that raises an error if called before litlogger.init()."""
+@overload
+def pre_init_callable(name: str, destination: Callable[Concatenate[T, P], R]) -> Callable[P, R]: ...
+
+
+@overload
+def pre_init_callable(name: str, destination: None = None) -> Callable[..., Any]: ...
+
+
+def pre_init_callable(
+    name: str, destination: Callable[Concatenate[T, P], R] | None = None
+) -> Callable[P, R] | Callable[..., Any]:
+    """Create a callable that raises an error if called before litlogger.init().
+
+    The return type mirrors the destination's signature minus the first argument (self),
+    allowing IDEs and type checkers to show correct signatures for module-level functions.
+    """
 
     def preinit_wrapper(*args: Any, **kwargs: Any) -> Any:
         raise RuntimeError(f"You must call litlogger.init() before {name}()")
 
     preinit_wrapper.__name__ = str(name)
-    if destination:
-        preinit_wrapper.__wrapped__ = destination  # type: ignore
+    if destination is not None:
+        preinit_wrapper.__wrapped__ = destination  # type: ignore[attr-defined]
         preinit_wrapper.__doc__ = destination.__doc__
     return preinit_wrapper

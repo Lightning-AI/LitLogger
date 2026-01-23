@@ -504,7 +504,7 @@ def test_metadata_and_tags():
 @pytest.mark.cloud()
 def test_get_metadata():
     """Test get_metadata() function and experiment.metadata property."""
-    experiment_name = f"standalone_get_metadata_test-{uuid.uuid4().hex}"
+    experiment_name = f"meta_test-{uuid.uuid4().hex}"
     metadata = {
         "model": "GPT-2",
         "dataset": "WikiText",
@@ -553,7 +553,7 @@ def test_get_metadata():
 @pytest.mark.cloud()
 def test_get_metadata_empty():
     """Test get_metadata() when no metadata is provided."""
-    experiment_name = f"standalone_get_metadata_empty_test-{uuid.uuid4().hex}"
+    experiment_name = f"meta_empty_test-{uuid.uuid4().hex}"
 
     exp = litlogger.init(
         name=experiment_name,
@@ -588,7 +588,7 @@ def test_get_metadata_direct_experiment():
     """Test experiment.metadata property when using Experiment class directly."""
     from datetime import datetime, timezone
 
-    experiment_name = f"standalone_direct_metadata-{uuid.uuid4().hex}"
+    experiment_name = f"meta_direct-{uuid.uuid4().hex}"
     timestamp = datetime.now(timezone.utc).isoformat(timespec="milliseconds")
     version_str = timestamp.replace("+00:00", "Z")
 

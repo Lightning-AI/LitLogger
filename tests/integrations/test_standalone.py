@@ -358,6 +358,9 @@ def test_error_handling_before_init():
     with pytest.raises(RuntimeError, match="You must call litlogger.init\\(\\)"):
         litlogger.finalize()
 
+    with pytest.raises(RuntimeError, match="You must call litlogger.init\\(\\)"):
+        litlogger.get_metadata()
+
 
 @pytest.mark.cloud()
 def test_multiple_experiments_in_sequence():
@@ -496,6 +499,131 @@ def test_metadata_and_tags():
         project_id=project_id,
         body=LitLoggerServiceDeleteMetricsStreamBody(ids=[stream_id]),
     )
+
+
+@pytest.mark.cloud()
+def test_get_metadata():
+    """Test get_metadata() function and experiment.metadata property."""
+    experiment_name = f"standalone_get_metadata_test-{uuid.uuid4().hex}"
+    metadata = {
+        "model": "GPT-2",
+        "dataset": "WikiText",
+        "learning_rate": "0.0001",
+        "batch_size": "16",
+    }
+
+    exp = litlogger.init(
+        name=experiment_name,
+        teamspace="oss-litlogger",
+        metadata=metadata,
+    )
+
+    # Test experiment.metadata property returns the metadata from the metrics stream
+    retrieved_metadata = exp.metadata
+    assert isinstance(retrieved_metadata, dict)
+    for key, value in metadata.items():
+        assert key in retrieved_metadata, f"Expected key '{key}' in metadata"
+        assert (
+            retrieved_metadata[key] == value
+        ), f"Expected metadata['{key}'] == '{value}', got '{retrieved_metadata[key]}'"
+
+    # Test litlogger.get_metadata() returns the same metadata
+    global_metadata = litlogger.get_metadata()
+    assert isinstance(global_metadata, dict)
+    for key, value in metadata.items():
+        assert key in global_metadata, f"Expected key '{key}' in global metadata"
+        assert global_metadata[key] == value
+
+    # Verify both return the same data
+    assert retrieved_metadata == global_metadata
+
+    litlogger.finalize()
+
+    # Cleanup
+    project_id = exp._teamspace.id
+    stream_id = exp._metrics_store.id
+
+    client = LitRestClient()
+    client.lit_logger_service_delete_metrics_stream(
+        project_id=project_id,
+        body=LitLoggerServiceDeleteMetricsStreamBody(ids=[stream_id]),
+    )
+
+
+@pytest.mark.cloud()
+def test_get_metadata_empty():
+    """Test get_metadata() when no metadata is provided."""
+    experiment_name = f"standalone_get_metadata_empty_test-{uuid.uuid4().hex}"
+
+    exp = litlogger.init(
+        name=experiment_name,
+        teamspace="oss-litlogger",
+    )
+
+    # Test that metadata is empty dict when none provided
+    retrieved_metadata = exp.metadata
+    assert isinstance(retrieved_metadata, dict)
+    assert len(retrieved_metadata) == 0
+
+    # Test litlogger.get_metadata() also returns empty dict
+    global_metadata = litlogger.get_metadata()
+    assert isinstance(global_metadata, dict)
+    assert len(global_metadata) == 0
+
+    litlogger.finalize()
+
+    # Cleanup
+    project_id = exp._teamspace.id
+    stream_id = exp._metrics_store.id
+
+    client = LitRestClient()
+    client.lit_logger_service_delete_metrics_stream(
+        project_id=project_id,
+        body=LitLoggerServiceDeleteMetricsStreamBody(ids=[stream_id]),
+    )
+
+
+@pytest.mark.cloud()
+def test_get_metadata_direct_experiment():
+    """Test experiment.metadata property when using Experiment class directly."""
+    from datetime import datetime, timezone
+
+    experiment_name = f"standalone_direct_metadata-{uuid.uuid4().hex}"
+    timestamp = datetime.now(timezone.utc).isoformat(timespec="milliseconds")
+    version_str = timestamp.replace("+00:00", "Z")
+
+    metadata = {
+        "framework": "PyTorch",
+        "version": "2.0",
+    }
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        exp = Experiment(
+            name=experiment_name,
+            version=version_str,
+            teamspace="oss-litlogger",
+            log_dir=tmpdir,
+            metadata=metadata,
+        )
+
+        # Test experiment.metadata property
+        retrieved_metadata = exp.metadata
+        assert isinstance(retrieved_metadata, dict)
+        for key, value in metadata.items():
+            assert key in retrieved_metadata
+            assert retrieved_metadata[key] == value
+
+        exp.finalize()
+
+        # Cleanup
+        project_id = exp._teamspace.id
+        stream_id = exp._metrics_store.id
+
+        client = LitRestClient()
+        client.lit_logger_service_delete_metrics_stream(
+            project_id=project_id,
+            body=LitLoggerServiceDeleteMetricsStreamBody(ids=[stream_id]),
+        )
 
 
 @pytest.mark.cloud()

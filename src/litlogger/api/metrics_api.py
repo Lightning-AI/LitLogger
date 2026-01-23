@@ -103,6 +103,21 @@ def _to_v1_metrics_tracker(tracker: MetricsTracker) -> V1MetricsTracker:
     return V1MetricsTracker(**kwargs)
 
 
+def _from_v1_metrics_tracker(v1_tracker: V1MetricsTracker) -> MetricsTracker:
+    """Convert V1MetricsTracker from API response to user-facing MetricsTracker."""
+    return MetricsTracker(
+        name=v1_tracker.name,
+        num_rows=v1_tracker.num_rows or 0,
+        min_value=v1_tracker.min_value,
+        max_value=v1_tracker.max_value,
+        min_index=v1_tracker.min_index,
+        max_index=v1_tracker.max_index,
+        last_value=v1_tracker.last_value,
+        last_index=v1_tracker.last_index,
+        max_user_step=v1_tracker.max_user_step,
+    )
+
+
 def _to_v1_phase_type(phase: PhaseType) -> str:
     """Convert user-facing PhaseType to V1PhaseType string.
 
@@ -133,6 +148,86 @@ class MetricsApi:
             client: Optional pre-configured LitRestClient. If None, creates a new one.
         """
         self.client = client or LitRestClient(max_retries=5)
+
+    def get_experiment_metrics_by_name(
+        self,
+        teamspace_id: str,
+        name: str,
+        version_number: int | None = None,
+    ) -> Any | None:
+        """Fetch an experiment (metrics stream) by name.
+
+        Args:
+            teamspace_id: The teamspace ID.
+            name: The experiment name.
+            version_number: Optional version number. If not specified, returns the latest version.
+
+        Returns:
+            The metrics stream object for the experiment, or None if not found.
+        """
+        response = self.client.lit_logger_service_list_metrics_streams(project_id=teamspace_id)
+
+        if not response.metrics_streams:
+            return None
+
+        # Filter by name
+        matching = [ms for ms in response.metrics_streams if ms.name == name]
+
+        if not matching:
+            return None
+
+        # If version_number specified, find that specific version
+        if version_number is not None:
+            for ms in matching:
+                if ms.version_number == version_number:
+                    return ms
+            return None
+
+        # Return the latest version (highest version_number)
+        return max(matching, key=lambda ms: ms.version_number)
+
+    def get_or_create_experiment_metrics(
+        self,
+        teamspace_id: str,
+        name: str,
+        version: str,
+        metadata: Dict[str, str] | None = None,
+        light_color: str | None = None,
+        dark_color: str | None = None,
+        store_step: bool = True,
+        store_created_at: bool = False,
+    ) -> tuple[Any, bool]:
+        """Get an existing experiment by name, or create a new one if it doesn't exist.
+
+        Args:
+            teamspace_id: The teamspace ID.
+            name: Experiment name.
+            version: Experiment version (used only when creating).
+            metadata: Optional metadata tags (used only when creating).
+            light_color: Light mode color (used only when creating).
+            dark_color: Dark mode color (used only when creating).
+            store_step: Whether to store step values (used only when creating).
+            store_created_at: Whether to store timestamps (used only when creating).
+
+        Returns:
+            A tuple of (metrics_store, created) where created is True if a new
+            experiment was created, False if an existing one was returned.
+        """
+        existing = self.get_experiment_metrics_by_name(teamspace_id=teamspace_id, name=name)
+        if existing is not None:
+            return existing, False
+
+        new_experiment = self.create_experiment_metrics(
+            teamspace_id=teamspace_id,
+            name=name,
+            version=version,
+            metadata=metadata,
+            light_color=light_color,
+            dark_color=dark_color,
+            store_step=store_step,
+            store_created_at=store_created_at,
+        )
+        return new_experiment, True
 
     def create_experiment_metrics(
         self,
@@ -252,3 +347,17 @@ class MetricsApi:
                 trackers=v1_trackers,
             ),
         )
+
+    def get_trackers_from_metrics_store(self, metrics_store: Any) -> Dict[str, MetricsTracker] | None:
+        """Extract and convert trackers from a metrics store object.
+
+        Args:
+            metrics_store: The metrics store object from the API.
+
+        Returns:
+            Dictionary of MetricsTracker objects, or None if no trackers exist.
+        """
+        if not hasattr(metrics_store, "trackers") or not metrics_store.trackers:
+            return None
+
+        return {name: _from_v1_metrics_tracker(v1_tracker) for name, v1_tracker in metrics_store.trackers.items()}

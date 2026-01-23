@@ -642,3 +642,129 @@ def test_console_output():
         project_id=project_id,
         body=LitLoggerServiceDeleteMetricsStreamBody(ids=[stream_id]),
     )
+
+
+@pytest.mark.cloud()
+def test_resume_experiment_with_tracker_initialization():
+    """Test that resuming an experiment initializes trackers and augments steps correctly."""
+    experiment_name = f"standalone_resume_tracker-{uuid.uuid4().hex}"
+
+    # First experiment run - log metrics with explicit steps
+    exp1 = litlogger.init(name=experiment_name, teamspace="oss-litlogger")
+
+    for i in range(10):
+        litlogger.log_metrics({"loss": 1.0 - i * 0.1}, step=i)
+
+    litlogger.finalize()
+
+    # Store info for verification
+    project_id = exp1._teamspace.id
+    stream_id = exp1._metrics_store.id
+
+    # Wait for metrics to be available
+    client = LitRestClient()
+    for _ in range(30):
+        response = client.lit_logger_service_get_logger_metrics(project_id=project_id, ids=[stream_id])
+        if response.named_metrics != {}:
+            metrics = response.named_metrics
+            if len(metrics.get("loss", {}).ids_metrics.get(stream_id, {}).metrics_values or []) == 10:
+                break
+        sleep(1)
+
+    # Second experiment run (resume) - log metrics WITHOUT explicit steps
+    # The steps should be augmented from tracker's num_rows (which should be 10)
+    exp2 = litlogger.init(name=experiment_name, teamspace="oss-litlogger")
+
+    # Verify that the experiment resumed (same stream ID means same experiment)
+    assert exp2._metrics_store.id == stream_id, "Expected to resume the same experiment"
+
+    # Log 5 more metrics WITHOUT explicit steps - they should get steps 10-14
+    for i in range(5):
+        litlogger.log_metrics({"loss": 0.05 - i * 0.01})  # No step parameter
+
+    litlogger.finalize()
+
+    # Wait for all metrics to be available
+    for _ in range(30):
+        response = client.lit_logger_service_get_logger_metrics(project_id=project_id, ids=[stream_id])
+        if response.named_metrics != {}:
+            metrics = response.named_metrics
+            loss_values = metrics.get("loss", {}).ids_metrics.get(stream_id, {}).metrics_values or []
+            if len(loss_values) == 15:  # 10 from first run + 5 from second
+                break
+        sleep(1)
+
+    # Verify we have all 15 metrics
+    loss_metrics = response.named_metrics["loss"].ids_metrics[stream_id].metrics_values
+    assert len(loss_metrics) == 15, f"Expected 15 loss metrics, got {len(loss_metrics)}"
+
+    # Verify the steps are sequential (0-9 from first run, 10-14 from second run)
+    # Steps may come back as strings from the API, so convert to int for comparison
+    steps = sorted([int(m.step) for m in loss_metrics])
+    expected_steps = list(range(15))
+    assert steps == expected_steps, f"Expected steps {expected_steps}, got {steps}"
+
+    # Cleanup
+    client.lit_logger_service_delete_metrics_stream(
+        project_id=project_id,
+        body=LitLoggerServiceDeleteMetricsStreamBody(ids=[stream_id]),
+    )
+
+
+@pytest.mark.cloud()
+def test_get_or_create_experiment_metrics():
+    """Test get_or_create_experiment_metrics returns existing experiment on second call."""
+    from litlogger.api.metrics_api import MetricsApi
+
+    experiment_name = f"standalone_get_or_create-{uuid.uuid4().hex}"
+
+    # Use litlogger.init to create the first experiment and get teamspace_id
+    exp = litlogger.init(name=experiment_name, teamspace="oss-litlogger")
+    litlogger.finalize()
+
+    teamspace_id = exp._teamspace.id
+    original_id = exp._metrics_store.id
+
+    # Now use the API to test get_or_create
+    api = MetricsApi()
+    client = LitRestClient()
+
+    from datetime import datetime, timezone
+
+    version = datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
+
+    # get_or_create should return the existing experiment (created by litlogger.init)
+    experiment, created = api.get_or_create_experiment_metrics(
+        teamspace_id=teamspace_id,
+        name=experiment_name,
+        version=version,
+    )
+
+    assert created is False
+    assert experiment.id == original_id
+    assert experiment.name == experiment_name
+
+    # Also test get_experiment_metrics_by_name directly
+    fetched = api.get_experiment_metrics_by_name(
+        teamspace_id=teamspace_id,
+        name=experiment_name,
+    )
+    assert fetched is not None
+    assert fetched.id == original_id
+
+    # Now test creating a new experiment with a different name
+    new_experiment_name = f"standalone_get_or_create_new-{uuid.uuid4().hex}"
+    new_experiment, new_created = api.get_or_create_experiment_metrics(
+        teamspace_id=teamspace_id,
+        name=new_experiment_name,
+        version=version,
+    )
+
+    assert new_created is True
+    assert new_experiment.name == new_experiment_name
+
+    # Cleanup both experiments
+    client.lit_logger_service_delete_metrics_stream(
+        project_id=teamspace_id,
+        body=LitLoggerServiceDeleteMetricsStreamBody(ids=[original_id, new_experiment.id]),
+    )

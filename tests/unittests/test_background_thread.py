@@ -13,6 +13,63 @@ from litlogger.types import Metrics, MetricsTracker, MetricValue, PhaseType
 class TestBackgroundThreadInit:
     """Test _BackgroundThread initialization."""
 
+    def test_init_with_trackers_init(self):
+        """Test initialization with existing trackers."""
+        mock_metrics_api = Mock()
+        mock_queue = Queue()
+        is_ready_event = Event()
+        stop_event = Event()
+        done_event = Event()
+
+        initial_trackers = {
+            "loss": MetricsTracker(name="loss", num_rows=100, min_value=0.1, max_value=1.0),
+            "accuracy": MetricsTracker(name="accuracy", num_rows=50, min_value=0.8, max_value=0.99),
+        }
+
+        with patch("litlogger.background.BinaryFileWriter"):
+            manager = _BackgroundThread(
+                teamspace_id="test_teamspace",
+                metrics_store_id="test_stream",
+                cloud_account="test_account",
+                metrics_api=mock_metrics_api,
+                metrics_queue=mock_queue,
+                is_ready_event=is_ready_event,
+                stop_event=stop_event,
+                done_event=done_event,
+                log_dir="/test/logs",
+                version="v1.0.0",
+                store_step=True,
+                store_created_at=False,
+                trackers_init=initial_trackers,
+            )
+
+            # Verify trackers were initialized from trackers_init
+            assert "loss" in manager.trackers
+            assert "accuracy" in manager.trackers
+            assert manager.trackers["loss"].num_rows == 100
+            assert manager.trackers["accuracy"].num_rows == 50
+
+    def test_init_with_trackers_init_none(self):
+        """Test initialization with trackers_init=None creates empty trackers."""
+        with patch("litlogger.background.BinaryFileWriter"):
+            manager = _BackgroundThread(
+                teamspace_id="test",
+                metrics_store_id="test",
+                cloud_account="test",
+                metrics_api=Mock(),
+                metrics_queue=Queue(),
+                is_ready_event=Event(),
+                stop_event=Event(),
+                done_event=Event(),
+                log_dir="/test",
+                version="v1",
+                store_step=True,
+                store_created_at=False,
+                trackers_init=None,
+            )
+
+            assert manager.trackers == {}
+
     def test_init_with_all_parameters(self):
         """Test initialization with all required parameters."""
         mock_metrics_api = Mock()
@@ -240,6 +297,153 @@ class TestBackgroundThreadStepBatching:
             assert len(manager.metrics["loss"].values) == 2
             assert manager.metrics["loss"].values[0].value == 0.5
             assert manager.metrics["loss"].values[1].value == 0.3
+
+
+class TestBackgroundThreadStepAugmentation:
+    """Test step augmentation from trackers when metrics don't have steps."""
+
+    def test_augments_step_when_none(self):
+        """Test that metrics without steps get augmented with tracker num_rows."""
+        with patch("litlogger.background.BinaryFileWriter"):
+            manager = _BackgroundThread(
+                teamspace_id="test",
+                metrics_store_id="test",
+                cloud_account="test",
+                metrics_api=Mock(),
+                metrics_queue=Mock(),
+                is_ready_event=Event(),
+                stop_event=Event(),
+                done_event=Event(),
+                log_dir="/test",
+                version="v1",
+                store_step=True,
+                store_created_at=False,
+            )
+
+            # Create values without steps
+            values = Metrics(
+                name="loss",
+                values=[
+                    MetricValue(value=0.5, step=None),
+                    MetricValue(value=0.4, step=None),
+                    MetricValue(value=0.3, step=None),
+                ],
+            )
+
+            manager._update_tracker("loss", values)
+
+            # Verify steps were augmented sequentially
+            assert values.values[0].step == 0
+            assert values.values[1].step == 1
+            assert values.values[2].step == 2
+
+    def test_preserves_explicit_steps(self):
+        """Test that metrics with explicit steps are not modified."""
+        with patch("litlogger.background.BinaryFileWriter"):
+            manager = _BackgroundThread(
+                teamspace_id="test",
+                metrics_store_id="test",
+                cloud_account="test",
+                metrics_api=Mock(),
+                metrics_queue=Mock(),
+                is_ready_event=Event(),
+                stop_event=Event(),
+                done_event=Event(),
+                log_dir="/test",
+                version="v1",
+                store_step=True,
+                store_created_at=False,
+            )
+
+            # Create values with explicit steps
+            values = Metrics(
+                name="loss",
+                values=[
+                    MetricValue(value=0.5, step=10),
+                    MetricValue(value=0.4, step=20),
+                    MetricValue(value=0.3, step=30),
+                ],
+            )
+
+            manager._update_tracker("loss", values)
+
+            # Verify explicit steps were preserved
+            assert values.values[0].step == 10
+            assert values.values[1].step == 20
+            assert values.values[2].step == 30
+
+    def test_augments_step_from_initialized_tracker(self):
+        """Test that step augmentation continues from initialized tracker num_rows."""
+        initial_trackers = {
+            "loss": MetricsTracker(name="loss", num_rows=100),
+        }
+
+        with patch("litlogger.background.BinaryFileWriter"):
+            manager = _BackgroundThread(
+                teamspace_id="test",
+                metrics_store_id="test",
+                cloud_account="test",
+                metrics_api=Mock(),
+                metrics_queue=Mock(),
+                is_ready_event=Event(),
+                stop_event=Event(),
+                done_event=Event(),
+                log_dir="/test",
+                version="v1",
+                store_step=True,
+                store_created_at=False,
+                trackers_init=initial_trackers,
+            )
+
+            # Create values without steps
+            values = Metrics(
+                name="loss",
+                values=[
+                    MetricValue(value=0.5, step=None),
+                    MetricValue(value=0.4, step=None),
+                ],
+            )
+
+            manager._update_tracker("loss", values)
+
+            # Verify steps continue from tracker's num_rows (100)
+            assert values.values[0].step == 100
+            assert values.values[1].step == 101
+
+    def test_mixed_explicit_and_none_steps(self):
+        """Test handling of mixed explicit and None steps."""
+        with patch("litlogger.background.BinaryFileWriter"):
+            manager = _BackgroundThread(
+                teamspace_id="test",
+                metrics_store_id="test",
+                cloud_account="test",
+                metrics_api=Mock(),
+                metrics_queue=Mock(),
+                is_ready_event=Event(),
+                stop_event=Event(),
+                done_event=Event(),
+                log_dir="/test",
+                version="v1",
+                store_step=True,
+                store_created_at=False,
+            )
+
+            # Create values with mixed steps
+            values = Metrics(
+                name="loss",
+                values=[
+                    MetricValue(value=0.5, step=None),  # Should get 0
+                    MetricValue(value=0.4, step=50),  # Should stay 50
+                    MetricValue(value=0.3, step=None),  # Should get 2
+                ],
+            )
+
+            manager._update_tracker("loss", values)
+
+            # Verify correct step handling
+            assert values.values[0].step == 0
+            assert values.values[1].step == 50
+            assert values.values[2].step == 2
 
 
 class TestBackgroundThreadUpdateTracker:

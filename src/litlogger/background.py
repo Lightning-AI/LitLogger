@@ -69,6 +69,7 @@ class _BackgroundThread(Thread):
         store_created_at: bool,
         rate_limiting_interval: int = 1,
         max_batch_size: int = 1000,
+        trackers_init: Dict[str, MetricsTracker] | None = None,
     ) -> None:
         super().__init__(daemon=True)
         self.teamspace_id = teamspace_id
@@ -98,7 +99,7 @@ class _BackgroundThread(Thread):
             client=metrics_api.client,
         )
 
-        self.trackers: Dict[str, MetricsTracker] = {}
+        self.trackers: Dict[str, MetricsTracker] = trackers_init if trackers_init is not None else {}
 
     def run(self) -> None:
         self._run()
@@ -210,6 +211,10 @@ class _BackgroundThread(Thread):
 
         # Increment the number of rows
         for value_obj in values.values:
+            # Augment with step from tracker if not provided
+            if value_obj.step is None:
+                value_obj.step = tracker.num_rows
+
             value = float(value_obj.value)
 
             if tracker.started_at is None and self.store_created_at and value_obj.created_at:

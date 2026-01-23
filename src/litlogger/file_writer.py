@@ -19,8 +19,6 @@ import struct
 import tarfile
 from typing import Dict, List
 
-import numpy as np
-
 from litlogger.api.artifacts_api import ArtifactsApi
 from litlogger.api.client import LitRestClient
 from litlogger.types import Metrics, MetricsTracker, MetricValue
@@ -91,7 +89,7 @@ class BinaryFileWriter:
                 }
 
                 header_in_bytes = json.dumps(header).encode("utf-8")
-                header_size_bytes = np.asarray(len(header_in_bytes), dtype=">u4").tobytes()
+                header_size_bytes = struct.pack(">I", len(header_in_bytes))
                 self.files[k].write(header_size_bytes)
                 self.files[k].write(header_in_bytes)
                 self.files[k].flush()

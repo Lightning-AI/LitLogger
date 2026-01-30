@@ -13,6 +13,7 @@
 # limitations under the License.
 """litlogger API module."""
 
-__all__ = ("MetricsApi",)
+__all__ = ("MediaApi", "MetricsApi")
 
+from .media_api import MediaApi
 from .metrics_api import MetricsApi

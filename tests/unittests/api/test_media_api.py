@@ -39,8 +39,8 @@ class TestMediaApi:
         mock_teamspace.id = "ts-123"
         mock_teamspace._teamspace_api = MagicMock()
 
-        media = SimpleNamespace(storage_path="media/abc.png", id="media-1")
-        create_response = SimpleNamespace(media=media, already_exists=False, cluster_id="acc-456")
+        media = SimpleNamespace(storage_path="media/abc.png", id="media-1", cluster_id="acc-456")
+        create_response = SimpleNamespace(media=media, already_exists=False)
         mock_client.lit_logger_service_create_lit_logger_media.return_value = create_response
 
         updated_media = SimpleNamespace(id="media-1", storage_path="media/abc.png")
@@ -79,8 +79,8 @@ class TestMediaApi:
         mock_teamspace.id = "ts-123"
         mock_teamspace._teamspace_api = MagicMock()
 
-        media = SimpleNamespace(storage_path="media/abc.png", id="media-1")
-        create_response = SimpleNamespace(media=media, already_exists=True, cluster_id="acc-456")
+        media = SimpleNamespace(storage_path="media/abc.png", id="media-1", cluster_id="acc-456")
+        create_response = SimpleNamespace(media=media, already_exists=True)
         mock_client.lit_logger_service_create_lit_logger_media.return_value = create_response
 
         with tempfile.NamedTemporaryFile(mode="wb", delete=False, suffix=".png") as f:

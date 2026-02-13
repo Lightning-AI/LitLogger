@@ -25,16 +25,20 @@ from threading import Event
 from time import sleep
 from types import FrameType
 from typing import TYPE_CHECKING, Any, Dict, List, Union
+import mimetypes
+
+from lightning_sdk.lightning_cloud.openapi import V1MediaType
 
 from litlogger.api.artifacts_api import ArtifactsApi
 from litlogger.api.auth_api import AuthApi
 from litlogger.api.metrics_api import MetricsApi
+from litlogger.api.media_api import MediaApi
 from litlogger.api.utils import _resolve_teamspace, build_experiment_url, get_accessible_url, get_guest_url
 from litlogger.artifacts import Artifact, Model, ModelArtifact
 from litlogger.background import _BackgroundThread
 from litlogger.capture import rerun_and_record
 from litlogger.printer import Printer, RunStats
-from litlogger.types import Metrics, MetricValue
+from litlogger.types import Metrics, MetricValue, MediaType
 
 if TYPE_CHECKING:
     from lightning_sdk import Teamspace
@@ -111,6 +115,7 @@ class Experiment:
             teamspace = None
 
         self._metrics_api = MetricsApi()
+        self._media_api = MediaApi(client=self._metrics_api.client)
         self._artifacts_api = ArtifactsApi()
         self._teamspace = _resolve_teamspace(teamspace)
 
@@ -560,6 +565,62 @@ class Experiment:
         if verbose:
             self._printer.print_success("Retrieved model object")
         return result
+
+    def log_media(
+        self,
+        path: str,
+        type: MediaType | None = None,
+        step: int | None = None,
+        epoch: int | None = None,
+        caption: str | None = None,
+    ) -> None:
+        """Upload a media file (image, text, etc.) to the experiment.
+
+        Args:
+            path: Local path to the media file.
+            type: Type of media (MediaType.IMAGE or MediaType.TEXT).
+                  If None, attempts to guess from file extension or mime type.
+            step: Optional training step.
+            epoch: Optional training epoch.
+            caption: Optional caption for the media.
+
+        Raises:
+            ValueError: If the file type cannot be determined or is not supported.
+            FileNotFoundError: If the file does not exist.
+        """
+        if not os.path.exists(path):
+            raise FileNotFoundError(f"Media file not found: {path}")
+
+        media_type = V1MediaType.UNSPECIFIED
+
+        if type is not None:
+            if type == MediaType.IMAGE:
+                media_type = V1MediaType.IMAGE
+            elif type == MediaType.TEXT:
+                media_type = V1MediaType.TEXT
+        else:
+            mime_type, _ = mimetypes.guess_type(path)
+            if mime_type:
+                if mime_type.startswith("image/"):
+                    media_type = V1MediaType.IMAGE
+                elif mime_type.startswith("text/"):
+                    media_type = V1MediaType.TEXT
+
+        if media_type == V1MediaType.UNSPECIFIED:
+            raise ValueError(f"Unsupported media type for file: {path}")
+
+        self._media_api.upload_media(
+            experiment_id=self._metrics_store.id,
+            teamspace=self._teamspace,
+            file_path=path,
+            name=os.path.basename(path),
+            media_type=media_type,
+            step=step,
+            epoch=epoch,
+            caption=caption,
+        )
+        self._stats.media_logged += 1
+        self._printer.media_logged(path, step)
 
     def print_url(self) -> None:
         """Print the experiment URL and initialization info with styled output."""

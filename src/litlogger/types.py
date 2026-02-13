@@ -33,6 +33,13 @@ class PhaseType(str, Enum):
     STOPPED = "stopped"
 
 
+class MediaType(str, Enum):
+    """Type of media to upload."""
+
+    IMAGE = "image"
+    TEXT = "text"
+
+
 @dataclass
 class MetricValue:
     """A single metric value with optional step and timestamp.

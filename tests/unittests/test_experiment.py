@@ -676,4 +676,101 @@ class TestExperimentInitialization:
     def test_signal_handlers_exist(self):
         """Test that signal handler method exists."""
         assert hasattr(experiment_module.Experiment, "_signal_handler")
-        assert callable(experiment_module.Experiment._signal_handler)
+
+class TestExperimentLogMedia:
+    """Test log_media method."""
+
+    def test_log_media_basic(self):
+        """Test basic media upload with explicit type."""
+        exp = MagicMock()
+        exp.name = "test_exp"
+        exp._manager = MagicMock()
+        exp._media_api = MagicMock()
+        exp._printer = MagicMock()
+        exp._stats = MagicMock()
+        exp._stats.media_logged = 0
+
+        # Import MediaType from types
+        from litlogger.types import MediaType
+        from lightning_sdk.lightning_cloud.openapi import V1MediaType
+        from litlogger.experiment import Experiment
+        from unittest.mock import patch
+        
+        with patch("os.path.exists", return_value=True):
+            Experiment.log_media(exp, "/path/to/image.png", type=MediaType.IMAGE)
+
+        # Verify upload_media called with correct args
+        exp._media_api.upload_media.assert_called_once()
+        _, kwargs = exp._media_api.upload_media.call_args
+        assert kwargs["file_path"] == "/path/to/image.png"
+        assert kwargs["media_type"] == V1MediaType.IMAGE
+        assert exp._stats.media_logged == 1
+
+    def test_log_media_guess_type_image(self):
+        """Test media upload with guessed image type."""
+        exp = MagicMock()
+        exp._media_api = MagicMock()
+        exp._printer = MagicMock()
+        exp._stats = MagicMock()
+        exp._stats.media_logged = 0
+
+        from lightning_sdk.lightning_cloud.openapi import V1MediaType
+        from litlogger.experiment import Experiment
+        from unittest.mock import patch
+        
+        with patch("os.path.exists", return_value=True):
+             Experiment.log_media(exp, "/path/to/image.jpg")
+
+        _, kwargs = exp._media_api.upload_media.call_args
+        assert kwargs["media_type"] == V1MediaType.IMAGE
+        assert exp._stats.media_logged == 1
+
+    def test_log_media_guess_type_text(self):
+        """Test media upload with guessed text type."""
+        exp = MagicMock()
+        exp._media_api = MagicMock()
+        exp._printer = MagicMock()
+        exp._stats = MagicMock()
+        exp._stats.media_logged = 0
+
+        from lightning_sdk.lightning_cloud.openapi import V1MediaType
+        from litlogger.experiment import Experiment
+        from unittest.mock import patch
+        
+        with patch("os.path.exists", return_value=True):
+             Experiment.log_media(exp, "/path/to/readme.txt")
+
+        _, kwargs = exp._media_api.upload_media.call_args
+        assert kwargs["media_type"] == V1MediaType.TEXT
+        assert exp._stats.media_logged == 1
+
+    def test_log_media_unsupported_type(self):
+        """Test log_media raises ValueError for guessed unsupported media type."""
+        exp = MagicMock()
+        exp._media_api = MagicMock()
+        exp._printer = MagicMock()
+        exp._stats = MagicMock()
+        exp._stats.media_logged = 0
+
+        from lightning_sdk.lightning_cloud.openapi import V1MediaType
+        from litlogger.experiment import Experiment
+        from unittest.mock import patch
+        import pytest
+        
+        with patch("os.path.exists", return_value=True):
+            with patch("mimetypes.guess_type", return_value=("application/zip", None)):
+                with pytest.raises(ValueError):
+                    Experiment.log_media(exp, "/path/to/file.txt")
+
+    def test_log_media_raises_file_not_found(self):
+        """Test log_media raises FileNotFoundError."""
+        exp = MagicMock()
+        
+        from litlogger.experiment import Experiment
+        from unittest.mock import patch
+        import pytest
+
+        with patch("os.path.exists", return_value=False):
+            with pytest.raises(FileNotFoundError):
+                Experiment.log_media(exp, "/non/existent/file.png")
+

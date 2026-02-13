@@ -427,6 +427,7 @@ else:
             step: int | None = None,
             epoch: int | None = None,
             caption: str | None = None,
+            verbose: bool = False,
         ) -> None:
             """Log a media file to the experiment.
 
@@ -437,7 +438,8 @@ else:
                 step: Optional training step.
                 epoch: Optional training epoch.
                 caption: Optional caption.
+                verbose: Whether to print a confirmation message after upload.
             """
             self._is_ready = True
             self._store_step = True
-            self.experiment.log_media(path, kind, step, epoch, caption)
+            self.experiment.log_media(path, kind, step, epoch, caption, verbose)

@@ -573,6 +573,7 @@ class Experiment:
         step: int | None = None,
         epoch: int | None = None,
         caption: str | None = None,
+        verbose: bool = False,
     ) -> None:
         """Upload a media file (image, text, etc.) to the experiment.
 
@@ -583,6 +584,7 @@ class Experiment:
             step: Optional training step.
             epoch: Optional training epoch.
             caption: Optional caption for the media.
+            verbose: Whether to print a confirmation message after upload.
 
         Raises:
             ValueError: If the file type cannot be determined or is not supported.
@@ -620,7 +622,8 @@ class Experiment:
             caption=caption,
         )
         self._stats.media_logged += 1
-        self._printer.media_logged(path, step)
+        if verbose:
+            self._printer.media_logged(path, step)
 
     def print_url(self) -> None:
         """Print the experiment URL and initialization info with styled output."""

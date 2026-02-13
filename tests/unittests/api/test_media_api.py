@@ -37,10 +37,9 @@ class TestMediaApi:
 
         mock_teamspace = MagicMock()
         mock_teamspace.id = "ts-123"
-        mock_teamspace.default_cloud_account = "acc-456"
         mock_teamspace._teamspace_api = MagicMock()
 
-        media = SimpleNamespace(storage_path="media/abc.png", id="media-1")
+        media = SimpleNamespace(storage_path="media/abc.png", id="media-1", cluster_id="acc-456")
         create_response = SimpleNamespace(media=media, already_exists=False)
         mock_client.lit_logger_service_create_lit_logger_media.return_value = create_response
 
@@ -78,10 +77,9 @@ class TestMediaApi:
 
         mock_teamspace = MagicMock()
         mock_teamspace.id = "ts-123"
-        mock_teamspace.default_cloud_account = "acc-456"
         mock_teamspace._teamspace_api = MagicMock()
 
-        media = SimpleNamespace(storage_path="media/abc.png", id="media-1")
+        media = SimpleNamespace(storage_path="media/abc.png", id="media-1", cluster_id="acc-456")
         create_response = SimpleNamespace(media=media, already_exists=True)
         mock_client.lit_logger_service_create_lit_logger_media.return_value = create_response
 
@@ -110,7 +108,6 @@ class TestMediaApi:
         api = MediaApi(client=MagicMock())
         mock_teamspace = MagicMock()
         mock_teamspace.id = "ts-123"
-        mock_teamspace.default_cloud_account = "acc-456"
         mock_teamspace._teamspace_api = MagicMock()
 
         with pytest.raises(FileNotFoundError, match="file not found"):

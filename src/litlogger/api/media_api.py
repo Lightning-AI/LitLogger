@@ -106,7 +106,7 @@ class MediaApi:
         headers = {"Content-Type": mime_type} if mime_type else None
         teamspace._teamspace_api.upload_file(
             teamspace_id=teamspace.id,
-            cloud_account=teamspace.default_cloud_account,
+            cloud_account=media.cluster_id,
             file_path=file_path,
             remote_path=media.storage_path,
             headers=headers,

@@ -28,6 +28,7 @@ from typing_extensions import override
 
 from litlogger.experiment import Experiment
 from litlogger.generator import _create_name
+from litlogger.types import MediaType
 
 _base_classes = []
 
@@ -418,3 +419,29 @@ else:
             self._is_ready = True
             self._store_step = True
             self.experiment.log_file(path)
+
+        def log_media(
+            self,
+            name: str,
+            path: str,
+            kind: MediaType | None = None,
+            step: int | None = None,
+            epoch: int | None = None,
+            caption: str | None = None,
+            verbose: bool = False,
+        ) -> None:
+            """Log a media file to the experiment.
+
+            Args:
+                name: Name of the media.
+                path: Local path to the media file.
+                kind: Kind of media (MediaType.IMAGE or MediaType.TEXT).
+                      If None, attempts to guess from file extension or mime type.
+                step: Optional training step.
+                epoch: Optional training epoch.
+                caption: Optional caption.
+                verbose: Whether to print a confirmation message after upload.
+            """
+            self._is_ready = True
+            self._store_step = True
+            self.experiment.log_media(name, path, kind, step, epoch, caption, verbose)

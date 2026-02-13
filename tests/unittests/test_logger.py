@@ -47,3 +47,16 @@ def test_log_file():
     # Call log_file and verify it delegates to the experiment
     logger.log_file("test.txt")
     logger._experiment.log_file.assert_called_once_with("test.txt")
+
+
+def test_log_media():
+    """Test that LightningLogger has a log_media method."""
+    from litlogger import LightningLogger
+    from litlogger.types import MediaType
+
+    logger = object.__new__(LightningLogger)
+    logger._experiment = MagicMock()
+
+    logger.log_media("image", "test.png", kind=MediaType.IMAGE, step=10, caption="Test caption")
+
+    logger._experiment.log_media.assert_called_once_with("image", "test.png", MediaType.IMAGE, 10, None, "Test caption")

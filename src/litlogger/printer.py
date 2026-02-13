@@ -121,6 +121,7 @@ class RunStats:
 
     metrics_logged: int = 0
     artifacts_logged: int = 0
+    media_logged: int = 0
     models_logged: int = 0
     # Store recent values for sparklines (metric_name -> list of values)
     metrics_history: Dict[str, List[float]] = field(default_factory=dict)
@@ -406,6 +407,8 @@ class Printer:
             rows.append(("Metrics logged", f"{stats.metrics_logged:,}"))
         if stats.artifacts_logged > 0:
             rows.append(("Artifacts", f"{stats.artifacts_logged:,}"))
+        if stats.media_logged > 0:
+            rows.append(("Media logged", f"{stats.media_logged:,}"))
         if stats.models_logged > 0:
             rows.append(("Models", f"{stats.models_logged:,}"))
 
@@ -476,6 +479,19 @@ class Printer:
         check = self.emoji("check") or "✓"
         display_path = remote_path or path
         self._echo(f"{self.success(check)} Logged {self.files(display_path)}")
+
+    def media_logged(self, path: str, step: int | None = None) -> None:
+        """Print media upload confirmation.
+
+        Example:
+            litlogger: ✓ Logged output.png (step 100)
+        """
+        if not self.verbose:
+            return
+
+        check = self.emoji("check") or "✓"
+        step_str = f" (step {step})" if step is not None else ""
+        self._echo(f"{self.success(check)} Logged {self.files(path)}{step_str}")
 
     def artifact_retrieved(self, path: str) -> None:
         """Print artifact download confirmation.

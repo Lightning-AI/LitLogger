@@ -15,6 +15,7 @@
 
 import atexit
 import contextlib
+import mimetypes
 import os
 import signal
 import sys
@@ -25,20 +26,19 @@ from threading import Event
 from time import sleep
 from types import FrameType
 from typing import TYPE_CHECKING, Any, Dict, List, Union
-import mimetypes
 
 from lightning_sdk.lightning_cloud.openapi import V1MediaType
 
 from litlogger.api.artifacts_api import ArtifactsApi
 from litlogger.api.auth_api import AuthApi
-from litlogger.api.metrics_api import MetricsApi
 from litlogger.api.media_api import MediaApi
+from litlogger.api.metrics_api import MetricsApi
 from litlogger.api.utils import _resolve_teamspace, build_experiment_url, get_accessible_url, get_guest_url
 from litlogger.artifacts import Artifact, Model, ModelArtifact
 from litlogger.background import _BackgroundThread
 from litlogger.capture import rerun_and_record
 from litlogger.printer import Printer, RunStats
-from litlogger.types import Metrics, MetricValue, MediaType
+from litlogger.types import MediaType, Metrics, MetricValue
 
 if TYPE_CHECKING:
     from lightning_sdk import Teamspace
@@ -569,7 +569,7 @@ class Experiment:
     def log_media(
         self,
         path: str,
-        type: MediaType | None = None,
+        kind: MediaType | None = None,
         step: int | None = None,
         epoch: int | None = None,
         caption: str | None = None,
@@ -578,7 +578,7 @@ class Experiment:
 
         Args:
             path: Local path to the media file.
-            type: Type of media (MediaType.IMAGE or MediaType.TEXT).
+            kind: Type of media (MediaType.IMAGE or MediaType.TEXT).
                   If None, attempts to guess from file extension or mime type.
             step: Optional training step.
             epoch: Optional training epoch.
@@ -593,10 +593,10 @@ class Experiment:
 
         media_type = V1MediaType.UNSPECIFIED
 
-        if type is not None:
-            if type == MediaType.IMAGE:
+        if kind is not None:
+            if kind == MediaType.IMAGE:
                 media_type = V1MediaType.IMAGE
-            elif type == MediaType.TEXT:
+            elif kind == MediaType.TEXT:
                 media_type = V1MediaType.TEXT
         else:
             mime_type, _ = mimetypes.guess_type(path)

@@ -677,6 +677,7 @@ class TestExperimentInitialization:
         """Test that signal handler method exists."""
         assert hasattr(experiment_module.Experiment, "_signal_handler")
 
+
 class TestExperimentLogMedia:
     """Test log_media method."""
 
@@ -691,13 +692,14 @@ class TestExperimentLogMedia:
         exp._stats.media_logged = 0
 
         # Import MediaType from types
-        from litlogger.types import MediaType
+        from unittest.mock import patch
+
         from lightning_sdk.lightning_cloud.openapi import V1MediaType
         from litlogger.experiment import Experiment
-        from unittest.mock import patch
-        
+        from litlogger.types import MediaType
+
         with patch("os.path.exists", return_value=True):
-            Experiment.log_media(exp, "/path/to/image.png", type=MediaType.IMAGE)
+            Experiment.log_media(exp, "/path/to/image.png", kind=MediaType.IMAGE)
 
         # Verify upload_media called with correct args
         exp._media_api.upload_media.assert_called_once()
@@ -714,12 +716,13 @@ class TestExperimentLogMedia:
         exp._stats = MagicMock()
         exp._stats.media_logged = 0
 
+        from unittest.mock import patch
+
         from lightning_sdk.lightning_cloud.openapi import V1MediaType
         from litlogger.experiment import Experiment
-        from unittest.mock import patch
-        
+
         with patch("os.path.exists", return_value=True):
-             Experiment.log_media(exp, "/path/to/image.jpg")
+            Experiment.log_media(exp, "/path/to/image.jpg")
 
         _, kwargs = exp._media_api.upload_media.call_args
         assert kwargs["media_type"] == V1MediaType.IMAGE
@@ -733,12 +736,13 @@ class TestExperimentLogMedia:
         exp._stats = MagicMock()
         exp._stats.media_logged = 0
 
+        from unittest.mock import patch
+
         from lightning_sdk.lightning_cloud.openapi import V1MediaType
         from litlogger.experiment import Experiment
-        from unittest.mock import patch
-        
+
         with patch("os.path.exists", return_value=True):
-             Experiment.log_media(exp, "/path/to/readme.txt")
+            Experiment.log_media(exp, "/path/to/readme.txt")
 
         _, kwargs = exp._media_api.upload_media.call_args
         assert kwargs["media_type"] == V1MediaType.TEXT
@@ -752,25 +756,26 @@ class TestExperimentLogMedia:
         exp._stats = MagicMock()
         exp._stats.media_logged = 0
 
-        from lightning_sdk.lightning_cloud.openapi import V1MediaType
-        from litlogger.experiment import Experiment
         from unittest.mock import patch
+
         import pytest
-        
-        with patch("os.path.exists", return_value=True):
-            with patch("mimetypes.guess_type", return_value=("application/zip", None)):
-                with pytest.raises(ValueError):
-                    Experiment.log_media(exp, "/path/to/file.txt")
+        from litlogger.experiment import Experiment
+
+        with (
+            patch("os.path.exists", return_value=True),
+            patch("mimetypes.guess_type", return_value=("application/zip", None)),
+            pytest.raises(ValueError, match="Unsupported media type for file: /path/to/file.txt"),
+        ):
+            Experiment.log_media(exp, "/path/to/file.txt")
 
     def test_log_media_raises_file_not_found(self):
         """Test log_media raises FileNotFoundError."""
         exp = MagicMock()
-        
-        from litlogger.experiment import Experiment
+
         from unittest.mock import patch
+
         import pytest
+        from litlogger.experiment import Experiment
 
-        with patch("os.path.exists", return_value=False):
-            with pytest.raises(FileNotFoundError):
-                Experiment.log_media(exp, "/non/existent/file.png")
-
+        with patch("os.path.exists", return_value=False), pytest.raises(FileNotFoundError):
+            Experiment.log_media(exp, "/non/existent/file.png")

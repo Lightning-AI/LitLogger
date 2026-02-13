@@ -568,6 +568,7 @@ class Experiment:
 
     def log_media(
         self,
+        name: str,
         path: str,
         kind: MediaType | None = None,
         step: int | None = None,
@@ -578,6 +579,7 @@ class Experiment:
         """Upload a media file (image, text, etc.) to the experiment.
 
         Args:
+            name: Name of the media.
             path: Local path to the media file.
             kind: Type of media (MediaType.IMAGE or MediaType.TEXT).
                   If None, attempts to guess from file extension or mime type.
@@ -615,7 +617,7 @@ class Experiment:
             experiment_id=self._metrics_store.id,
             teamspace=self._teamspace,
             file_path=path,
-            name=os.path.basename(path),
+            name=name,
             media_type=media_type,
             step=step,
             epoch=epoch,

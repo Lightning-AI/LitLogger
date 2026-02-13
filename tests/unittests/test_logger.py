@@ -57,6 +57,6 @@ def test_log_media():
     logger = object.__new__(LightningLogger)
     logger._experiment = MagicMock()
 
-    logger.log_media("test.png", kind=MediaType.IMAGE, step=10, caption="Test caption")
+    logger.log_media("image", "test.png", kind=MediaType.IMAGE, step=10, caption="Test caption")
 
-    logger._experiment.log_media.assert_called_once_with("test.png", MediaType.IMAGE, 10, None, "Test caption")
+    logger._experiment.log_media.assert_called_once_with("image", "test.png", MediaType.IMAGE, 10, None, "Test caption")

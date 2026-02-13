@@ -422,6 +422,7 @@ else:
 
         def log_media(
             self,
+            name: str,
             path: str,
             kind: MediaType | None = None,
             step: int | None = None,
@@ -432,6 +433,7 @@ else:
             """Log a media file to the experiment.
 
             Args:
+                name: Name of the media.
                 path: Local path to the media file.
                 kind: Kind of media (MediaType.IMAGE or MediaType.TEXT).
                       If None, attempts to guess from file extension or mime type.
@@ -442,4 +444,4 @@ else:
             """
             self._is_ready = True
             self._store_step = True
-            self.experiment.log_media(path, kind, step, epoch, caption, verbose)
+            self.experiment.log_media(name, path, kind, step, epoch, caption, verbose)

@@ -699,7 +699,7 @@ class TestExperimentLogMedia:
         from litlogger.types import MediaType
 
         with patch("os.path.exists", return_value=True):
-            Experiment.log_media(exp, "/path/to/image.png", kind=MediaType.IMAGE)
+            Experiment.log_media(exp, "image", "/path/to/image.png", kind=MediaType.IMAGE)
 
         # Verify upload_media called with correct args
         exp._media_api.upload_media.assert_called_once()
@@ -722,7 +722,7 @@ class TestExperimentLogMedia:
         from litlogger.experiment import Experiment
 
         with patch("os.path.exists", return_value=True):
-            Experiment.log_media(exp, "/path/to/image.jpg")
+            Experiment.log_media(exp, "image", "/path/to/image.jpg")
 
         _, kwargs = exp._media_api.upload_media.call_args
         assert kwargs["media_type"] == V1MediaType.IMAGE
@@ -742,7 +742,7 @@ class TestExperimentLogMedia:
         from litlogger.experiment import Experiment
 
         with patch("os.path.exists", return_value=True):
-            Experiment.log_media(exp, "/path/to/readme.txt")
+            Experiment.log_media(exp, "file", "/path/to/file.txt")
 
         _, kwargs = exp._media_api.upload_media.call_args
         assert kwargs["media_type"] == V1MediaType.TEXT
@@ -766,7 +766,7 @@ class TestExperimentLogMedia:
             patch("mimetypes.guess_type", return_value=("application/zip", None)),
             pytest.raises(ValueError, match="Unsupported media type for file: /path/to/file.txt"),
         ):
-            Experiment.log_media(exp, "/path/to/file.txt")
+            Experiment.log_media(exp, "file", "/path/to/file.txt")
 
     def test_log_media_raises_file_not_found(self):
         """Test log_media raises FileNotFoundError."""
@@ -778,4 +778,4 @@ class TestExperimentLogMedia:
         from litlogger.experiment import Experiment
 
         with patch("os.path.exists", return_value=False), pytest.raises(FileNotFoundError):
-            Experiment.log_media(exp, "/non/existent/file.png")
+            Experiment.log_media(exp, "file", "/non/existent/file.png")

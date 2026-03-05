@@ -287,7 +287,12 @@ class _BackgroundThread(Thread):
             )
 
     def inform_done(self) -> None:
-        """Inform the API that metrics collection is complete."""
+        """Inform the API that metrics collection is complete.
+
+        Sends the final update with phase=COMPLETED and accumulated trackers.
+        Metadata is intentionally omitted (None) so that tags set via
+        ``Experiment.log_metadata`` are preserved.
+        """
         self.metrics_api.update_experiment_metrics(
             teamspace_id=self.teamspace_id,
             metrics_store_id=self.metrics_store_id,

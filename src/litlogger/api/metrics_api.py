@@ -153,14 +153,12 @@ class MetricsApi:
         self,
         teamspace_id: str,
         name: str,
-        version_number: int | None = None,
     ) -> Any | None:
         """Fetch an experiment (metrics stream) by name.
 
         Args:
             teamspace_id: The teamspace ID.
             name: The experiment name.
-            version_number: Optional version number. If not specified, returns the latest version.
 
         Returns:
             The metrics stream object for the experiment, or None if not found.
@@ -176,21 +174,12 @@ class MetricsApi:
         if not matching:
             return None
 
-        # If version_number specified, find that specific version
-        if version_number is not None:
-            for ms in matching:
-                if ms.version_number == version_number:
-                    return ms
-            return None
-
-        # Return the latest version (highest version_number)
-        return max(matching, key=lambda ms: ms.version_number)
+        return matching[0]
 
     def get_or_create_experiment_metrics(
         self,
         teamspace_id: str,
         name: str,
-        version: str,
         metadata: Dict[str, str] | None = None,
         light_color: str | None = None,
         dark_color: str | None = None,
@@ -202,7 +191,6 @@ class MetricsApi:
         Args:
             teamspace_id: The teamspace ID.
             name: Experiment name.
-            version: Experiment version (used only when creating).
             metadata: Optional metadata tags (used only when creating).
             light_color: Light mode color (used only when creating).
             dark_color: Dark mode color (used only when creating).
@@ -220,7 +208,6 @@ class MetricsApi:
         new_experiment = self.create_experiment_metrics(
             teamspace_id=teamspace_id,
             name=name,
-            version=version,
             metadata=metadata,
             light_color=light_color,
             dark_color=dark_color,
@@ -233,7 +220,6 @@ class MetricsApi:
         self,
         teamspace_id: str,
         name: str,
-        version: str,
         metadata: Dict[str, str] | None = None,
         light_color: str | None = None,
         dark_color: str | None = None,
@@ -245,7 +231,6 @@ class MetricsApi:
         Args:
             teamspace_id: The teamspace ID.
             name: Experiment name.
-            version: Experiment version.
             metadata: Optional metadata tags.
             light_color: Light mode color.
             dark_color: Dark mode color.
@@ -255,8 +240,8 @@ class MetricsApi:
         Returns:
             The created metrics store object.
         """
-        # Generate colors based on name + version for consistent unique colors per version
-        random_light_color, random_dark_color = _create_colors(name, version)
+        # Generate colors based on name for consistent unique colors
+        random_light_color, random_dark_color = _create_colors(name)
 
         # Convert metadata to tags
         tags = []
@@ -278,7 +263,6 @@ class MetricsApi:
             project_id=teamspace_id,
             body=LitLoggerServiceCreateMetricsStreamBody(
                 name=name,
-                version=version,
                 cloudspace_id=cloudspace_id,
                 app_id=app_id,
                 work_id=work_id,

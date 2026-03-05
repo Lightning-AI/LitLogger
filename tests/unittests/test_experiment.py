@@ -58,7 +58,6 @@ def test_experiment_sender_queue(tmpdir):
         stop_event=stop_event,
         done_event=done_event,
         log_dir=str(tmpdir),
-        version="fake_timestamp",
         store_step=False,
         store_created_at=False,
     )
@@ -226,7 +225,6 @@ class TestExperimentArtifactMethods:
 
         exp = MagicMock()
         exp.name = "test_exp"
-        exp.version = "v1.0"
         exp._teamspace = MagicMock()
 
         # Call the actual method implementation
@@ -250,7 +248,6 @@ class TestExperimentArtifactMethods:
 
         exp = MagicMock()
         exp.name = "test_exp"
-        exp.version = "v1.0"
         exp._teamspace = MagicMock()
 
         # Call the actual method implementation
@@ -260,7 +257,7 @@ class TestExperimentArtifactMethods:
 
         # Verify ModelArtifact was created correctly
         mock_model_artifact_class.assert_called_once_with(
-            path="model.pt", experiment_name="test_exp", teamspace=exp._teamspace, version="v1.0", verbose=False
+            path="model.pt", experiment_name="test_exp", teamspace=exp._teamspace, version="latest", verbose=False
         )
         # Verify get was called and result returned
         mock_model_artifact.get.assert_called_once()
@@ -274,7 +271,6 @@ class TestExperimentArtifactMethods:
 
         exp = MagicMock()
         exp.name = "test_exp"
-        exp.version = "v1.0"
         exp._teamspace = MagicMock()
 
         mock_model_obj = MagicMock()
@@ -289,7 +285,7 @@ class TestExperimentArtifactMethods:
             model=mock_model_obj,
             experiment_name="test_exp",
             teamspace=exp._teamspace,
-            version="v1.0",
+            version="latest",
             verbose=False,
             metadata={"key": "value"},
             staging_dir="/tmp/staging",
@@ -307,7 +303,6 @@ class TestExperimentArtifactMethods:
 
         exp = MagicMock()
         exp.name = "test_exp"
-        exp.version = "v1.0"
         exp._teamspace = MagicMock()
 
         # Call the actual method implementation
@@ -320,7 +315,7 @@ class TestExperimentArtifactMethods:
             model=None,
             experiment_name="test_exp",
             teamspace=exp._teamspace,
-            version="v1.0",
+            version="latest",
             verbose=False,
             staging_dir="/tmp/staging",
         )

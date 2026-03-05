@@ -10,45 +10,34 @@ from litlogger.colors import _create_colors
 class TestCreateColors:
     """Test the _create_colors function."""
 
-    def test_same_name_different_version_different_colors(self):
-        """Test that same name with different versions get different colors."""
-        color1 = _create_colors("my-experiment", "v1")
-        color2 = _create_colors("my-experiment", "v2")
-        color3 = _create_colors("my-experiment", "v3")
+    def test_different_names_different_colors(self):
+        """Test that different experiment names get different colors."""
+        color1 = _create_colors("experiment-a")
+        color2 = _create_colors("experiment-b")
 
-        # All should be different
+        # Should be different (with high probability due to hash)
         assert color1 != color2
-        assert color2 != color3
-        assert color1 != color3
 
     def test_deterministic_colors(self):
-        """Test that same name+version always returns same colors."""
-        color1 = _create_colors("my-experiment", "v1")
-        color2 = _create_colors("my-experiment", "v1")
+        """Test that same name always returns same colors."""
+        color1 = _create_colors("my-experiment")
+        color2 = _create_colors("my-experiment")
 
         assert color1 == color2
 
     def test_returns_tuple_of_two_colors(self):
         """Test that function returns a tuple of (light_color, dark_color)."""
-        result = _create_colors("test", "v1")
+        result = _create_colors("test")
 
         assert isinstance(result, tuple)
         assert len(result) == 2
         assert result[0].startswith("#")
         assert result[1].startswith("#")
 
-    def test_different_names_different_colors(self):
-        """Test that different experiment names get different colors."""
-        color1 = _create_colors("experiment-a", "v1")
-        color2 = _create_colors("experiment-b", "v1")
-
-        # Should be different (with high probability due to hash)
-        assert color1 != color2
-
-    def test_fallback_to_random_without_name_version(self):
-        """Test that without name/version, colors are still returned."""
+    def test_fallback_to_random_without_name(self):
+        """Test that without name, colors are still returned."""
         color1 = _create_colors()
-        color2 = _create_colors(None, None)
+        color2 = _create_colors(None)
 
         # Should return valid colors (may or may not be same due to random)
         assert isinstance(color1, tuple)

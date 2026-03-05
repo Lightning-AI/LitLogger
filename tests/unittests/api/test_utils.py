@@ -309,11 +309,10 @@ class TestBuildExperimentUrl:
                 owner_name="my-org",
                 teamspace_name="my-teamspace",
                 experiment_name="my-experiment",
-                version="1",
             )
 
             # The URL should be constructed from the parameters
-            assert url == "https://lightning.ai/my-org/my-teamspace/experiments/my-experiment%20-%20v1"
+            assert url == "https://lightning.ai/my-org/my-teamspace/experiments/my-experiment"
 
 
 class TestGetAccessibleUrl:

@@ -11,7 +11,6 @@ def test_file_writer(tmpdir):
 
     store = BinaryFileWriter(
         log_dir=str(tmpdir),
-        version="fake_timestamp",
         store_step=False,
         store_created_at=False,
         teamspace_id="project_id",

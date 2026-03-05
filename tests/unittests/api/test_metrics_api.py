@@ -48,54 +48,26 @@ class TestMetricsApi:
         assert result.id == "ms-123"
         assert result.name == "my-experiment"
 
-    def test_get_experiment_metrics_by_name_returns_latest_version(self):
-        """Test that get_experiment_metrics_by_name returns the latest version when multiple exist."""
+    def test_get_experiment_metrics_by_name_returns_first_match(self):
+        """Test that get_experiment_metrics_by_name returns the first match when multiple exist."""
         mock_client = MagicMock()
-        mock_stream_v1 = MagicMock()
-        mock_stream_v1.id = "ms-123"
-        mock_stream_v1.name = "my-experiment"
-        mock_stream_v1.version_number = 1
-        mock_stream_v2 = MagicMock()
-        mock_stream_v2.id = "ms-456"
-        mock_stream_v2.name = "my-experiment"
-        mock_stream_v2.version_number = 2
+        mock_stream_1 = MagicMock()
+        mock_stream_1.id = "ms-123"
+        mock_stream_1.name = "my-experiment"
+        mock_stream_2 = MagicMock()
+        mock_stream_2.id = "ms-456"
+        mock_stream_2.name = "my-experiment"
         mock_response = MagicMock()
-        mock_response.metrics_streams = [mock_stream_v1, mock_stream_v2]
+        mock_response.metrics_streams = [mock_stream_1, mock_stream_2]
         mock_client.lit_logger_service_list_metrics_streams.return_value = mock_response
         api = MetricsApi(client=mock_client)
 
         result = api.get_experiment_metrics_by_name(
             teamspace_id="ts-123",
             name="my-experiment",
-        )
-
-        assert result.id == "ms-456"
-        assert result.version_number == 2
-
-    def test_get_experiment_metrics_by_name_with_version(self):
-        """Test fetching a specific version of an experiment by name."""
-        mock_client = MagicMock()
-        mock_stream_v1 = MagicMock()
-        mock_stream_v1.id = "ms-123"
-        mock_stream_v1.name = "my-experiment"
-        mock_stream_v1.version_number = 1
-        mock_stream_v2 = MagicMock()
-        mock_stream_v2.id = "ms-456"
-        mock_stream_v2.name = "my-experiment"
-        mock_stream_v2.version_number = 2
-        mock_response = MagicMock()
-        mock_response.metrics_streams = [mock_stream_v1, mock_stream_v2]
-        mock_client.lit_logger_service_list_metrics_streams.return_value = mock_response
-        api = MetricsApi(client=mock_client)
-
-        result = api.get_experiment_metrics_by_name(
-            teamspace_id="ts-123",
-            name="my-experiment",
-            version_number=1,
         )
 
         assert result.id == "ms-123"
-        assert result.version_number == 1
 
     def test_get_experiment_metrics_by_name_not_found(self):
         """Test that get_experiment_metrics_by_name returns None when experiment not found."""
@@ -108,26 +80,6 @@ class TestMetricsApi:
         result = api.get_experiment_metrics_by_name(
             teamspace_id="ts-123",
             name="nonexistent",
-        )
-
-        assert result is None
-
-    def test_get_experiment_metrics_by_name_version_not_found(self):
-        """Test that get_experiment_metrics_by_name returns None when specific version not found."""
-        mock_client = MagicMock()
-        mock_stream = MagicMock()
-        mock_stream.id = "ms-123"
-        mock_stream.name = "my-experiment"
-        mock_stream.version_number = 1
-        mock_response = MagicMock()
-        mock_response.metrics_streams = [mock_stream]
-        mock_client.lit_logger_service_list_metrics_streams.return_value = mock_response
-        api = MetricsApi(client=mock_client)
-
-        result = api.get_experiment_metrics_by_name(
-            teamspace_id="ts-123",
-            name="my-experiment",
-            version_number=99,
         )
 
         assert result is None
@@ -153,7 +105,6 @@ class TestMetricsApi:
             result, created = api.get_or_create_experiment_metrics(
                 teamspace_id="ts-123",
                 name="my-experiment",
-                version="v1",
             )
 
         assert created is True
@@ -167,7 +118,6 @@ class TestMetricsApi:
         mock_existing = MagicMock()
         mock_existing.id = "ms-existing"
         mock_existing.name = "my-experiment"
-        mock_existing.version_number = 1
         mock_list_response = MagicMock()
         mock_list_response.metrics_streams = [mock_existing]
         mock_client.lit_logger_service_list_metrics_streams.return_value = mock_list_response
@@ -176,7 +126,6 @@ class TestMetricsApi:
         result, created = api.get_or_create_experiment_metrics(
             teamspace_id="ts-123",
             name="my-experiment",
-            version="v1",
         )
 
         assert created is False
@@ -207,11 +156,10 @@ class TestMetricsApi:
             api.create_experiment_metrics(
                 teamspace_id="ts-123",
                 name="my-experiment",
-                version="v1",
             )
 
-            # Verify _create_colors was called with name and version
-            mock_colors.assert_called_once_with("my-experiment", "v1")
+            # Verify _create_colors was called with name
+            mock_colors.assert_called_once_with("my-experiment")
 
             # Check that client method was called
             mock_client.lit_logger_service_create_metrics_stream.assert_called_once()
@@ -219,7 +167,6 @@ class TestMetricsApi:
 
             # Verify parameters
             assert call_args[1]["body"].name == "my-experiment"
-            assert call_args[1]["body"].version == "v1"
             assert call_args[1]["body"].store_step is True
             assert call_args[1]["body"].store_created_at is False
 
@@ -242,7 +189,6 @@ class TestMetricsApi:
             api.create_experiment_metrics(
                 teamspace_id="ts-123",
                 name="my-experiment",
-                version="v1",
                 metadata=metadata,
             )
 
@@ -267,7 +213,6 @@ class TestMetricsApi:
             api.create_experiment_metrics(
                 teamspace_id="ts-123",
                 name="my-experiment",
-                version="v1",
                 light_color="#custom-light",
                 dark_color="#custom-dark",
             )
@@ -292,7 +237,6 @@ class TestMetricsApi:
             api.create_experiment_metrics(
                 teamspace_id="ts-123",
                 name="my-experiment",
-                version="v1",
                 store_step=False,
                 store_created_at=True,
             )

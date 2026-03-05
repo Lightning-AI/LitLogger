@@ -37,7 +37,6 @@ class TestBackgroundThreadInit:
                 stop_event=stop_event,
                 done_event=done_event,
                 log_dir="/test/logs",
-                version="v1.0.0",
                 store_step=True,
                 store_created_at=False,
                 trackers_init=initial_trackers,
@@ -62,7 +61,6 @@ class TestBackgroundThreadInit:
                 stop_event=Event(),
                 done_event=Event(),
                 log_dir="/test",
-                version="v1",
                 store_step=True,
                 store_created_at=False,
                 trackers_init=None,
@@ -89,7 +87,6 @@ class TestBackgroundThreadInit:
                 stop_event=stop_event,
                 done_event=done_event,
                 log_dir="/test/logs",
-                version="v1.0.0",
                 store_step=True,
                 store_created_at=False,
                 rate_limiting_interval=2,
@@ -115,7 +112,6 @@ class TestBackgroundThreadInit:
             # Verify BinaryFileWriter was initialized correctly
             mock_file_writer.assert_called_once_with(
                 log_dir="/test/logs",
-                version="v1.0.0",
                 store_step=True,
                 store_created_at=False,
                 teamspace_id="test_teamspace",
@@ -137,7 +133,6 @@ class TestBackgroundThreadInit:
                 stop_event=Event(),
                 done_event=Event(),
                 log_dir="/test",
-                version="v1",
                 store_step=True,
                 store_created_at=False,
             )
@@ -167,7 +162,6 @@ class TestBackgroundThreadStepBatching:
                 stop_event=Event(),
                 done_event=Event(),
                 log_dir="/test",
-                version="v1",
                 store_step=True,
                 store_created_at=False,
                 rate_limiting_interval=100,  # High value to prevent time-based send
@@ -194,7 +188,6 @@ class TestBackgroundThreadStepBatching:
                 stop_event=Event(),
                 done_event=Event(),
                 log_dir="/test",
-                version="v1",
                 store_step=True,
                 store_created_at=False,
             )
@@ -224,7 +217,6 @@ class TestBackgroundThreadStepBatching:
                 stop_event=Event(),
                 done_event=Event(),
                 log_dir="/test",
-                version="v1",
                 store_step=True,
                 store_created_at=False,
                 rate_limiting_interval=100,  # High value to prevent time-based send
@@ -255,7 +247,6 @@ class TestBackgroundThreadStepBatching:
                 stop_event=Event(),
                 done_event=Event(),
                 log_dir="/test",
-                version="v1",
                 store_step=True,
                 store_created_at=False,
                 max_batch_size=50,  # Set low threshold
@@ -284,7 +275,6 @@ class TestBackgroundThreadStepBatching:
                 stop_event=Event(),
                 done_event=Event(),
                 log_dir="/test",
-                version="v1",
                 store_step=True,
                 store_created_at=False,
                 rate_limiting_interval=100,  # High value to prevent time-based send
@@ -315,7 +305,6 @@ class TestBackgroundThreadStepAugmentation:
                 stop_event=Event(),
                 done_event=Event(),
                 log_dir="/test",
-                version="v1",
                 store_step=True,
                 store_created_at=False,
             )
@@ -350,7 +339,6 @@ class TestBackgroundThreadStepAugmentation:
                 stop_event=Event(),
                 done_event=Event(),
                 log_dir="/test",
-                version="v1",
                 store_step=True,
                 store_created_at=False,
             )
@@ -389,7 +377,6 @@ class TestBackgroundThreadStepAugmentation:
                 stop_event=Event(),
                 done_event=Event(),
                 log_dir="/test",
-                version="v1",
                 store_step=True,
                 store_created_at=False,
                 trackers_init=initial_trackers,
@@ -423,7 +410,6 @@ class TestBackgroundThreadStepAugmentation:
                 stop_event=Event(),
                 done_event=Event(),
                 log_dir="/test",
-                version="v1",
                 store_step=True,
                 store_created_at=False,
             )
@@ -462,7 +448,6 @@ class TestBackgroundThreadUpdateTracker:
                 stop_event=Event(),
                 done_event=Event(),
                 log_dir="/test",
-                version="v1",
                 store_step=True,
                 store_created_at=False,
             )
@@ -489,7 +474,6 @@ class TestBackgroundThreadUpdateTracker:
                 stop_event=Event(),
                 done_event=Event(),
                 log_dir="/test",
-                version="v1",
                 store_step=True,
                 store_created_at=False,
             )
@@ -519,7 +503,6 @@ class TestBackgroundThreadUpdateTracker:
                 stop_event=Event(),
                 done_event=Event(),
                 log_dir="/test",
-                version="v1",
                 store_step=True,
                 store_created_at=False,
             )
@@ -555,7 +538,6 @@ class TestBackgroundThreadUpdateTracker:
                 stop_event=Event(),
                 done_event=Event(),
                 log_dir="test",
-                version="test",
                 store_step=True,
                 store_created_at=False,
             )
@@ -598,7 +580,6 @@ class TestBackgroundThreadUpdateTracker:
                 stop_event=Event(),
                 done_event=Event(),
                 log_dir="/test",
-                version="v1",
                 store_step=True,
                 store_created_at=True,
             )
@@ -638,7 +619,6 @@ class TestBackgroundThreadSend:
                 stop_event=Event(),
                 done_event=Event(),
                 log_dir="/test",
-                version="v1",
                 store_step=True,
                 store_created_at=False,
             )
@@ -665,7 +645,6 @@ class TestBackgroundThreadSend:
                 stop_event=Event(),
                 done_event=Event(),
                 log_dir="/test",
-                version="v1",
                 store_step=True,
                 store_created_at=False,
             )
@@ -700,7 +679,6 @@ class TestBackgroundThreadSend:
                 stop_event=Event(),
                 done_event=Event(),
                 log_dir="/test",
-                version="v1",
                 store_step=True,
                 store_created_at=False,
             )
@@ -730,7 +708,6 @@ class TestBackgroundThreadSend:
                 stop_event=Event(),
                 done_event=Event(),
                 log_dir="/test",
-                version="v1",
                 store_step=True,
                 store_created_at=False,
             )
@@ -760,7 +737,6 @@ class TestBackgroundThreadSendMetrics:
                 stop_event=Event(),
                 done_event=Event(),
                 log_dir="/test",
-                version="v1",
                 store_step=True,
                 store_created_at=False,
             )
@@ -786,7 +762,6 @@ class TestBackgroundThreadSendMetrics:
                 stop_event=Event(),
                 done_event=Event(),
                 log_dir="/test",
-                version="v1",
                 store_step=True,
                 store_created_at=False,
             )
@@ -812,7 +787,6 @@ class TestBackgroundThreadSendMetrics:
                 stop_event=Event(),
                 done_event=Event(),
                 log_dir="/test",
-                version="v1",
                 store_step=True,
                 store_created_at=False,
                 max_batch_size=1000,
@@ -840,7 +814,6 @@ class TestBackgroundThreadSendMetrics:
                 stop_event=Event(),
                 done_event=Event(),
                 log_dir="/test",
-                version="v1",
                 store_step=True,
                 store_created_at=False,
                 max_batch_size=100,
@@ -872,7 +845,6 @@ class TestBackgroundThreadSendMetrics:
                 stop_event=Event(),
                 done_event=Event(),
                 log_dir="/test",
-                version="v1",
                 store_step=True,
                 store_created_at=False,
                 max_batch_size=50,
@@ -906,7 +878,6 @@ class TestBackgroundThreadStep:
                 stop_event=Event(),
                 done_event=Event(),
                 log_dir="/test",
-                version="v1",
                 store_step=True,
                 store_created_at=False,
                 rate_limiting_interval=100,  # Prevent time-based send
@@ -932,7 +903,6 @@ class TestBackgroundThreadStep:
                 stop_event=Event(),
                 done_event=Event(),
                 log_dir="/test",
-                version="v1",
                 store_step=True,
                 store_created_at=False,
             )
@@ -960,7 +930,6 @@ class TestBackgroundThreadInformDone:
                 stop_event=Event(),
                 done_event=Event(),
                 log_dir="/test",
-                version="v1",
                 store_step=True,
                 store_created_at=False,
             )
@@ -998,7 +967,6 @@ class TestBackgroundThreadInformDone:
                 stop_event=Event(),
                 done_event=Event(),
                 log_dir="/test",
-                version="v1",
                 store_step=True,
                 store_created_at=True,
             )
@@ -1046,7 +1014,6 @@ class TestBackgroundThreadRun:
                 stop_event=Event(),
                 done_event=Event(),
                 log_dir="/test",
-                version="v1",
                 store_step=True,
                 store_created_at=False,
             )
@@ -1073,7 +1040,6 @@ class TestBackgroundThreadRun:
                 stop_event=stop_event,
                 done_event=Event(),
                 log_dir="/test",
-                version="v1",
                 store_step=True,
                 store_created_at=False,
             )
@@ -1111,7 +1077,6 @@ class TestBackgroundThreadRun:
                 stop_event=stop_event,
                 done_event=Event(),
                 log_dir="/test",
-                version="v1",
                 store_step=True,
                 store_created_at=False,
             )
@@ -1157,7 +1122,6 @@ class TestBackgroundThreadIntegration:
                 stop_event=stop_event,
                 done_event=done_event,
                 log_dir="/test",
-                version="v1.0.0",
                 store_step=True,
                 store_created_at=False,
             )

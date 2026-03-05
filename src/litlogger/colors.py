@@ -223,26 +223,22 @@ _DARK_THEME_COLORS = [
 ]
 
 
-def _create_colors(name: str | None = None, version: str | None = None) -> tuple[str, str]:
+def _create_colors(name: str | None = None) -> tuple[str, str]:
     """Return a pair of (light_mode_color, dark_mode_color).
 
-    If name and version are provided, returns a deterministic color based on their hash.
-    This ensures different versions of the same experiment get different colors,
-    while the same version always gets the same color.
+    If name is provided, returns a deterministic color based on it's hash.
+    This ensures different of the same experiment get different colors.
 
-    If neither is provided, falls back to random selection for backwards compatibility.
+    If it is not provided, falls back to random selection for backwards compatibility.
 
     Args:
         name: Optional experiment name
-        version: Optional version string
-
     Returns:
         Tuple of (light_mode_color, dark_mode_color) hex strings
     """
-    if name is not None and version is not None:
-        # Use hash of name + version for deterministic but unique color assignment
-        hash_input = f"{name}:{version}"
-        hash_value = int(hashlib.md5(hash_input.encode()).hexdigest(), 16)
+    if name is not None:
+        # Use hash of namefor deterministic but unique color assignment
+        hash_value = int(hashlib.md5(name.encode()).hexdigest(), 16)
         idx = hash_value % len(_DARK_THEME_COLORS)
     else:
         # Fallback to random for backwards compatibility

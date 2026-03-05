@@ -13,7 +13,6 @@
 # limitations under the License.
 """Initialize litlogger experiment for standalone usage (without PyTorch Lightning)."""
 
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, Union
 
@@ -85,18 +84,12 @@ def init(
     # default to 'project' if no meaningful name was found
     experiment_project_name = experiment_project_name or "project"
 
-    # Create version as proper RFC 3339 timestamp with Z suffix (required by protobuf)
-    timestamp = datetime.now(timezone.utc).isoformat(timespec="milliseconds")
-    # Convert +00:00 to Z (both are valid RFC 3339, but Z might be preferred)
-    version_str = timestamp.replace("+00:00", "Z")
-
     log_dir = os.path.join(root_dir, name)
     os.makedirs(log_dir, exist_ok=True)
 
     # Create experiment
     experiment = Experiment(
         name=name,
-        version=version_str,
         teamspace=teamspace,
         metadata=metadata or {},
         store_step=store_step,

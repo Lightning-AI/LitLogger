@@ -166,7 +166,6 @@ class TestInit:
 
         call_kwargs = mock_experiment_class.call_args.kwargs
         assert call_kwargs["name"] == "test"
-        assert "version" in call_kwargs
         assert call_kwargs["teamspace"] is None
 
     @patch.object(init_module, "Experiment")
@@ -184,7 +183,6 @@ class TestInit:
 
         call_kwargs = mock_experiment_class.call_args.kwargs
         assert call_kwargs["name"] == "test"
-        assert "version" in call_kwargs
         assert call_kwargs["teamspace"] is None
 
     @patch.object(init_module, "Experiment")
@@ -202,7 +200,6 @@ class TestInit:
 
         call_kwargs = mock_experiment_class.call_args.kwargs
         assert call_kwargs["name"] == "test"
-        assert "version" in call_kwargs
         assert call_kwargs["teamspace"] is None
 
     @patch.object(init_module, "Experiment")
@@ -224,22 +221,6 @@ class TestInit:
         actual_path = call_args[0][0].replace("\\", "/")
         assert "/tmp/logs/test-exp" in actual_path
         assert call_args[1]["exist_ok"] is True
-
-    @patch.object(init_module, "Experiment")
-    @patch.object(init_module, "set_global")
-    @patch("subprocess.check_output")
-    def test_init_version_is_created(self, mock_check_output, mock_set_global, mock_experiment_class):
-        """Test that a version string is created."""
-        mock_check_output.return_value = b"/path/to/repo\n"
-        mock_experiment = MagicMock()
-        mock_experiment_class.return_value = mock_experiment
-
-        init(name="test")
-
-        call_kwargs = mock_experiment_class.call_args.kwargs
-        # Version should be a string (timestamp in ISO format)
-        assert isinstance(call_kwargs["version"], str | dict)
-        assert "version" in call_kwargs
 
 
 class TestFinish:

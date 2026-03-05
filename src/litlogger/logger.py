@@ -18,7 +18,7 @@ import os
 import warnings
 from argparse import Namespace
 from collections.abc import Mapping
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Any, Dict
 
 from lightning_utilities import module_available
@@ -135,7 +135,6 @@ else:
             """
             self._root_dir = os.fspath(root_dir or "./lightning_logs")
             self._name = name or _create_name()
-            self._version = None
             self._teamspace = teamspace
             self._experiment: Experiment | None = None
             self._sub_dir = None
@@ -158,9 +157,8 @@ else:
 
         @property
         @override
-        def version(self) -> str:
-            """Get the experiment version - its time of creation."""
-            return self._version
+        def version(self) -> str | None:
+            return None
 
         @property
         @override
@@ -171,12 +169,7 @@ else:
         @property
         @override
         def log_dir(self) -> str:
-            """The directory for this run's tensorboard checkpoint.
-
-            By default, it is named ``'version_${self.version}'`` but it can be overridden by passing a string value
-            for the constructor's version parameter instead of ``None`` or an int.
-
-            """
+            """The directory for this run's tensorboard checkpoint."""
             log_dir = os.path.join(self.root_dir, self.name)
             if isinstance(self.sub_dir, str):
                 log_dir = os.path.join(log_dir, self.sub_dir)
@@ -206,15 +199,8 @@ else:
             if self.root_dir:
                 self._fs.makedirs(self.root_dir, exist_ok=True)
 
-            if self.version is None:
-                # Generate version as proper RFC 3339 timestamp with Z suffix (required by protobuf)
-                timestamp = datetime.now(timezone.utc).isoformat(timespec="milliseconds")
-                # Convert +00:00 to Z (both are valid RFC 3339, but Z might be preferred)
-                self._version = timestamp.replace("+00:00", "Z")
-
             self._experiment = Experiment(
                 name=self._name,
-                version=self.version,
                 teamspace=self._teamspace,
                 metadata={k: str(v) for k, v in self._metadata.items()},
                 store_step=True,
@@ -308,7 +294,7 @@ else:
             Args:
                 path: Path to the local model file or directory to upload.
                 verbose: Whether to show progress bar during upload. Defaults to False.
-                version: Optional version string for the model. Defaults to the experiment version.
+                version: Optional version string for the model.
             """
             self._is_ready = True
             self._store_step = True

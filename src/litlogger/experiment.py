@@ -59,7 +59,6 @@ class Experiment:
     def __init__(
         self,
         name: str,
-        version: str,
         log_dir: str = "lightning_logs",
         save_logs: bool = False,
         teamspace: Union[str, "Teamspace"] | None = None,
@@ -76,7 +75,6 @@ class Experiment:
 
         Args:
             name: A human-friendly name for your experiment.
-            version: An experiment version identifier (typically a timestamp string).
             log_dir: Local directory where temporary logs/artifacts are stored. Defaults to "lightning_logs".
             save_logs: If True, capture and upload terminal output as a file artifact. Defaults to False.
             teamspace: Teamspace in which to create and display the charts. If None, uses your default teamspace.
@@ -90,7 +88,6 @@ class Experiment:
             verbose: If True, print styled console output. Defaults to True.
         """
         self.name = name
-        self.version = version
         self.save_logs = save_logs
         self._done_event = Event()
         self._finalized = False
@@ -123,7 +120,6 @@ class Experiment:
         self._metrics_store, _ = self._metrics_api.get_or_create_experiment_metrics(
             teamspace_id=self._teamspace.id,
             name=self.name,
-            version=self.version,
             metadata=metadata,
             light_color=light_color,
             dark_color=dark_color,
@@ -131,13 +127,12 @@ class Experiment:
             store_created_at=bool(store_created_at),
         )
 
-        # Build URLs using API - use version_number from metrics store for clean URLs
+        # Build URLs using API
         if is_authenticated:
             self._url = build_experiment_url(
                 owner_name=self._teamspace.owner.name,
                 teamspace_name=self._teamspace.name,
                 experiment_name=self.name,
-                version=self._metrics_store.version_number,
             )
         else:
             self._url = get_guest_url(self._auth_api)
@@ -163,7 +158,6 @@ class Experiment:
             stop_event=self._stop_event,
             done_event=self._done_event,
             log_dir=log_dir,
-            version=version,
             store_step=store_step,
             store_created_at=store_created_at,
             rate_limiting_interval=rate_limiting_interval,
@@ -462,13 +456,13 @@ class Experiment:
         Args:
             path: Path to the local model file or directory to upload.
             verbose: Whether to show progress bar during upload. Defaults to False.
-            version: Optional version string for the model. Defaults to the experiment version.
+            version: Optional version string for the model.
         """
         model_artifact = ModelArtifact(
             path=path,
             experiment_name=self.name,
             teamspace=self._teamspace,
-            version=version or self.version,
+            version=version or "latest",
             verbose=verbose,
         )
         model_artifact.log()
@@ -485,7 +479,7 @@ class Experiment:
         Args:
             path: Path where the model should be saved locally. Directories are created if needed.
             verbose: Whether to show progress bar during download. Defaults to False.
-            version: Optional version string for the model. Defaults to the experiment version.
+            version: Optional version string for the model.
 
         Returns:
             str: The local path where the model was saved (same as the input path).
@@ -494,7 +488,7 @@ class Experiment:
             path=path,
             experiment_name=self.name,
             teamspace=self._teamspace,
-            version=version or self.version,
+            version=version or "latest",
             verbose=verbose,
         )
         result = model_artifact.get()
@@ -521,7 +515,7 @@ class Experiment:
             model: The model object to save and upload (e.g., torch.nn.Module, LightningModule).
             staging_dir: Optional local directory for staging the model before upload. If None, uses a temp directory.
             verbose: Whether to show progress bar during upload. Defaults to False.
-            version: Optional version string for the model. Defaults to the experiment version.
+            version: Optional version string for the model.
             metadata: Optional metadata dictionary to store with the model (e.g., hyperparameters, metrics).
 
         Returns:
@@ -531,7 +525,7 @@ class Experiment:
             model=model,
             experiment_name=self.name,
             teamspace=self._teamspace,
-            version=version or self.version,
+            version=version or "latest",
             verbose=verbose,
             metadata=metadata,
             staging_dir=staging_dir,
@@ -557,7 +551,7 @@ class Experiment:
             model=None,  # Not needed for loading
             experiment_name=self.name,
             teamspace=self._teamspace,
-            version=version or self.version,
+            version=version or "latest",
             verbose=verbose,
             staging_dir=staging_dir,
         )
@@ -633,6 +627,5 @@ class Experiment:
             name=self.name,
             teamspace=self._teamspace.name,
             url=self._url,
-            version=self.version,
             metadata=self.metadata,
         )

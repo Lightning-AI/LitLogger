@@ -27,15 +27,6 @@ def test_logger_name_property():
     assert logger._name == "test_logger"
 
 
-def test_logger_version_property():
-    """Test that logger has a version property."""
-    # Mock the logger to avoid actual initialization
-    logger = object.__new__(LightningLogger)
-    logger._version = "v1.0"
-
-    assert logger._version == "v1.0"
-
-
 def test_log_file():
     """Test that LightningLogger has a log_file method."""
     from litlogger import LightningLogger

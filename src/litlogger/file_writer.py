@@ -24,14 +24,6 @@ from litlogger.api.client import LitRestClient
 from litlogger.types import Metrics, MetricsTracker, MetricValue
 
 
-def _sanitize_version_for_path(version: str) -> str:
-    """Sanitize version string for use in file paths.
-
-    Windows doesn't allow colons in filenames, so replace them with hyphens.
-    """
-    return version.replace(":", "-")
-
-
 class BinaryFileWriter:
     """Write metrics to per-series .litbin files and upload them as a single archive.
 
@@ -43,7 +35,6 @@ class BinaryFileWriter:
     def __init__(
         self,
         log_dir: str,
-        version: str,
         store_step: bool,
         store_created_at: bool,
         teamspace_id: str,
@@ -52,7 +43,6 @@ class BinaryFileWriter:
         client: LitRestClient | None = None,
     ) -> None:
         self.log_dir = log_dir
-        self.version = version
         self.store_step = store_step
         self.store_created_at = store_created_at
 
@@ -149,8 +139,7 @@ class BinaryFileWriter:
         filenames = [fn for fn in os.listdir(self.log_dir) if fn.endswith(".litbin")]
 
         # Create and upload tar ball
-        safe_version = _sanitize_version_for_path(self.version)
-        file_path = os.path.join(self.log_dir, f"{safe_version}.tar.gz")
+        file_path = os.path.join(self.log_dir, f"{self.metrics_store_id}.tar.gz")
         with tarfile.open(file_path, "w:gz") as tar:
             for filename in filenames:
                 tar.add(

@@ -46,7 +46,6 @@ class _BackgroundThread(Thread):
         stop_event: Event that, when set, requests a graceful shutdown.
         done_event: Event set once all pending metrics have been flushed and the upload completed.
         log_dir: Local directory where temporary metric files are written.
-        version: Experiment version used to name the archive on upload.
         store_step: Whether to persist the step field with each value.
         store_created_at: Whether to persist the timestamp for each value.
         rate_limiting_interval: Minimum seconds between consecutive network sends.
@@ -64,7 +63,6 @@ class _BackgroundThread(Thread):
         stop_event: Event,
         done_event: Event,
         log_dir: str,
-        version: str,
         store_step: bool,
         store_created_at: bool,
         rate_limiting_interval: int = 1,
@@ -90,7 +88,6 @@ class _BackgroundThread(Thread):
 
         self.file_store = BinaryFileWriter(
             log_dir=log_dir,
-            version=version,
             store_step=store_step,
             store_created_at=store_created_at,
             teamspace_id=teamspace_id,

@@ -271,7 +271,6 @@ class Printer:
         name: str,
         teamspace: str,
         url: str,
-        version: str | None = None,
         metadata: Dict[str, str] | None = None,
         show_logo: bool = True,
     ) -> None:
@@ -310,9 +309,6 @@ class Printer:
                 f"               Teamspace: {self.code(teamspace)}",
             ]
 
-            if version:
-                info_lines.append(f"                 Version: {self.secondary(version)}")
-
             if metadata:
                 items = list(metadata.items())[:3]
                 meta_str = ", ".join(f"{k}={v}" for k, v in items)
@@ -348,9 +344,6 @@ class Printer:
             self._echo(f"{rocket}{prefix_space}Experiment initialized")
             self._echo(f"           Name: {self.name(name)}", prefix=False)
             self._echo(f"      Teamspace: {self.code(teamspace)}", prefix=False)
-
-            if version:
-                self._echo(f"        Version: {self.secondary(version)}", prefix=False)
 
             if metadata:
                 items = list(metadata.items())[:3]

@@ -81,7 +81,6 @@ def build_experiment_url(
     owner_name: str,
     teamspace_name: str,
     experiment_name: str,
-    version: str,
 ) -> str:
     """Build the direct URL to an experiment.
 
@@ -89,13 +88,12 @@ def build_experiment_url(
         owner_name: Owner username or org name.
         teamspace_name: Teamspace name.
         experiment_name: Experiment name.
-        version: Experiment version.
 
     Returns:
         str: The experiment URL.
     """
     cloud_url = _get_cloud_url()
-    return f"{cloud_url}/{owner_name}/{teamspace_name}/experiments/{experiment_name}%20-%20v{version}"
+    return f"{cloud_url}/{owner_name}/{teamspace_name}/experiments/{experiment_name}"
 
 
 _MAP_PLUGIN_ID_TO_APP = {"job_run_plugin": "jobs", "distributed_plugin": "mmt", "litdata": "litdata"}

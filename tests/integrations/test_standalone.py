@@ -586,11 +586,7 @@ def test_get_metadata_empty():
 @pytest.mark.cloud()
 def test_get_metadata_direct_experiment():
     """Test experiment.metadata property when using Experiment class directly."""
-    from datetime import datetime, timezone
-
     experiment_name = f"meta_direct-{uuid.uuid4().hex}"
-    timestamp = datetime.now(timezone.utc).isoformat(timespec="milliseconds")
-    version_str = timestamp.replace("+00:00", "Z")
 
     metadata = {
         "framework": "PyTorch",
@@ -600,7 +596,6 @@ def test_get_metadata_direct_experiment():
     with tempfile.TemporaryDirectory() as tmpdir:
         exp = Experiment(
             name=experiment_name,
-            version=version_str,
             teamspace="oss-litlogger",
             log_dir=tmpdir,
             metadata=metadata,
@@ -663,17 +658,11 @@ def test_custom_colors():
 @pytest.mark.cloud()
 def test_direct_experiment_usage():
     """Test using the Experiment class directly without module-level API."""
-    from datetime import datetime, timezone
-
     experiment_name = f"standalone_direct_exp-{uuid.uuid4().hex}"
-    # Create version as proper RFC 3339 timestamp with Z suffix (required by protobuf)
-    timestamp = datetime.now(timezone.utc).isoformat(timespec="milliseconds")
-    version_str = timestamp.replace("+00:00", "Z")
 
     with tempfile.TemporaryDirectory() as tmpdir:
         exp = Experiment(
             name=experiment_name,
-            version=version_str,
             teamspace="oss-litlogger",
             log_dir=tmpdir,
             metadata={"direct": "true"},
@@ -857,15 +846,10 @@ def test_get_or_create_experiment_metrics():
     api = MetricsApi()
     client = LitRestClient()
 
-    from datetime import datetime, timezone
-
-    version = datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
-
     # get_or_create should return the existing experiment (created by litlogger.init)
     experiment, created = api.get_or_create_experiment_metrics(
         teamspace_id=teamspace_id,
         name=experiment_name,
-        version=version,
     )
 
     assert created is False
@@ -885,7 +869,6 @@ def test_get_or_create_experiment_metrics():
     new_experiment, new_created = api.get_or_create_experiment_metrics(
         teamspace_id=teamspace_id,
         name=new_experiment_name,
-        version=version,
     )
 
     assert new_created is True

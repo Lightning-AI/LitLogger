@@ -652,7 +652,6 @@ class Experiment:
         resp = self._metrics_api.get_experiment_metrics_by_name(
             self._teamspace.id,
             name=self._metrics_store.name,
-            version_number=self._metrics_store.version_number,
         )
 
         if resp is not None:

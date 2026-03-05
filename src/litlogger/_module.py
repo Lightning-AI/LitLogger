@@ -29,6 +29,7 @@ def set_global(
     get_model: Callable | None = None,
     log_model_artifact: Callable | None = None,
     get_model_artifact: Callable | None = None,
+    log_metadata: Callable | None = None,
     finalize: Callable | None = None,
 ) -> None:
     """Set global litlogger state after initialization."""
@@ -50,6 +51,8 @@ def set_global(
         litlogger.log_model_artifact = log_model_artifact
     if get_model_artifact:
         litlogger.get_model_artifact = get_model_artifact
+    if log_metadata:
+        litlogger.log_metadata = log_metadata
     if finalize:
         litlogger.finalize = finalize
 
@@ -66,6 +69,7 @@ def get_global() -> Dict[str, Any]:
         "get_model": litlogger.get_model,
         "log_model_artifact": litlogger.log_model_artifact,
         "get_model_artifact": litlogger.get_model_artifact,
+        "log_metadata": litlogger.log_metadata,
         "finalize": litlogger.finalize,
     }
 
@@ -83,4 +87,5 @@ def unset_globals() -> None:
     litlogger.get_model = pre_init_callable("litlogger.get_model", Experiment.get_model)
     litlogger.log_model_artifact = pre_init_callable("litlogger.log_model_artifact", Experiment.log_model_artifact)
     litlogger.get_model_artifact = pre_init_callable("litlogger.get_model_artifact", Experiment.get_model_artifact)
+    litlogger.log_metadata = pre_init_callable("litlogger.log_metadata", Experiment.log_metadata)
     litlogger.finalize = pre_init_callable("litlogger.finalize", Experiment.finalize)

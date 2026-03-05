@@ -112,6 +112,7 @@ def init(
         log_model_artifact=experiment.log_model_artifact,
         get_model_artifact=experiment.get_model_artifact,
         finalize=experiment.finalize,
+        log_metadata=experiment.log_metadata,
     )
 
     if print_url:

@@ -244,9 +244,7 @@ class MetricsApi:
         random_light_color, random_dark_color = _create_colors(name)
 
         # Convert metadata to tags
-        tags = []
-        if metadata:
-            tags = [V1MetricsTags(name=str(k), value=str(v), from_code=True, active=False) for k, v in metadata.items()]
+        tags = self._metadata_to_tags(metadata=metadata)
 
         # Create the stream
         cloudspace_id = os.getenv("LIGHTNING_CLOUD_SPACE_ID")
@@ -306,8 +304,12 @@ class MetricsApi:
         persisted: bool = True,
         phase: PhaseType = PhaseType.COMPLETED,
         trackers: Dict[str, MetricsTracker] | None = None,
+        metadata: Dict[str, str] | None = None,
     ) -> None:
-        """Update an experiment metrics store with completion status and trackers.
+        """Update an experiment metrics store with completion status, trackers, and/or metadata.
+
+        When ``metadata`` is ``None`` (the default), existing tags on the server are
+        left untouched.  Pass an explicit dict to replace the tags.
 
         Args:
             teamspace_id: The teamspace ID.
@@ -315,6 +317,8 @@ class MetricsApi:
             persisted: Whether the metrics have been persisted.
             phase: The phase of the metrics store (e.g., COMPLETED).
             trackers: Optional dictionary of metric trackers.
+            metadata: Optional metadata to attach to the experiment. If None,
+                existing tags are preserved.
         """
         # Convert user-facing phase and trackers to V1 types
         v1_phase = _to_v1_phase_type(phase)
@@ -329,6 +333,7 @@ class MetricsApi:
                 persisted=persisted,
                 phase=v1_phase,
                 trackers=v1_trackers,
+                tags=self._metadata_to_tags(metadata=metadata) if metadata is not None else None,
             ),
         )
 
@@ -345,3 +350,20 @@ class MetricsApi:
             return None
 
         return {name: _from_v1_metrics_tracker(v1_tracker) for name, v1_tracker in metrics_store.trackers.items()}
+
+    @staticmethod
+    def _metadata_to_tags(metadata: Dict[str, Any] | None) -> list[V1MetricsTags]:
+        """Convert a metadata dictionary to a list of V1MetricsTags.
+
+        Args:
+            metadata: Dictionary of metadata key-value pairs, or None.
+
+        Returns:
+            List of V1MetricsTags with ``from_code=True`` and ``active=True``,
+            or an empty list if metadata is None/empty.
+        """
+        tags = []
+        if metadata:
+            tags = [V1MetricsTags(name=str(k), value=str(v), from_code=True, active=True) for k, v in metadata.items()]
+
+        return tags

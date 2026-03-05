@@ -862,16 +862,7 @@ class TestExperimentLogMetadata:
         exp._metrics_store = MagicMock()
         exp._metrics_store.id = "store_123"
         exp._metrics_store.name = "test"
-        exp._metrics_store.version_number = 1
         exp._metrics_api = MagicMock()
-        exp._metrics_api.get_experiment_metrics_by_name.return_value = exp._metrics_store
-
-        # Existing from_code tag
-        existing_tag = MagicMock()
-        existing_tag.name = "lr"
-        existing_tag.value = "0.001"
-        existing_tag.from_code = True
-        exp._metrics_store.tags = [existing_tag]
 
         exp._teamspace = MagicMock()
         exp._teamspace.id = "ts_123"
@@ -882,9 +873,6 @@ class TestExperimentLogMetadata:
         from litlogger.experiment import Experiment
 
         Experiment.log_metadata(exp, {"batch_size": "32"})
-
-        # Verify _update_metrics_store was called
-        exp._update_metrics_store.assert_called_once()
 
         # Verify update_experiment_metrics was called with merged metadata
         exp._metrics_api.update_experiment_metrics.assert_called_once()
@@ -900,9 +888,7 @@ class TestExperimentLogMetadata:
         exp._metrics_store = MagicMock()
         exp._metrics_store.id = "store_123"
         exp._metrics_store.name = "test"
-        exp._metrics_store.version_number = 1
         exp._metrics_api = MagicMock()
-        exp._metrics_api.get_experiment_metrics_by_name.return_value = exp._metrics_store
 
         exp._teamspace = MagicMock()
         exp._teamspace.id = "ts_123"
@@ -937,7 +923,7 @@ class TestUpdateMetricsStore:
 
         Experiment._update_metrics_store(exp)
 
-        exp._metrics_api.get_experiment_metrics_by_name.assert_called_once_with("ts_123", name="test", version_number=1)
+        exp._metrics_api.get_experiment_metrics_by_name.assert_called_once_with("ts_123", name="test")
         assert exp._metrics_store is new_store
 
     def test_update_metrics_store_keeps_old_on_none(self):
@@ -1047,7 +1033,6 @@ class TestExperimentStatsTracking:
         mock_model_artifact_class.return_value = MagicMock()
         exp = MagicMock()
         exp.name = "test"
-        exp.version = "v1"
         exp._teamspace = MagicMock()
         exp._stats = MagicMock()
         exp._stats.models_logged = 0
@@ -1063,7 +1048,6 @@ class TestExperimentStatsTracking:
         mock_model_class.return_value = MagicMock()
         exp = MagicMock()
         exp.name = "test"
-        exp.version = "v1"
         exp._teamspace = MagicMock()
         exp._stats = MagicMock()
         exp._stats.models_logged = 0
@@ -1081,7 +1065,6 @@ class TestExperimentPrintUrl:
         """Test that print_url delegates to printer with correct args."""
         exp = MagicMock()
         exp.name = "my-experiment"
-        exp.version = "v1"
         exp._teamspace = MagicMock()
         exp._teamspace.name = "my-teamspace"
         exp._url = "https://lightning.ai/my-experiment"
@@ -1103,7 +1086,6 @@ class TestExperimentPrintUrl:
         assert call_kwargs["name"] == "my-experiment"
         assert call_kwargs["teamspace"] == "my-teamspace"
         assert call_kwargs["url"] == "https://lightning.ai/my-experiment"
-        assert call_kwargs["version"] == "v1"
 
 
 class TestExperimentLogMetricsBatchCreatedAt:

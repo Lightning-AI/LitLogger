@@ -272,12 +272,11 @@ class Experiment:
         if kwargs:
             current_tags.update(kwargs)
 
-        tags = self._metrics_api._metadata_to_tags(current_tags)
         self._metrics_api.update_experiment_metrics(
             teamspace_id=self._teamspace.id,
             metrics_store_id=self._metrics_store.id,
             phase=PhaseType.RUNNING,
-            metadata=tags,
+            metadata=current_tags,
         )
 
     def log_metrics_batch(self, metrics: Dict[str, List[Dict[str, float]]]) -> None:

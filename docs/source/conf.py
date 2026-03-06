@@ -95,6 +95,8 @@ nitpick_ignore = [
     ("py:class", "lightning.fabric.loggers.logger.Logger"),
     ("py:class", "lightning.fabric.utilities.types._PATH"),
     ("py:class", "lightning_sdk.teamspace.Teamspace"),
+    ("py:class", "pytorch_lightning.loggers.LitLogger"),
+    ("py:class", "lightning.pytorch.loggers.LitLogger"),
 ]
 
 # -- Options for autodoc -----------------------------------------------------

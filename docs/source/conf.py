@@ -32,6 +32,7 @@ extensions = [
     "sphinx.ext.napoleon",
     "sphinx.ext.viewcode",
     "sphinx.ext.autosectionlabel",
+    "sphinx.ext.todo",
     "sphinx_autodoc_typehints",
     "sphinx_copybutton",
     "sphinx_paramlinks",

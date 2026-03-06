@@ -22,7 +22,7 @@ release = litlogger.__version__
 
 # -- General configuration ---------------------------------------------------
 
-needs_sphinx = "7.0"  # tested with Sphinx 8.x
+needs_sphinx = "8.0"
 
 extensions = [
     "sphinx.ext.autodoc",

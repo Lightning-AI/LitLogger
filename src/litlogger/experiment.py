@@ -261,17 +261,18 @@ class Experiment:
         Args:
             metrics: Dictionary mapping metric names to lists of dicts with "step" and "value" keys.
 
-        Example:
-                    {
-                        "loss": [
-                            {"step": 0, "value": 1.0},
-                            {"step": 1, "value": 0.5},
-                        ],
-                        "accuracy": [
-                            {"step": 0, "value": 0.6},
-                            {"step": 1, "value": 0.8},
-                        ],
-                    }
+        Example::
+
+            {
+                "loss": [
+                    {"step": 0, "value": 1.0},
+                    {"step": 1, "value": 0.5},
+                ],
+                "accuracy": [
+                    {"step": 0, "value": 0.6},
+                    {"step": 1, "value": 0.8},
+                ],
+            }
 
         Raises:
             RuntimeError: If the background thread encountered an error.

@@ -6,9 +6,6 @@ on:
   pull_request:
     types: [opened, reopened, ready_for_review, synchronize]
 
-env:
-  PYPI_LOCAL_DIR: "pypi_pkgs/"
-
 jobs:
   docs-build:
     runs-on: ubuntu-latest
@@ -27,9 +24,7 @@ jobs:
 
     - name: Install package & doc dependencies
       run: |
-        aws s3 sync --no-sign-request s3://sphinx-packages/ ${PYPI_LOCAL_DIR}
         uv sync --group docs
-        uv pip install lai-sphinx-theme -U -f ${PYPI_LOCAL_DIR}
         uv pip list
 
     - name: Build docs

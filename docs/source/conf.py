@@ -57,24 +57,10 @@ pygments_style = None
 
 # -- Options for HTML output -------------------------------------------------
 
-# Use the Lightning AI theme if available, otherwise fall back to pydata
-try:
-    import lai_sphinx_theme
-
-    html_theme = "lai_sphinx_theme"
-    html_theme_path = [os.environ.get("LIT_SPHINX_PATH", lai_sphinx_theme.get_html_theme_path())]
-    html_theme_options = {
-        "pytorch_project": "https://lightning.ai",
-        "canonical_url": "https://lightning.ai/docs/litlogger/stable/",
-        "collapse_navigation": False,
-        "display_version": True,
-        "logo_only": False,
-    }
-except ImportError:
-    html_theme = "pydata_sphinx_theme"
-    html_theme_options = {
-        "github_url": "https://github.com/Lightning-AI/litlogger",
-    }
+html_theme = "pydata_sphinx_theme"
+html_theme_options = {
+    "github_url": "https://github.com/Lightning-AI/litlogger",
+}
 
 # html_favicon = "_static/images/icon.svg"  # TODO: add favicon
 html_static_path = ["_static"]

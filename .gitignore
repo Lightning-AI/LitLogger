@@ -177,3 +177,6 @@ cython_debug/
 # our binary format
 *.tar.gz
 *.litbin
+
+# since this is a library, we don't want to lock uv versions
+uv.lock

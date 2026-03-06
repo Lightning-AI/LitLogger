@@ -183,6 +183,7 @@ and native to the Lightning platform.
     guide/lightning
     guide/artifacts
     guide/media
+    guide/examples
 
 .. toctree::
     :maxdepth: 1

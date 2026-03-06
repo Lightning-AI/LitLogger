@@ -37,7 +37,6 @@ extensions = [
     "sphinx_copybutton",
     "sphinx_paramlinks",
     "sphinx_togglebutton",
-    "sphinx_toolbox.collapse",
     "myst_parser",
 ]
 

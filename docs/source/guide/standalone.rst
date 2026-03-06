@@ -22,16 +22,17 @@ Initialize an experiment, log metrics in a loop, and finalize when done:
 
    litlogger.finalize()
 
-After calling ``init()``, a URL is printed where you can view live charts on
-`lightning.ai <https://lightning.ai>`_.
+After calling :func:`litlogger.init() <litlogger.init.init>`, a URL is printed
+where you can view live charts on `lightning.ai <https://lightning.ai>`_.
 
 
 Tracking Metrics
 ================
 
-Use ``litlogger.log()`` (or equivalently ``litlogger.log_metrics()``) to send
-metric values. Metrics are buffered and uploaded in the background so your
-training loop is never blocked.
+Use :meth:`litlogger.log() <litlogger.experiment.Experiment.log_metrics>`
+(or equivalently :meth:`litlogger.log_metrics() <litlogger.experiment.Experiment.log_metrics>`)
+to send metric values. Metrics are buffered and uploaded in the background so
+your training loop is never blocked.
 
 .. code-block:: python
 
@@ -52,7 +53,7 @@ Metadata lets you tag experiments with key-value pairs like hyperparameters,
 model names, or dataset versions. This makes it easy to filter, compare, and
 identify experiments.
 
-Pass a ``metadata`` dictionary to ``init()``:
+Pass a ``metadata`` dictionary to :func:`litlogger.init() <litlogger.init.init>`:
 
 .. code-block:: python
 
@@ -70,8 +71,9 @@ Pass a ``metadata`` dictionary to ``init()``:
 Retrieve Metadata
 -----------------
 
-Retrieve metadata from any experiment using ``litlogger.get_metadata()`` or
-the ``experiment.metadata`` property:
+Retrieve metadata from any experiment using
+:func:`litlogger.get_metadata() <litlogger.init.get_metadata>` or the
+:attr:`Experiment.metadata <litlogger.experiment.Experiment.metadata>` property:
 
 .. code-block:: python
 
@@ -149,22 +151,21 @@ into a different one:
 Finalizing
 ==========
 
-``litlogger.finalize()`` flushes all remaining metrics to the cloud. It is
-called automatically via an ``atexit`` handler, but calling it explicitly
-guarantees that everything is uploaded before the process exits:
+:meth:`litlogger.finalize() <litlogger.experiment.Experiment.finalize>` flushes
+all remaining metrics to the cloud. It is called automatically via an
+``atexit`` handler, but calling it explicitly guarantees that everything is
+uploaded before the process exits:
 
 .. code-block:: python
 
    litlogger.finalize()
-   # or equivalently:
-   litlogger.finish()
 
 
 Using the Experiment Object
 ===========================
 
-``litlogger.init()`` returns an :class:`~litlogger.experiment.Experiment`
-instance that you can use directly:
+:func:`litlogger.init() <litlogger.init.init>` returns an
+:class:`~litlogger.experiment.Experiment` instance that you can use directly:
 
 .. code-block:: python
 

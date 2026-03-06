@@ -61,7 +61,8 @@ type. If the type cannot be determined, a ``ValueError`` is raised.
 Parameters
 ==========
 
-``log_media`` accepts the following parameters:
+:meth:`litlogger.log_media() <litlogger.experiment.Experiment.log_media>` accepts
+the following parameters:
 
 - **name** -- Name of the media entry.
 - **path** -- Local path to the file.
@@ -74,8 +75,8 @@ Parameters
 Using with LightningLogger
 ===========================
 
-The :class:`~litlogger.logger.LightningLogger` exposes the same ``log_media``
-method, which you can call from callbacks or your LightningModule:
+The :class:`~litlogger.logger.LightningLogger` exposes the same
+:meth:`litlogger.log_media() <litlogger.experiment.Experiment.log_media>` method, which you can call from callbacks or your LightningModule:
 
 .. code-block:: python
 

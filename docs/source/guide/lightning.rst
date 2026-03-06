@@ -10,7 +10,7 @@ Lightning ``Trainer`` and Lightning Fabric, streaming metrics and artifacts to
 Using with Trainer
 ==================
 
-Pass a ``LightningLogger`` as the ``logger`` argument to the Trainer.
+Pass a :class:`~litlogger.logger.LightningLogger` as the ``logger`` argument to the Trainer.
 Every ``self.log()`` call inside your LightningModule is automatically
 forwarded to Lightning.ai:
 
@@ -75,7 +75,7 @@ registry whenever Lightning saves a checkpoint:
 Using with Fabric
 =================
 
-``LightningLogger`` also works as a Fabric logger:
+:class:`~litlogger.logger.LightningLogger` also works as a Fabric logger:
 
 .. code-block:: python
 
@@ -94,7 +94,7 @@ Using with Fabric
 Logging Files and Media
 ========================
 
-The logger exposes ``log_file`` and ``log_media`` for uploading artifacts
+The logger exposes :meth:`litlogger.log_file() <litlogger.experiment.Experiment.log_file>` and :meth:`litlogger.log_media() <litlogger.experiment.Experiment.log_media>` for uploading artifacts
 during training:
 
 .. code-block:: python

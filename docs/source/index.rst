@@ -43,6 +43,8 @@ Install
 
    pip install litlogger
 
+See more details at :doc:`install`
+
 Hello World
 -----------
 
@@ -70,8 +72,8 @@ LitLogger provides two APIs: a **standalone API** for any Python code, and an
 Standalone API
 --------------
 
-The standalone API uses ``litlogger.init()`` and module-level functions. This
-is the recommended approach for most use cases.
+The standalone API uses :func:`litlogger.init() <litlogger.init.init>` and
+module-level functions. This is the recommended approach for most use cases.
 
 .. code-block:: python
 
@@ -92,9 +94,9 @@ See :doc:`guide/standalone` for the full guide.
 Experiment
 ----------
 
-``litlogger.init()`` returns an :class:`~litlogger.experiment.Experiment`
-instance. You can also create one directly for full control over the
-experiment lifecycle.
+:func:`litlogger.init() <litlogger.init.init>` returns an
+:class:`~litlogger.experiment.Experiment` instance. You can also create one
+directly for full control over the experiment lifecycle.
 
 .. code-block:: python
 
@@ -119,9 +121,9 @@ See the :doc:`api/experiment` reference for all available methods.
 PyTorch Lightning Integration
 =============================
 
-The ``LightningLogger`` class integrates directly with the PyTorch Lightning
-Trainer, so every ``self.log()`` call is automatically forwarded to
-Lightning.ai.
+The :class:`~litlogger.logger.LightningLogger` class integrates directly with
+the PyTorch Lightning Trainer, so every ``self.log()`` call is automatically
+forwarded to Lightning.ai.
 
 .. code-block:: python
 
@@ -152,14 +154,6 @@ Open an experiment detail to share with everyone or specific users.
 
 .. image:: https://storage.googleapis.com/lightning-avatars/litpages/01j07an7zgc2ewmnnxj8gngg72/19d278b1-32a4-43ac-9a03-200aa0687e69.png
    :alt: Sharing option for experiments
-
-----
-
-Third-Party Loggers
-===================
-
-Use any third-party logger you want with Lightning. However, LitLogger is free
-and native to the Lightning platform.
 
 ----
 

@@ -29,7 +29,8 @@ Log and Retrieve Files
 Logging Multiple Files
 ======================
 
-``log_files`` uploads a list of files in parallel for better throughput:
+:meth:`litlogger.log_files() <litlogger.experiment.Experiment.log_files>` uploads
+a list of files in parallel for better throughput:
 
 .. code-block:: python
 
@@ -66,7 +67,7 @@ Logging Model Files
 ===================
 
 If you already have saved model files on disk (weights, checkpoints, or full
-directories), use ``log_model_artifact``:
+directories), use :meth:`litlogger.log_model_artifact() <litlogger.experiment.Experiment.log_model_artifact>`:
 
 .. code-block:: python
 

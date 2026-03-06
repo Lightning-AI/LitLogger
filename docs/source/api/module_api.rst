@@ -10,13 +10,10 @@ Initialization
 .. currentmodule:: litlogger.init
 
 .. autofunction:: init
-    :no-index:
 
 .. autofunction:: finish
-    :no-index:
 
 .. autofunction:: get_metadata
-    :no-index:
 
 Experiment Methods
 ------------------

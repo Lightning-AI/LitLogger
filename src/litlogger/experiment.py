@@ -210,7 +210,7 @@ class Experiment:
         tags = getattr(self._metrics_store, "tags", None) or []
         return {tag.name: tag.value for tag in tags if tag.from_code}
 
-    def log_metrics(self, metrics: Dict[str, float], step: int | None = None, **kwargs: float) -> None:
+    def log_metrics(self, metrics: Dict[str, float] | None = None, step: int | None = None, **kwargs: float) -> None:
         """Log metrics to the experiment with background uploading.
 
         Metrics are buffered locally and uploaded to the cloud in batches to optimize performance.
@@ -230,6 +230,9 @@ class Experiment:
             raise self._manager.exception
 
         batch: Dict[str, Metrics] = {}
+
+        if metrics is None:
+            metrics = {}
 
         metrics.update(kwargs)
         for name, value in metrics.items():

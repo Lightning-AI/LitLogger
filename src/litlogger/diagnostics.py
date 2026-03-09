@@ -160,7 +160,8 @@ def collect_system_info() -> dict:
     """
 
     # git
-    def get_git_info(command: List[str], default_message: str) -> str:
+    def get_git_info(command: List[str], default_message: str, fallback_cwd: str | None) -> str:
+        """Checks the git info of the current cwd. If not successful, then checks for the fallback_cwd."""
         try:
             return subprocess.check_output(
                 command,
@@ -168,13 +169,23 @@ def collect_system_info() -> dict:
                 stderr=subprocess.DEVNULL,
             ).strip()
         except subprocess.CalledProcessError:
-            return default_message
+            try:
+                return subprocess.check_output(command, text=True, stderr=subprocess.DEVNULL, cwd=fallback_cwd).strip()
+            except subprocess.CalledProcessError:
+                return default_message
+
+    script_path = os.path.abspath(sys.argv[0])
+    script_dir = os.path.dirname(script_path)
 
     # in case git is not installed
     try:
-        git_repo_name = get_git_info(["git", "rev-parse", "--show-toplevel"], "Not a git repository").split("/")[-1]
-        git_branch = get_git_info(["git", "rev-parse", "--abbrev-ref", "HEAD"], "No branch found")
-        git_commit_hash = get_git_info(["git", "rev-parse", "HEAD"], "No commit hash found")
+        git_repo_name = get_git_info(
+            ["git", "rev-parse", "--show-toplevel"], "Not a git repository", fallback_cwd=script_dir
+        ).split("/")[-1]
+        git_branch = get_git_info(
+            ["git", "rev-parse", "--abbrev-ref", "HEAD"], "No branch found", fallback_cwd=script_dir
+        )
+        git_commit_hash = get_git_info(["git", "rev-parse", "HEAD"], "No commit hash found", fallback_cwd=script_dir)
     except FileNotFoundError:
         git_repo_name = None
         git_branch = None

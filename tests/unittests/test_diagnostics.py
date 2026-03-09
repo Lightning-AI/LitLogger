@@ -8,9 +8,49 @@ from litlogger.diagnostics import (
     get_cpu_name,
     get_cuda_version,
     get_cudnn_version,
+    get_git_info,
     get_gpu_info,
     get_os_info,
 )
+
+
+class TestGetGitInfo:
+    """Test the get_git_info function."""
+
+    @patch("subprocess.check_output")
+    def test_success_on_first_try(self, mock_subprocess):
+        """Test that git info is returned from the cwd call."""
+        mock_subprocess.return_value = "main\n"
+        result = get_git_info(["git", "rev-parse", "--abbrev-ref", "HEAD"], "No branch found", fallback_cwd="/tmp")
+        assert result == "main"
+        mock_subprocess.assert_called_once()
+
+    @patch("subprocess.check_output")
+    def test_fallback_to_cwd(self, mock_subprocess):
+        """Test that git info falls back to fallback_cwd when cwd fails."""
+        mock_subprocess.side_effect = [
+            subprocess.CalledProcessError(1, "git"),
+            "develop\n",
+        ]
+        result = get_git_info(["git", "rev-parse", "--abbrev-ref", "HEAD"], "No branch found", fallback_cwd="/tmp")
+        assert result == "develop"
+        assert mock_subprocess.call_count == 2
+        # Second call should use fallback_cwd
+        assert mock_subprocess.call_args_list[1].kwargs["cwd"] == "/tmp"
+
+    @patch("subprocess.check_output")
+    def test_both_fail_returns_default(self, mock_subprocess):
+        """Test that the default message is returned when both cwd and fallback_cwd fail."""
+        mock_subprocess.side_effect = subprocess.CalledProcessError(1, "git")
+        result = get_git_info(["git", "rev-parse", "--abbrev-ref", "HEAD"], "No branch found", fallback_cwd="/tmp")
+        assert result == "No branch found"
+
+    @patch("subprocess.check_output")
+    def test_output_is_stripped(self, mock_subprocess):
+        """Test that whitespace is stripped from the output."""
+        mock_subprocess.return_value = "  main  \n"
+        result = get_git_info(["git", "rev-parse", "--abbrev-ref", "HEAD"], "No branch found", fallback_cwd=None)
+        assert result == "main"
 
 
 class TestSystemInfo:

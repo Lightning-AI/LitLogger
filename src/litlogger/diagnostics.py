@@ -139,6 +139,21 @@ def get_cli_args() -> str:
     return " ".join(sys.argv[1:])
 
 
+def get_git_info(command: List[str], default_message: str, fallback_cwd: str | None) -> str:
+    """Checks the git info of the current cwd. If not successful, then checks for the fallback_cwd."""
+    try:
+        return subprocess.check_output(
+            command,
+            text=True,
+            stderr=subprocess.DEVNULL,
+        ).strip()
+    except subprocess.CalledProcessError:
+        try:
+            return subprocess.check_output(command, text=True, stderr=subprocess.DEVNULL, cwd=fallback_cwd).strip()
+        except subprocess.CalledProcessError:
+            return default_message
+
+
 def collect_system_info() -> dict:
     """Collect git, system, hardware, environment and CLI information.
 
@@ -158,22 +173,6 @@ def collect_system_info() -> dict:
           - Network I/O (psutil.net_io_counters())
           And add experiment.log_system_metrics() to log these metrics periodically.
     """
-
-    # git
-    def get_git_info(command: List[str], default_message: str, fallback_cwd: str | None) -> str:
-        """Checks the git info of the current cwd. If not successful, then checks for the fallback_cwd."""
-        try:
-            return subprocess.check_output(
-                command,
-                text=True,
-                stderr=subprocess.DEVNULL,
-            ).strip()
-        except subprocess.CalledProcessError:
-            try:
-                return subprocess.check_output(command, text=True, stderr=subprocess.DEVNULL, cwd=fallback_cwd).strip()
-            except subprocess.CalledProcessError:
-                return default_message
-
     script_path = os.path.abspath(sys.argv[0])
     script_dir = os.path.dirname(script_path)
 
@@ -200,7 +199,6 @@ def collect_system_info() -> dict:
     gpu_info = get_gpu_info()
 
     # args - capture python interpreter and script path (cli_args has the arguments separately)
-    script_path = os.path.abspath(sys.argv[0])
     execution_command = f"{sys.executable} {script_path}"
     cli_args = get_cli_args()
 

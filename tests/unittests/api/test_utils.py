@@ -314,6 +314,32 @@ class TestBuildExperimentUrl:
             # The URL should be constructed from the parameters
             assert url == "https://lightning.ai/my-org/my-teamspace/experiments/my-experiment"
 
+    def test_build_experiment_url_with_slashes(self):
+        """Test building experiment URL with slashes in the experiment name."""
+        with patch("litlogger.api.utils._get_cloud_url") as mock_cloud_url:
+            mock_cloud_url.return_value = "https://lightning.ai"
+
+            url = build_experiment_url(
+                owner_name="my-org",
+                teamspace_name="my-teamspace",
+                experiment_name="a/b/c/d/e/f",
+            )
+
+            assert url == "https://lightning.ai/my-org/my-teamspace/experiments/a%2Fb%2Fc%2Fd%2Fe%2Ff"
+
+    def test_build_experiment_url_with_special_chars(self):
+        """Test building experiment URL with special characters in the experiment name."""
+        with patch("litlogger.api.utils._get_cloud_url") as mock_cloud_url:
+            mock_cloud_url.return_value = "https://lightning.ai"
+
+            url = build_experiment_url(
+                owner_name="my-org",
+                teamspace_name="my-teamspace",
+                experiment_name="my experiment@v2",
+            )
+
+            assert url == "https://lightning.ai/my-org/my-teamspace/experiments/my%20experiment%40v2"
+
 
 class TestGetAccessibleUrl:
     """Test the get_accessible_url function."""

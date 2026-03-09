@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from typing import Any, TypedDict
+from urllib.parse import quote
 
 from lightning_sdk import Teamspace
 from lightning_sdk.api.utils import _get_cloud_url
@@ -93,7 +94,7 @@ def build_experiment_url(
         str: The experiment URL.
     """
     cloud_url = _get_cloud_url()
-    return f"{cloud_url}/{owner_name}/{teamspace_name}/experiments/{experiment_name}"
+    return f"{cloud_url}/{owner_name}/{teamspace_name}/experiments/{quote(experiment_name, safe='')}"
 
 
 _MAP_PLUGIN_ID_TO_APP = {"job_run_plugin": "jobs", "distributed_plugin": "mmt", "litdata": "litdata"}

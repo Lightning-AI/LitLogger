@@ -26,13 +26,25 @@ and also as module-level callables after ``litlogger.init()`` is called.
 .. automethod:: Experiment.log_metrics
     :no-index:
 
+.. automethod:: Experiment.log_metadata
+    :no-index:
+
 .. automethod:: Experiment.log_file
+    :no-index:
+
+.. automethod:: Experiment.get_file
     :no-index:
 
 .. automethod:: Experiment.log_model
     :no-index:
 
+.. automethod:: Experiment.get_model
+    :no-index:
+
 .. automethod:: Experiment.log_model_artifact
+    :no-index:
+
+.. automethod:: Experiment.get_model_artifact
     :no-index:
 
 .. automethod:: Experiment.finalize

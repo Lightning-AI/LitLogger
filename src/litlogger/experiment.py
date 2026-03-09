@@ -646,8 +646,6 @@ class Experiment:
             metadata=self.metadata,
         )
 
-    # -- Private helpers -------------------------------------------------------
-
     def _update_metrics_store(self) -> None:
         """Re-fetch the metrics store from the API to refresh local state (tags, trackers, etc.)."""
         resp = self._metrics_api.get_experiment_metrics_by_name(

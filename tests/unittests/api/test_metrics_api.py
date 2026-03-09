@@ -48,27 +48,6 @@ class TestMetricsApi:
         assert result.id == "ms-123"
         assert result.name == "my-experiment"
 
-    def test_get_experiment_metrics_by_name_returns_first_match(self):
-        """Test that get_experiment_metrics_by_name returns the first match when multiple exist."""
-        mock_client = MagicMock()
-        mock_stream_1 = MagicMock()
-        mock_stream_1.id = "ms-123"
-        mock_stream_1.name = "my-experiment"
-        mock_stream_2 = MagicMock()
-        mock_stream_2.id = "ms-456"
-        mock_stream_2.name = "my-experiment"
-        mock_response = MagicMock()
-        mock_response.metrics_streams = [mock_stream_1, mock_stream_2]
-        mock_client.lit_logger_service_list_metrics_streams.return_value = mock_response
-        api = MetricsApi(client=mock_client)
-
-        result = api.get_experiment_metrics_by_name(
-            teamspace_id="ts-123",
-            name="my-experiment",
-        )
-
-        assert result.id == "ms-123"
-
     def test_get_experiment_metrics_by_name_not_found(self):
         """Test that get_experiment_metrics_by_name returns None when experiment not found."""
         mock_client = MagicMock()

@@ -35,7 +35,7 @@ from litlogger.api.media_api import MediaApi
 from litlogger.api.metrics_api import MetricsApi
 from litlogger.api.utils import _resolve_teamspace, build_experiment_url, get_accessible_url, get_guest_url
 from litlogger.artifacts import Artifact, Model, ModelArtifact
-from litlogger.background import _BackgroundThread
+from litlogger.background import PhaseType, _BackgroundThread
 from litlogger.capture import rerun_and_record
 from litlogger.printer import Printer, RunStats
 from litlogger.types import MediaType, Metrics, MetricValue
@@ -206,10 +206,11 @@ class Experiment:
         Returns:
             Dict[str, str]: The metadata dictionary with key-value pairs from code-defined tags.
         """
+        self._update_metrics_store()
         tags = getattr(self._metrics_store, "tags", None) or []
         return {tag.name: tag.value for tag in tags if tag.from_code}
 
-    def log_metrics(self, metrics: Dict[str, float], step: int | None = None, **kwargs: float) -> None:
+    def log_metrics(self, metrics: Dict[str, float] | None = None, step: int | None = None, **kwargs: float) -> None:
         """Log metrics to the experiment with background uploading.
 
         Metrics are buffered locally and uploaded to the cloud in batches to optimize performance.
@@ -229,6 +230,9 @@ class Experiment:
             raise self._manager.exception
 
         batch: Dict[str, Metrics] = {}
+
+        if metrics is None:
+            metrics = {}
 
         metrics.update(kwargs)
         for name, value in metrics.items():
@@ -250,6 +254,33 @@ class Experiment:
         # Push to queue immediately - background thread handles batching and rate limiting
         if batch:
             self._metrics_queue.put(batch)
+
+    def log_metadata(self, metadata: Dict[str, str] | None = None, **kwargs: str) -> None:
+        """Add or update metadata tags on the experiment.
+
+        Merges the provided key-value pairs into the experiment's existing metadata
+        and pushes the update to the cloud immediately.
+
+        Args:
+            metadata: Dictionary of metadata key-value pairs to add or update.
+                Example: {"optimizer": "adam", "lr": "0.001"}.
+            **kwargs: Additional metadata as keyword arguments.
+                Example: optimizer="adam", lr="0.001".
+        """
+        current_tags = self.metadata
+
+        if metadata:
+            current_tags.update(metadata)
+
+        if kwargs:
+            current_tags.update(kwargs)
+
+        self._metrics_api.update_experiment_metrics(
+            teamspace_id=self._teamspace.id,
+            metrics_store_id=self._metrics_store.id,
+            phase=PhaseType.RUNNING,
+            metadata=current_tags,
+        )
 
     def log_metrics_batch(self, metrics: Dict[str, List[Dict[str, float]]]) -> None:
         """Log a batch of metrics through the background queue.
@@ -292,19 +323,6 @@ class Experiment:
             batch[name] = Metrics(name=name, values=metric_values)
 
         self._metrics_queue.put(batch)
-
-    def _signal_handler(self, signum: int, frame: FrameType | None) -> None:
-        """Handle termination signals by calling finalize().
-
-        Args:
-            signum: Signal number.
-            frame: Current stack frame (unused).
-        """
-        # Call finalize and then exit with appropriate code
-        # For SIGTERM (15) and SIGINT (2), exit with 128 + signal number
-        # This follows the convention for signal-induced termination
-        self.finalize()
-        sys.exit(128 + signum)
 
     def finalize(self, status: str | None = None, print_summary: bool = True) -> None:
         """Finalize the experiment and upload all remaining metrics.
@@ -630,3 +648,26 @@ class Experiment:
             url=self._url,
             metadata=self.metadata,
         )
+
+    def _update_metrics_store(self) -> None:
+        """Re-fetch the metrics store from the API to refresh local state (tags, trackers, etc.)."""
+        resp = self._metrics_api.get_experiment_metrics_by_name(
+            self._teamspace.id,
+            name=self._metrics_store.name,
+        )
+
+        if resp is not None:
+            self._metrics_store = resp
+
+    def _signal_handler(self, signum: int, frame: FrameType | None) -> None:
+        """Handle termination signals by calling finalize().
+
+        Args:
+            signum: Signal number.
+            frame: Current stack frame (unused).
+        """
+        # Call finalize and then exit with appropriate code
+        # For SIGTERM (15) and SIGINT (2), exit with 128 + signal number
+        # This follows the convention for signal-induced termination
+        self.finalize()
+        sys.exit(128 + signum)

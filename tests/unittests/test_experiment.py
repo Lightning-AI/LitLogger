@@ -774,3 +774,367 @@ class TestExperimentLogMedia:
 
         with patch("os.path.exists", return_value=False), pytest.raises(FileNotFoundError):
             Experiment.log_media(exp, "file", "/non/existent/file.png")
+
+    def test_log_media_with_step_epoch_caption(self):
+        """Test log_media passes step, epoch, and caption to upload_media."""
+        exp = MagicMock()
+        exp._media_api = MagicMock()
+        exp._printer = MagicMock()
+        exp._stats = MagicMock()
+        exp._stats.media_logged = 0
+
+        from unittest.mock import patch
+
+        from litlogger.experiment import Experiment
+        from litlogger.types import MediaType
+
+        with patch("os.path.exists", return_value=True):
+            Experiment.log_media(
+                exp,
+                "img",
+                "/path/to/img.png",
+                kind=MediaType.IMAGE,
+                step=5,
+                epoch=2,
+                caption="A caption",
+            )
+
+        _, kwargs = exp._media_api.upload_media.call_args
+        assert kwargs["step"] == 5
+        assert kwargs["epoch"] == 2
+        assert kwargs["caption"] == "A caption"
+
+
+class TestExperimentMetadataProperty:
+    """Test metadata property."""
+
+    def test_metadata_returns_from_code_tags(self):
+        """Test that metadata property filters to from_code tags only."""
+        exp = MagicMock()
+        tag1 = MagicMock()
+        tag1.name = "lr"
+        tag1.value = "0.001"
+        tag1.from_code = True
+        tag2 = MagicMock()
+        tag2.name = "ui_tag"
+        tag2.value = "ignored"
+        tag2.from_code = False
+        tag3 = MagicMock()
+        tag3.name = "batch_size"
+        tag3.value = "32"
+        tag3.from_code = True
+        exp._metrics_store = MagicMock()
+        exp._metrics_store.tags = [tag1, tag2, tag3]
+
+        from litlogger.experiment import Experiment
+
+        result = Experiment.metadata.fget(exp)
+        assert result == {"lr": "0.001", "batch_size": "32"}
+
+    def test_metadata_returns_empty_when_no_tags(self):
+        """Test that metadata property returns empty dict when tags is None."""
+        exp = MagicMock()
+        exp._metrics_store = MagicMock(spec=[])  # no tags attribute
+
+        from litlogger.experiment import Experiment
+
+        result = Experiment.metadata.fget(exp)
+        assert result == {}
+
+    def test_metadata_returns_empty_for_empty_tags_list(self):
+        """Test that metadata property returns empty dict for empty tags list."""
+        exp = MagicMock()
+        exp._metrics_store = MagicMock()
+        exp._metrics_store.tags = []
+
+        from litlogger.experiment import Experiment
+
+        result = Experiment.metadata.fget(exp)
+        assert result == {}
+
+
+class TestExperimentLogMetadata:
+    """Test log_metadata method."""
+
+    def test_log_metadata_updates_tags(self):
+        """Test that log_metadata merges new metadata with existing."""
+        exp = MagicMock()
+        exp._metrics_store = MagicMock()
+        exp._metrics_store.id = "store_123"
+        exp._metrics_store.name = "test"
+        exp._metrics_api = MagicMock()
+
+        exp._teamspace = MagicMock()
+        exp._teamspace.id = "ts_123"
+        # metadata property can't work via MagicMock, so set it directly
+        exp.metadata = {"lr": "0.001"}
+
+        from litlogger.background import PhaseType
+        from litlogger.experiment import Experiment
+
+        Experiment.log_metadata(exp, {"batch_size": "32"})
+
+        # Verify update_experiment_metrics was called with merged metadata
+        exp._metrics_api.update_experiment_metrics.assert_called_once()
+        call_kwargs = exp._metrics_api.update_experiment_metrics.call_args.kwargs
+        assert call_kwargs["teamspace_id"] == "ts_123"
+        assert call_kwargs["metrics_store_id"] == "store_123"
+        assert call_kwargs["phase"] == PhaseType.RUNNING
+        assert call_kwargs["metadata"] == {"lr": "0.001", "batch_size": "32"}
+
+    def test_log_metadata_overwrites_existing_key(self):
+        """Test that log_metadata overwrites existing keys."""
+        exp = MagicMock()
+        exp._metrics_store = MagicMock()
+        exp._metrics_store.id = "store_123"
+        exp._metrics_store.name = "test"
+        exp._metrics_api = MagicMock()
+
+        exp._teamspace = MagicMock()
+        exp._teamspace.id = "ts_123"
+        # metadata property can't work via MagicMock, so set it directly
+        exp.metadata = {"lr": "0.001"}
+
+        from litlogger.experiment import Experiment
+
+        Experiment.log_metadata(exp, {"lr": "0.01"})
+
+        call_kwargs = exp._metrics_api.update_experiment_metrics.call_args.kwargs
+        assert call_kwargs["metadata"] == {"lr": "0.01"}
+
+
+class TestUpdateMetricsStore:
+    """Test _update_metrics_store method."""
+
+    def test_update_metrics_store_refreshes(self):
+        """Test that _update_metrics_store refreshes from API."""
+        exp = MagicMock()
+        exp._metrics_store = MagicMock()
+        exp._metrics_store.name = "test"
+        exp._metrics_store.version_number = 1
+        exp._teamspace = MagicMock()
+        exp._teamspace.id = "ts_123"
+
+        new_store = MagicMock()
+        exp._metrics_api = MagicMock()
+        exp._metrics_api.get_experiment_metrics_by_name.return_value = new_store
+
+        from litlogger.experiment import Experiment
+
+        Experiment._update_metrics_store(exp)
+
+        exp._metrics_api.get_experiment_metrics_by_name.assert_called_once_with("ts_123", name="test")
+        assert exp._metrics_store is new_store
+
+    def test_update_metrics_store_keeps_old_on_none(self):
+        """Test that _update_metrics_store keeps old store if API returns None."""
+        exp = MagicMock()
+        old_store = MagicMock()
+        exp._metrics_store = old_store
+        exp._metrics_store.name = "test"
+        exp._metrics_store.version_number = 1
+        exp._teamspace = MagicMock()
+        exp._teamspace.id = "ts_123"
+
+        exp._metrics_api = MagicMock()
+        exp._metrics_api.get_experiment_metrics_by_name.return_value = None
+
+        from litlogger.experiment import Experiment
+
+        Experiment._update_metrics_store(exp)
+
+        # Should not overwrite with None
+        assert exp._metrics_store is old_store
+
+
+class TestExperimentLogMetricsKwargs:
+    """Test log_metrics with kwargs."""
+
+    def test_log_metrics_with_kwargs(self):
+        """Test log_metrics accepts kwargs alongside metrics dict."""
+        exp = MagicMock()
+        exp._manager = MagicMock()
+        exp._manager.exception = None
+        exp.store_step = True
+        exp.store_created_at = False
+        exp._metrics_queue = MagicMock()
+        exp._stats = MagicMock()
+
+        from litlogger.experiment import Experiment
+
+        Experiment.log_metrics(exp, {"loss": 0.5}, step=1, accuracy=0.9)
+
+        call_args = exp._metrics_queue.put.call_args[0][0]
+        assert "loss" in call_args
+        assert "accuracy" in call_args
+        assert call_args["loss"].values[0].value == 0.5
+        assert call_args["accuracy"].values[0].value == 0.9
+
+    def test_log_metrics_kwargs_override_dict(self):
+        """Test that kwargs override dict values for same key."""
+        exp = MagicMock()
+        exp._manager = MagicMock()
+        exp._manager.exception = None
+        exp.store_step = False
+        exp.store_created_at = False
+        exp._metrics_queue = MagicMock()
+        exp._stats = MagicMock()
+
+        from litlogger.experiment import Experiment
+
+        Experiment.log_metrics(exp, {"loss": 0.5}, loss=0.3)
+
+        call_args = exp._metrics_queue.put.call_args[0][0]
+        assert call_args["loss"].values[0].value == 0.3
+
+
+class TestExperimentStatsTracking:
+    """Test that experiment methods track stats correctly."""
+
+    def test_log_metrics_tracks_stats(self):
+        """Test log_metrics calls record_metric on stats."""
+        exp = MagicMock()
+        exp._manager = MagicMock()
+        exp._manager.exception = None
+        exp.store_step = True
+        exp.store_created_at = False
+        exp._metrics_queue = MagicMock()
+        exp._stats = MagicMock()
+
+        from litlogger.experiment import Experiment
+
+        Experiment.log_metrics(exp, {"loss": 0.5, "acc": 0.9}, step=1)
+
+        assert exp._stats.record_metric.call_count == 2
+        calls = {c.args[0]: c.args[1] for c in exp._stats.record_metric.call_args_list}
+        assert calls["loss"] == 0.5
+        assert calls["acc"] == 0.9
+
+    @patch.object(experiment_module, "Artifact")
+    def test_log_file_tracks_artifact_count(self, mock_artifact_class):
+        """Test log_file increments artifacts_logged."""
+        mock_artifact_class.return_value = MagicMock()
+        exp = MagicMock()
+        exp.name = "test"
+        exp._teamspace = MagicMock()
+        exp._metrics_store = MagicMock()
+        exp._artifacts_api = MagicMock()
+        exp._stats = MagicMock()
+        exp._stats.artifacts_logged = 0
+
+        from litlogger.experiment import Experiment
+
+        Experiment.log_file(exp, "file.txt", verbose=False)
+        assert exp._stats.artifacts_logged == 1
+
+    @patch.object(experiment_module, "ModelArtifact")
+    def test_log_model_artifact_tracks_model_count(self, mock_model_artifact_class):
+        """Test log_model_artifact increments models_logged."""
+        mock_model_artifact_class.return_value = MagicMock()
+        exp = MagicMock()
+        exp.name = "test"
+        exp._teamspace = MagicMock()
+        exp._stats = MagicMock()
+        exp._stats.models_logged = 0
+
+        from litlogger.experiment import Experiment
+
+        Experiment.log_model_artifact(exp, "model.pt", verbose=False)
+        assert exp._stats.models_logged == 1
+
+    @patch.object(experiment_module, "Model")
+    def test_log_model_tracks_model_count(self, mock_model_class):
+        """Test log_model increments models_logged."""
+        mock_model_class.return_value = MagicMock()
+        exp = MagicMock()
+        exp.name = "test"
+        exp._teamspace = MagicMock()
+        exp._stats = MagicMock()
+        exp._stats.models_logged = 0
+
+        from litlogger.experiment import Experiment
+
+        Experiment.log_model(exp, MagicMock(), verbose=False)
+        assert exp._stats.models_logged == 1
+
+
+class TestExperimentPrintUrl:
+    """Test print_url method."""
+
+    def test_print_url_calls_printer(self):
+        """Test that print_url delegates to printer with correct args."""
+        exp = MagicMock()
+        exp.name = "my-experiment"
+        exp._teamspace = MagicMock()
+        exp._teamspace.name = "my-teamspace"
+        exp._url = "https://lightning.ai/my-experiment"
+
+        # Set up metadata property to return dict
+        tag = MagicMock()
+        tag.name = "lr"
+        tag.value = "0.001"
+        tag.from_code = True
+        exp._metrics_store = MagicMock()
+        exp._metrics_store.tags = [tag]
+
+        from litlogger.experiment import Experiment
+
+        Experiment.print_url(exp)
+
+        exp._printer.experiment_start.assert_called_once()
+        call_kwargs = exp._printer.experiment_start.call_args.kwargs
+        assert call_kwargs["name"] == "my-experiment"
+        assert call_kwargs["teamspace"] == "my-teamspace"
+        assert call_kwargs["url"] == "https://lightning.ai/my-experiment"
+
+
+class TestExperimentLogMetricsBatchCreatedAt:
+    """Test log_metrics_batch with store_created_at."""
+
+    def test_log_metrics_batch_with_store_created_at(self):
+        """Test that log_metrics_batch sets created_at when store_created_at=True."""
+        exp = MagicMock()
+        exp._manager = MagicMock()
+        exp._manager.exception = None
+        exp._metrics_queue = MagicMock()
+        exp.store_created_at = True
+
+        from litlogger.experiment import Experiment
+
+        metrics = {"loss": [{"step": 0, "value": 1.0}]}
+        Experiment.log_metrics_batch(exp, metrics)
+
+        batch = exp._metrics_queue.put.call_args[0][0]
+        assert batch["loss"].values[0].created_at is not None
+
+    def test_log_metrics_batch_without_store_created_at(self):
+        """Test that log_metrics_batch does not set created_at when store_created_at=False."""
+        exp = MagicMock()
+        exp._manager = MagicMock()
+        exp._manager.exception = None
+        exp._metrics_queue = MagicMock()
+        exp.store_created_at = False
+
+        from litlogger.experiment import Experiment
+
+        metrics = {"loss": [{"step": 0, "value": 1.0}]}
+        Experiment.log_metrics_batch(exp, metrics)
+
+        batch = exp._metrics_queue.put.call_args[0][0]
+        assert batch["loss"].values[0].created_at is None
+
+    def test_log_metrics_batch_without_step_key(self):
+        """Test that log_metrics_batch handles missing step key."""
+        exp = MagicMock()
+        exp._manager = MagicMock()
+        exp._manager.exception = None
+        exp._metrics_queue = MagicMock()
+        exp.store_created_at = False
+
+        from litlogger.experiment import Experiment
+
+        metrics = {"loss": [{"value": 1.0}]}
+        Experiment.log_metrics_batch(exp, metrics)
+
+        batch = exp._metrics_queue.put.call_args[0][0]
+        assert batch["loss"].values[0].step is None

@@ -60,6 +60,7 @@ class TestInit:
             log_model_artifact=mock_experiment.log_model_artifact,
             get_model_artifact=mock_experiment.get_model_artifact,
             finalize=mock_experiment.finalize,
+            log_metadata=mock_experiment.log_metadata,
         )
 
         assert result is mock_experiment

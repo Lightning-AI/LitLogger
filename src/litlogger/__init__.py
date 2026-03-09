@@ -38,6 +38,7 @@ log_model = pre_init_callable("litlogger.log_model", Experiment.log_model)
 get_model = pre_init_callable("litlogger.get_model", Experiment.get_model)
 log_model_artifact = pre_init_callable("litlogger.log_model_artifact", Experiment.log_model_artifact)
 get_model_artifact = pre_init_callable("litlogger.get_model_artifact", Experiment.get_model_artifact)
+log_metadata = pre_init_callable("litlogger.log_metadata", Experiment.log_metadata)
 finalize = pre_init_callable("litlogger.finalize", Experiment.finalize)
 
 __all__ = [
@@ -55,6 +56,7 @@ __all__ = [
     "get_model_artifact",
     "finalize",
     "get_metadata",
+    "log_metadata",
 ]
 
 try:

@@ -114,7 +114,7 @@ directly for full control over the experiment lifecycle.
    exp.log_model(model)
    exp.finalize()
 
-See the :doc:`api/experiment` reference for all available methods.
+See the :doc:`api` reference for all available methods.
 
 ----
 
@@ -183,9 +183,7 @@ Open an experiment detail to share with everyone or specific users.
     :maxdepth: 1
     :caption: API Reference
 
-    api/experiment
-    api/logger
-    api/module_api
+    api
 
 .. raw:: html
 

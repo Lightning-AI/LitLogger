@@ -1,6 +1,9 @@
-##########
-Module API
-##########
+#############
+API Reference
+#############
+
+Module-Level API
+================
 
 Top-level functions available directly on the ``litlogger`` module.
 
@@ -15,11 +18,12 @@ Initialization
 
 .. autofunction:: get_metadata
 
-Experiment Methods
-------------------
+Logging Functions
+-----------------
 
-These methods are available on the :class:`~litlogger.experiment.Experiment` instance
-and also as module-level callables after ``litlogger.init()`` is called.
+These functions are available as module-level callables after
+``litlogger.init()`` is called. They delegate to the underlying
+:class:`~litlogger.experiment.Experiment` instance.
 
 .. currentmodule:: litlogger.experiment
 
@@ -49,3 +53,25 @@ and also as module-level callables after ``litlogger.init()`` is called.
 
 .. automethod:: Experiment.finalize
     :no-index:
+
+----
+
+Experiment
+==========
+
+.. currentmodule:: litlogger.experiment
+
+.. autoclass:: Experiment
+    :members:
+    :show-inheritance:
+
+----
+
+LightningLogger
+================
+
+.. currentmodule:: litlogger.logger
+
+.. autoclass:: LightningLogger
+    :members:
+    :show-inheritance:

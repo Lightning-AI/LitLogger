@@ -38,7 +38,6 @@ extensions = [
     "sphinx_paramlinks",
     "sphinx_togglebutton",
     "myst_parser",
-    "sphinx_editorjs",
 ]
 
 templates_path = ["_templates"]

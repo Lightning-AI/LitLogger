@@ -16,6 +16,9 @@ jobs:
   build-package:
     runs-on: "ubuntu-22.04"
     timeout-minutes: 10
+    # IMPORTANT: this permission is mandatory for Trusted Publishing
+    permissions:
+      id-token: write
     steps:
     - uses: actions/checkout@v5
     - uses: actions/setup-python@v5
@@ -44,14 +47,13 @@ jobs:
         repo-token: ${{ secrets.GITHUB_TOKEN }}
 
     # We do this, since failures on test.pypi aren't that bad
-    - name: Publish to Test PyPI
-      if: startsWith(github.event.ref, 'refs/tags')
-      uses: pypa/gh-action-pypi-publish@v1.12.4
-      with:
-        user: __token__
-        password: ${{ secrets.test_pypi_password }}
-        repository_url: https://test.pypi.org/legacy/
-        verbose: true
+    # TODO: add back once ownership is transferred
+    # - name: Publish to Test PyPI
+    #   if: startsWith(github.event.ref, 'refs/tags')
+    #   uses: pypa/gh-action-pypi-publish@v1.12.4
+    #   with:
+    #     repository_url: https://test.pypi.org/legacy/
+    #     verbose: true
 
     - name: Publish distribution 📦 to PyPI
       if: startsWith(github.event.ref, 'refs/tags')

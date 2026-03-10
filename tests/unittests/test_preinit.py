@@ -4,6 +4,8 @@
 #
 """Tests for litlogger._preinit pre-initialization wrappers."""
 
+import inspect
+
 import pytest
 from litlogger._preinit import PreInitObject, pre_init_callable
 
@@ -108,9 +110,9 @@ class TestPreInitCallable:
             func(key="value")
 
     def test_name_is_set(self):
-        """Test that the function name is set correctly."""
+        """Test that the function name is set to the bare name."""
         func = pre_init_callable("litlogger.log_metrics")
-        assert func.__name__ == "litlogger.log_metrics"
+        assert func.__name__ == "log_metrics"
 
     def test_doc_copied_from_destination(self):
         """Test that __doc__ is copied from destination."""
@@ -133,9 +135,58 @@ class TestPreInitCallable:
     def test_without_destination(self):
         """Test creating pre_init_callable without destination."""
         func = pre_init_callable("test.func")
-        assert func.__name__ == "test.func"
+        assert func.__name__ == "func"
         # Should not have __doc__ or __wrapped__ set (or they're None)
         assert not hasattr(func, "__wrapped__") or func.__wrapped__ is None
+
+    def test_qualname_is_set(self):
+        """Test that __qualname__ is set to the bare name."""
+        func = pre_init_callable("litlogger.log_metrics")
+        assert func.__qualname__ == "log_metrics"
+
+    def test_module_is_set(self):
+        """Test that __module__ is set to 'litlogger'."""
+        func = pre_init_callable("litlogger.log_metrics")
+        assert func.__module__ == "litlogger"
+
+    def test_signature_copied_from_destination(self):
+        """Test that __signature__ is copied from destination with 'self' stripped."""
+
+        class MyClass:
+            def method(self, x: int, y: str = "hello") -> bool:
+                pass
+
+        func = pre_init_callable("litlogger.method", destination=MyClass.method)
+        sig = inspect.signature(func)
+        param_names = list(sig.parameters.keys())
+        assert "self" not in param_names
+        assert param_names == ["x", "y"]
+        assert sig.parameters["x"].annotation is int
+        assert sig.parameters["y"].default == "hello"
+        assert sig.return_annotation is bool
+
+    def test_signature_not_set_without_destination(self):
+        """Test that __signature__ is not set when there is no destination."""
+        func = pre_init_callable("test.func")
+        assert not hasattr(func, "__signature__")
+
+    def test_signature_matches_module_level_callables(self):
+        """Test that the actual module-level litlogger callables have correct signatures."""
+        import litlogger
+        from litlogger.experiment import Experiment
+
+        for name in ["log_metrics", "log_file", "get_file", "log_model", "get_model", "finalize"]:
+            func = getattr(litlogger, name)
+            method = getattr(Experiment, name)
+            func_sig = inspect.signature(func)
+            method_sig = inspect.signature(method)
+
+            func_params = list(func_sig.parameters.keys())
+            method_params = list(method_sig.parameters.keys())
+
+            assert "self" not in func_params, f"{name}: 'self' should be stripped"
+            assert func_params == method_params[1:], f"{name}: params should match method (minus self)"
+            assert func.__doc__ == method.__doc__, f"{name}: docstring should match"
 
     def test_different_names_in_error_messages(self):
         """Test that error messages include the correct function name."""

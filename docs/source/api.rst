@@ -25,34 +25,27 @@ These functions are available as module-level callables after
 ``litlogger.init()`` is called. They delegate to the underlying
 :class:`~litlogger.experiment.Experiment` instance.
 
-.. currentmodule:: litlogger.experiment
+.. currentmodule:: litlogger
 
-.. automethod:: Experiment.log_metrics
-    :no-index:
+.. autofunction:: log
 
-.. automethod:: Experiment.log_metadata
-    :no-index:
+.. autofunction:: log_metrics
 
-.. automethod:: Experiment.log_file
-    :no-index:
+.. autofunction:: log_metadata
 
-.. automethod:: Experiment.get_file
-    :no-index:
+.. autofunction:: log_file
 
-.. automethod:: Experiment.log_model
-    :no-index:
+.. autofunction:: get_file
 
-.. automethod:: Experiment.get_model
-    :no-index:
+.. autofunction:: log_model
 
-.. automethod:: Experiment.log_model_artifact
-    :no-index:
+.. autofunction:: get_model
 
-.. automethod:: Experiment.get_model_artifact
-    :no-index:
+.. autofunction:: log_model_artifact
 
-.. automethod:: Experiment.finalize
-    :no-index:
+.. autofunction:: get_model_artifact
+
+.. autofunction:: finalize
 
 ----
 

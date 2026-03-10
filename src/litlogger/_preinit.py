@@ -13,6 +13,7 @@
 # limitations under the License.
 """Pre-initialization wrappers for litlogger to provide helpful error messages."""
 
+import inspect
 from typing import Any, Callable, Concatenate, ParamSpec, TypeVar, overload
 
 P = ParamSpec("P")
@@ -66,8 +67,19 @@ def pre_init_callable(
     def preinit_wrapper(*args: Any, **kwargs: Any) -> Any:
         raise RuntimeError(f"You must call litlogger.init() before {name}()")
 
-    preinit_wrapper.__name__ = str(name)
+    preinit_wrapper.__name__ = name.rsplit(".", 1)[-1]
+    preinit_wrapper.__qualname__ = preinit_wrapper.__name__
+    preinit_wrapper.__module__ = "litlogger"
     if destination is not None:
         preinit_wrapper.__wrapped__ = destination  # type: ignore[attr-defined]
         preinit_wrapper.__doc__ = destination.__doc__
+        try:
+            sig = inspect.signature(destination)
+            # Strip 'self' parameter for unbound methods
+            params = list(sig.parameters.values())
+            if params and params[0].name == "self":
+                params = params[1:]
+            preinit_wrapper.__signature__ = sig.replace(parameters=params)
+        except (ValueError, TypeError):
+            pass
     return preinit_wrapper

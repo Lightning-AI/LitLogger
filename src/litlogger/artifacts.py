@@ -18,16 +18,13 @@ Model class uses litmodels for proper model handling and versioning.
 """
 
 import os
-from typing import TYPE_CHECKING, Any, Dict, Protocol, Union, runtime_checkable
+from typing import Any, Protocol, runtime_checkable
 
+from lightning_sdk import Teamspace
 from litmodels import download_model, load_model, save_model, upload_model
 
 from litlogger.api.artifacts_api import ArtifactsApi
 from litlogger.api.client import LitRestClient
-
-if TYPE_CHECKING:
-    import torch
-    from lightning_sdk import Teamspace
 
 # Re-export for backwards compatibility
 __all__ = ["Artifact", "Model", "ModelArtifact", "upload_model", "download_model"]
@@ -72,7 +69,7 @@ class Artifact:
         self,
         path: str,
         experiment_name: str,
-        teamspace: "Teamspace",
+        teamspace: Teamspace,
         metrics_store: Any,
         client: LitRestClient | None = None,
         remote_path: str | None = None,
@@ -142,11 +139,11 @@ class ModelArtifact:
         self,
         path: str,
         experiment_name: str,
-        teamspace: "Teamspace",
+        teamspace: Teamspace,
         version: str | None = None,
         verbose: bool = False,
         cloud_account: str | None = None,
-        metadata: Dict[str, str] | None = None,
+        metadata: dict[str, str] | None = None,
     ) -> None:
         self.path = path
         self.name = f"{teamspace.owner.name}/{teamspace.name}/{experiment_name}"
@@ -182,13 +179,13 @@ class Model:
 
     def __init__(
         self,
-        model: Union["torch.nn.Module", Any],
+        model: Any,
         experiment_name: str,
-        teamspace: "Teamspace",
+        teamspace: Teamspace,
         version: str | None = None,
         verbose: bool = False,
         cloud_account: str | None = None,
-        metadata: Dict[str, str] | None = None,
+        metadata: dict[str, str] | None = None,
         staging_dir: str | None = None,
     ) -> None:
         self.model = model

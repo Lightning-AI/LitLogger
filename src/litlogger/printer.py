@@ -21,7 +21,7 @@ import math
 import platform
 import sys
 from dataclasses import dataclass, field
-from typing import Any, Dict, List
+from typing import Any
 
 import click
 from rich.console import Console
@@ -70,7 +70,7 @@ LIGHTNING_LOGO_SMALL = """\
            #"""
 
 
-def sparkify(series: List[float]) -> str:
+def sparkify(series: list[float]) -> str:
     """Convert a series of numbers to a sparkline string.
 
     Example:
@@ -124,7 +124,7 @@ class RunStats:
     media_logged: int = 0
     models_logged: int = 0
     # Store recent values for sparklines (metric_name -> list of values)
-    metrics_history: Dict[str, List[float]] = field(default_factory=dict)
+    metrics_history: dict[str, list[float]] = field(default_factory=dict)
 
     def record_metric(self, name: str, value: float) -> None:
         """Record a metric value for history tracking."""
@@ -271,7 +271,7 @@ class Printer:
         name: str,
         teamspace: str,
         url: str,
-        metadata: Dict[str, str] | None = None,
+        metadata: dict[str, str] | None = None,
         show_logo: bool = True,
     ) -> None:
         """Print experiment start header with key information.

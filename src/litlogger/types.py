@@ -20,7 +20,6 @@ implementation details (V1* classes).
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import List
 
 
 class PhaseType(str, Enum):
@@ -65,7 +64,7 @@ class Metrics:
     """
 
     name: str
-    values: List[MetricValue] = field(default_factory=list)
+    values: list[MetricValue] = field(default_factory=list)
 
 
 @dataclass

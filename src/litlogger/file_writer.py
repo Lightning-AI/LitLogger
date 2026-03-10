@@ -17,7 +17,6 @@ import json
 import os
 import struct
 import tarfile
-from typing import Dict, List
 
 from litlogger.api.artifacts_api import ArtifactsApi
 from litlogger.api.client import LitRestClient
@@ -52,7 +51,7 @@ class BinaryFileWriter:
         self._artifacts_api = ArtifactsApi(client=client or LitRestClient(max_retries=5))
         self.files = {}
 
-    def store(self, metrics: Dict[str, Metrics], trackers: Dict[str, MetricsTracker] | None = None) -> None:
+    def store(self, metrics: dict[str, Metrics], trackers: dict[str, MetricsTracker] | None = None) -> None:
         """Append metric values to per-series binary files, creating them if needed.
 
         Writes a small header once per file, then appends:
@@ -92,7 +91,7 @@ class BinaryFileWriter:
                 assert trackers
                 self._write_all(k, v.values, trackers)
 
-    def _write_only_values(self, k: str, values: List[float]) -> None:
+    def _write_only_values(self, k: str, values: list[float]) -> None:
         """Append raw float32 values for series k."""
         buf = b""
         for value in values:
@@ -101,7 +100,7 @@ class BinaryFileWriter:
         self.files[k].write(buf)
         self.files[k].flush()
 
-    def _write_values_steps(self, k: str, values: List[MetricValue]) -> None:
+    def _write_values_steps(self, k: str, values: list[MetricValue]) -> None:
         """Append step (uint64) and value (float32) pairs for series k."""
         buf = b""
         for value in values:
@@ -111,7 +110,7 @@ class BinaryFileWriter:
         self.files[k].write(buf)
         self.files[k].flush()
 
-    def _write_all(self, k: str, values: List[MetricValue], trackers: Dict[str, MetricsTracker]) -> None:
+    def _write_all(self, k: str, values: list[MetricValue], trackers: dict[str, MetricsTracker]) -> None:
         """Append step, relative time (since series start), and value records for series k."""
         buf = b""
         for value in values:

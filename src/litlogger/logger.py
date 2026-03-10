@@ -19,7 +19,8 @@ import warnings
 from argparse import Namespace
 from collections.abc import Mapping
 from datetime import datetime
-from typing import Any, Dict
+from pathlib import Path
+from typing import Any
 
 from lightning_utilities import module_available
 from torch import Tensor
@@ -62,7 +63,6 @@ else:
         from lightning.fabric.utilities.cloud_io import get_filesystem
         from lightning.fabric.utilities.logger import _add_prefix
         from lightning.fabric.utilities.rank_zero import rank_zero_only
-        from lightning.fabric.utilities.types import _PATH
         from lightning.pytorch.loggers.utilities import _scan_checkpoints
 
         _base_classes.append(_LightningLogger)
@@ -73,7 +73,6 @@ else:
         from lightning_fabric.utilities.cloud_io import get_filesystem
         from lightning_fabric.utilities.logger import _add_prefix
         from lightning_fabric.utilities.rank_zero import rank_zero_only
-        from lightning_fabric.utilities.types import _PATH
         from pytorch_lightning.loggers.utilities import _scan_checkpoints
 
         _base_classes.append(_PytorchLightningLogger)
@@ -89,9 +88,9 @@ else:
         def __init__(
             self,
             name: str | None = None,
-            root_dir: _PATH | None = None,
+            root_dir: str | Path | None = None,
             teamspace: str | None = None,
-            metadata: Dict[str, str] | None = None,
+            metadata: dict[str, str] | None = None,
             log_model: bool = False,
             save_logs: bool = False,
             checkpoint_name: str | None = None,
@@ -146,7 +145,7 @@ else:
             self._log_model = log_model
             self._save_logs = save_logs
             self._checkpoint_callback: Any | None = None
-            self._logged_model_time: Dict[str, float] = {}
+            self._logged_model_time: dict[str, float] = {}
             self._checkpoint_name = checkpoint_name
 
         @property
@@ -235,8 +234,8 @@ else:
         @rank_zero_only
         def log_hyperparams(  # type: ignore[override]
             self,
-            params: Dict[str, Any] | Namespace,
-            metrics: Dict[str, Any] | None = None,
+            params: dict[str, Any] | Namespace,
+            metrics: dict[str, Any] | None = None,
         ) -> None:
             """Log hyperparams."""
             if isinstance(params, Namespace):
@@ -247,7 +246,7 @@ else:
         @rank_zero_only
         def log_metadata(  # type: ignore[override]
             self,
-            params: Dict[str, Any] | Namespace,
+            params: dict[str, Any] | Namespace,
         ) -> None:
             """Log hyperparams."""
             if isinstance(params, Namespace):
@@ -267,7 +266,7 @@ else:
             staging_dir: str | None = None,
             verbose: bool = False,
             version: str | None = None,
-            metadata: Dict[str, Any] | None = None,
+            metadata: dict[str, Any] | None = None,
         ) -> None:
             """Save and upload a model object to cloud storage.
 

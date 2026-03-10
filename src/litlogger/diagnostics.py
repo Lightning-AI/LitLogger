@@ -17,7 +17,6 @@ import re
 import subprocess
 import sys
 from importlib.metadata import distributions
-from typing import List
 
 import psutil
 
@@ -139,7 +138,7 @@ def get_cli_args() -> str:
     return " ".join(sys.argv[1:])
 
 
-def get_git_info(command: List[str], default_message: str, fallback_cwd: str | None) -> str:
+def get_git_info(command: list[str], default_message: str, fallback_cwd: str | None) -> str:
     """Checks the git info of the current cwd. If not successful, then checks for the fallback_cwd."""
     try:
         return subprocess.check_output(

@@ -16,6 +16,8 @@ jobs:
     runs-on: ubuntu-latest
     if: github.event.pull_request.draft == false
     timeout-minutes: 10
+    env:
+      UV_TORCH_BACKEND: cpu
     strategy:
       fail-fast: false
       matrix:

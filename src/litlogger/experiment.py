@@ -36,10 +36,10 @@ from litlogger.api.media_api import MediaApi
 from litlogger.api.metrics_api import MetricsApi
 from litlogger.api.utils import _resolve_teamspace, build_experiment_url, get_accessible_url, get_guest_url
 from litlogger.artifacts import Artifact, Model, ModelArtifact
-from litlogger.background import PhaseType, _BackgroundThread
+from litlogger.background import _BackgroundThread
 from litlogger.capture import rerun_and_record
 from litlogger.printer import Printer, RunStats
-from litlogger.types import MediaType, Metrics, MetricValue
+from litlogger.types import MediaType, Metrics, MetricValue, PhaseType
 
 
 class Experiment:
@@ -143,7 +143,7 @@ class Experiment:
         )
 
         # Initialize metrics management
-        self._metrics_queue = JoinableQueue()
+        self._metrics_queue: JoinableQueue[dict[str, Metrics]] = JoinableQueue()
         self._stop_event = Event()
         self._is_ready_event = Event()
         self._manager = _BackgroundThread(
@@ -156,8 +156,8 @@ class Experiment:
             stop_event=self._stop_event,
             done_event=self._done_event,
             log_dir=log_dir,
-            store_step=store_step,
-            store_created_at=store_created_at,
+            store_step=bool(store_step),
+            store_created_at=bool(store_created_at),
             rate_limiting_interval=rate_limiting_interval,
             max_batch_size=max_batch_size,
             trackers_init=self._metrics_api.get_trackers_from_metrics_store(self._metrics_store),
@@ -317,7 +317,9 @@ class Experiment:
             metric_values = []
             for v in values:
                 created_at = datetime.now() if self.store_created_at else None
-                metric_values.append(MetricValue(value=v["value"], step=v.get("step", None), created_at=created_at))
+                raw_step = v.get("step")
+                step = int(raw_step) if raw_step is not None else None
+                metric_values.append(MetricValue(value=v["value"], step=step, created_at=created_at))
             batch[name] = Metrics(name=name, values=metric_values)
 
         self._metrics_queue.put(batch)
@@ -415,7 +417,7 @@ class Experiment:
             max_workers: Maximum number of concurrent uploads. Defaults to 10.
         """
         if remote_paths is None:
-            remote_paths = [None] * len(paths)
+            remote_paths = [None] * len(paths)  # type: ignore[list-item]
 
         if len(remote_paths) != len(paths):
             raise ValueError(f"remote_paths length ({len(remote_paths)}) must match paths length ({len(paths)})")
@@ -519,7 +521,7 @@ class Experiment:
         staging_dir: str | None = None,
         verbose: bool = False,
         version: str | None = None,
-        metadata: dict | None = None,
+        metadata: dict[str, str] | None = None,
     ) -> str:
         """Save and upload a model object to cloud storage using litmodels.
 
@@ -547,11 +549,11 @@ class Experiment:
             metadata=metadata,
             staging_dir=staging_dir,
         )
-        result = model_obj.log()
+        model_obj.log()
         self._stats.models_logged += 1
         if verbose:
             self._printer.print_success("Logged model object")
-        return result
+        return model_obj.name
 
     def get_model(self, staging_dir: str | None = None, verbose: bool = False, version: str | None = None) -> Any:
         """Get a model object using litmodels load_model.

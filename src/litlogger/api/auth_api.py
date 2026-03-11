@@ -40,4 +40,4 @@ class AuthApi:
         Returns:
             str: The guest ID.
         """
-        return self.auth.api_key
+        return str(self.auth.api_key)

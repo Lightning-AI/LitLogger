@@ -37,7 +37,7 @@ def _resolve_teamspace(teamspace: str | Teamspace | None, verbose: bool = False)
             ) from e
 
         resolved_teamspace = None
-        owner_kwargs = {}
+        owner_kwargs: OwnerDict = {"user": None, "org": None}
         for membership in memberships:
             if (
                 teamspace is not None

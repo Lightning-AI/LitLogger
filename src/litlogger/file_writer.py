@@ -17,6 +17,7 @@ import json
 import os
 import struct
 import tarfile
+from typing import IO
 
 from litlogger.api.artifacts_api import ArtifactsApi
 from litlogger.api.client import LitRestClient
@@ -49,7 +50,7 @@ class BinaryFileWriter:
         self.metrics_store_id = metrics_store_id
         self.cloud_account = cloud_account
         self._artifacts_api = ArtifactsApi(client=client or LitRestClient(max_retries=5))
-        self.files = {}
+        self.files: dict[str, IO[bytes]] = {}
 
     def store(self, metrics: dict[str, Metrics], trackers: dict[str, MetricsTracker] | None = None) -> None:
         """Append metric values to per-series binary files, creating them if needed.
@@ -63,7 +64,7 @@ class BinaryFileWriter:
             if k not in self.files:
                 filepath = os.path.join(self.log_dir, f"{k}.litbin")
                 os.makedirs(os.path.dirname(filepath), exist_ok=True)
-                self.files[k] = open(filepath, "wb")  # type: ignore # noqa: SIM115
+                self.files[k] = open(filepath, "wb")  # noqa: SIM115
 
                 # Convert datetime to ISO string for header if present
                 created_at_str = None
@@ -115,8 +116,9 @@ class BinaryFileWriter:
         buf = b""
         for value in values:
             # Handle None timestamps (e.g., when store_created_at=False)
-            if value.created_at is not None and trackers[k].started_at is not None:
-                relative_time = value.created_at.timestamp() - trackers[k].started_at.timestamp()
+            tracker_started_at = trackers[k].started_at
+            if value.created_at is not None and tracker_started_at is not None:
+                relative_time = value.created_at.timestamp() - tracker_started_at.timestamp()
             else:
                 relative_time = 0.0
 

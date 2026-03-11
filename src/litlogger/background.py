@@ -57,7 +57,7 @@ class _BackgroundThread(Thread):
         metrics_store_id: str,
         cloud_account: str,
         metrics_api: MetricsApi,
-        metrics_queue: Queue,
+        metrics_queue: "Queue[dict[str, Metrics]]",
         is_ready_event: Event,
         stop_event: Event,
         done_event: Event,
@@ -80,7 +80,7 @@ class _BackgroundThread(Thread):
         self.stop_event = stop_event
         self.done_event = done_event
         self.metrics: dict[str, Metrics] = {}
-        self.exception = None
+        self.exception: Exception | None = None
 
         self.store_step = store_step
         self.store_created_at = store_created_at
@@ -203,7 +203,7 @@ class _BackgroundThread(Thread):
 
         # Store the internal start step for this batch (used by BinaryFileWriter)
         if not hasattr(values, "internal_start_step"):
-            values.internal_start_step = tracker.num_rows
+            values.internal_start_step = tracker.num_rows  # type: ignore[attr-defined]
 
         # Increment the number of rows
         for value_obj in values.values:

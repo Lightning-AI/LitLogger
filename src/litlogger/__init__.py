@@ -30,15 +30,15 @@ from litlogger.init import finish, get_metadata, init
 
 # Global variables
 experiment: Experiment | None = None
-log = pre_init_callable("litlogger.log", Experiment.log_metrics)
-log_metrics = pre_init_callable("litlogger.log_metrics", Experiment.log_metrics)
+log = pre_init_callable("litlogger.log", Experiment.log_metrics)  # type: ignore[arg-type]
+log_metrics = pre_init_callable("litlogger.log_metrics", Experiment.log_metrics)  # type: ignore[arg-type]
 log_file = pre_init_callable("litlogger.log_file", Experiment.log_file)
 get_file = pre_init_callable("litlogger.get_file", Experiment.get_file)
 log_model = pre_init_callable("litlogger.log_model", Experiment.log_model)
 get_model = pre_init_callable("litlogger.get_model", Experiment.get_model)
 log_model_artifact = pre_init_callable("litlogger.log_model_artifact", Experiment.log_model_artifact)
 get_model_artifact = pre_init_callable("litlogger.get_model_artifact", Experiment.get_model_artifact)
-log_metadata = pre_init_callable("litlogger.log_metadata", Experiment.log_metadata)
+log_metadata = pre_init_callable("litlogger.log_metadata", Experiment.log_metadata)  # type: ignore[arg-type]
 finalize = pre_init_callable("litlogger.finalize", Experiment.finalize)
 
 __all__ = [

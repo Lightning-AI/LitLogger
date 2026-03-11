@@ -31,7 +31,7 @@ from litlogger.experiment import Experiment
 from litlogger.generator import _create_name
 from litlogger.types import MediaType
 
-_base_classes = []
+_base_classes: list[type] = []
 
 log = logging.getLogger(__name__)
 
@@ -53,7 +53,7 @@ except ImportError:
 
 if _base_classes:
 
-    class LightningLogger(*_base_classes):
+    class LightningLogger(*_base_classes):  # type: ignore[misc]
         pass
 
 else:
@@ -73,14 +73,14 @@ else:
         from lightning_fabric.utilities.cloud_io import get_filesystem
         from lightning_fabric.utilities.logger import _add_prefix
         from lightning_fabric.utilities.rank_zero import rank_zero_only
-        from pytorch_lightning.loggers.utilities import _scan_checkpoints
+        from pytorch_lightning.loggers.utilities import _scan_checkpoints  # type: ignore[assignment]
 
         _base_classes.append(_PytorchLightningLogger)
 
     if not _base_classes:
         raise ModuleNotFoundError("Either `lightning` or `pytorch_lightning` must be installed")
 
-    class LightningLogger(*_base_classes):
+    class LightningLogger(*_base_classes):  # type: ignore[misc, no-redef]
         """Logger that streams metrics and artifacts to the Lightning.ai platform."""
 
         LOGGER_JOIN_CHAR = "-"
@@ -138,7 +138,7 @@ else:
             self._experiment: Experiment | None = None
             self._sub_dir = None
             self._prefix = ""
-            self._fs = get_filesystem(root_dir)
+            self._fs = get_filesystem(root_dir or ".")
             self._step = -1
             self._metadata = metadata or {}
             self._is_ready = False
@@ -194,7 +194,7 @@ else:
                 # Set ready and continue to create experiment
                 self._is_ready = True
 
-            assert rank_zero_only.rank == 0, "tried to init log dirs in non global_rank=0"
+            assert rank_zero_only.rank == 0, "tried to init log dirs in non global_rank=0"  # type: ignore[attr-defined]
             if self.root_dir:
                 self._fs.makedirs(self.root_dir, exist_ok=True)
 
@@ -213,12 +213,12 @@ else:
         @property
         @rank_zero_only
         def url(self) -> str:
-            return self.experiment.url
+            return str(self.experiment.url)
 
         @override
         @rank_zero_only
         def log_metrics(self, metrics: Mapping[str, float], step: int | None = None) -> None:
-            assert rank_zero_only.rank == 0, "experiment tried to log from global_rank != 0"
+            assert rank_zero_only.rank == 0, "experiment tried to log from global_rank != 0"  # type: ignore[attr-defined]
 
             self._is_ready = True
 
@@ -226,13 +226,13 @@ else:
             self._step = self._step + 1 if step is None else step
             self._store_step = True
 
-            metrics = _add_prefix(metrics, self._prefix, self.LOGGER_JOIN_CHAR)
+            metrics = _add_prefix(metrics, self._prefix, self.LOGGER_JOIN_CHAR)  # type: ignore[assignment]
             metrics = {k: v.item() if isinstance(v, Tensor) else v for k, v in metrics.items()}
             self.experiment.log_metrics(metrics, step=self._step)
 
         @override
         @rank_zero_only
-        def log_hyperparams(  # type: ignore[override]
+        def log_hyperparams(
             self,
             params: dict[str, Any] | Namespace,
             metrics: dict[str, Any] | None = None,
@@ -244,7 +244,7 @@ else:
             self._metadata = params
 
         @rank_zero_only
-        def log_metadata(  # type: ignore[override]
+        def log_metadata(
             self,
             params: dict[str, Any] | Namespace,
         ) -> None:
@@ -312,7 +312,7 @@ else:
             """
             self._is_ready = True
             self._store_step = True
-            return self.experiment.get_file(path, verbose=verbose)
+            return str(self.experiment.get_file(path, verbose=verbose))
 
         @rank_zero_only
         def get_model(self, staging_dir: str | None = None, verbose: bool = False, version: str | None = None) -> Any:
@@ -344,7 +344,7 @@ else:
             """
             self._is_ready = True
             self._store_step = True
-            return self.experiment.get_model_artifact(path, verbose, version)
+            return str(self.experiment.get_model_artifact(path, verbose, version))
 
         @override
         @rank_zero_only

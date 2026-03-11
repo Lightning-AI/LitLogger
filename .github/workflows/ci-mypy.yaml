@@ -1,0 +1,42 @@
+name: Mypy
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    types: [ opened, reopened, ready_for_review, synchronize ]
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}-${{ github.head_ref }}
+  cancel-in-progress: ${{ ! (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release/')) }}
+
+jobs:
+  mypy:
+    runs-on: ubuntu-latest
+    if: github.event.pull_request.draft == false
+    timeout-minutes: 10
+    env:
+      UV_TORCH_BACKEND: cpu
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.13"]
+    steps:
+    - uses: actions/checkout@v5
+    - name: Install uv and setup python
+      uses: astral-sh/setup-uv@v6
+      with:
+        activate-environment: true
+        python-version: ${{ matrix.python-version }}
+        enable-cache: true
+
+    - name: Install package & dependencies
+      env:
+        UV_TORCH_BACKEND: cpu
+      run: |
+        uv sync --group dev --group tests
+        uv pip list
+
+    - name: Run mypy
+      run: uv run mypy src/litlogger/

@@ -57,6 +57,21 @@ def _warn_deprecated(method: str, message: str) -> None:
         warnings.warn(message, DeprecationWarning, stacklevel=3)
 
 
+class _MetadataValue(str):
+    """String-like metadata value that rejects time-series operations."""
+
+    def __new__(cls, key: str, value: str) -> "_MetadataValue":
+        obj = super().__new__(cls, value)
+        obj._key = key
+        return obj
+
+    def append(self, value: object, step: int | None = None) -> None:
+        raise KeyError(f"Key {self._key!r} is already used as metadata. Cannot append metric values.")
+
+    def extend(self, values: object, start_step: int | None = None) -> None:
+        raise KeyError(f"Key {self._key!r} is already used as metadata. Cannot append metric values.")
+
+
 class LegacyExperiment:
     """Legacy method-based API for backwards compatibility.
 
@@ -192,6 +207,8 @@ class LegacyExperiment:
             remote_path = rel if rel is not None and not rel.startswith("..") else os.path.basename(path)
             remote_path = remote_path.replace("\\", "/")
         self[remote_path] = File(path)
+        if verbose:
+            self._printer.artifact_logged(path, remote_path)
 
     def log_files(
         self,
@@ -646,10 +663,17 @@ class Experiment(LegacyExperiment):
         if key in self._key_types:
             kt = self._key_types[key]
             if kt == "metadata":
-                return self._metadata_values[key]  # type: ignore[return-value]
+                return _MetadataValue(key, self._metadata_values[key])  # type: ignore[return-value]
             if kt == "static_file":
                 return self._static_files[key]  # type: ignore[return-value]
             # 'metric' or 'file_series'
+            if key not in self._series:
+                series = Series(self, key)
+                if kt == "metric":
+                    series._type = "metric"
+                elif kt == "file_series":
+                    series._type = "file"
+                self._series[key] = series
             return self._series[key]
         # New key - return a series proxy for future appends
         if key not in self._series:

@@ -10,6 +10,7 @@ from unittest.mock import MagicMock
 import pytest
 from litlogger.experiment import Experiment
 from litlogger.media import File
+from litlogger.series import Series
 
 experiment_module = sys.modules["litlogger.experiment"]
 
@@ -258,6 +259,16 @@ class TestRebuildStateMetadata:
 
         assert exp._key_types["loss"] == "metric"
         assert exp._key_types["acc"] == "metric"
+
+    def test_getitem_rebuilds_missing_series_for_metric_key(self):
+        exp = _make_exp()
+        exp._key_types["loss"] = "metric"
+
+        series = exp["loss"]
+
+        assert isinstance(series, Series)
+        assert series._type == "metric"
+        assert exp._series["loss"] is series
 
 
 # ---------------------------------------------------------------------------

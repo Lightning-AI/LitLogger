@@ -20,6 +20,7 @@ them to temporary files for upload.
 
 import os
 import tempfile
+from importlib import import_module
 from typing import Any, Callable
 
 from typing_extensions import override
@@ -161,23 +162,23 @@ class Image(File):
 
         # Handle numpy array
         try:
-            import numpy as np  # type: ignore[import-not-found]
+            np = import_module("numpy")
 
             if isinstance(data, np.ndarray):
-                from PIL import Image as PILImage  # type: ignore[import-not-found]
+                pil_image = import_module("PIL.Image")
 
                 if data.dtype != np.uint8:
                     data = (data * 255).astype(np.uint8) if data.max() <= 1.0 else data.astype(np.uint8)
 
                 if data.ndim == 2:
-                    img = PILImage.fromarray(data)
+                    img = pil_image.fromarray(data)
                 elif data.ndim == 3:
                     # Handle CHW -> HWC format
                     if data.shape[0] in (1, 3, 4) and data.shape[2] not in (1, 3, 4):
                         data = data.transpose(1, 2, 0)
                     if data.shape[2] == 1:
                         data = data.squeeze(2)
-                    img = PILImage.fromarray(data)
+                    img = pil_image.fromarray(data)
                 else:
                     raise ValueError(f"Unsupported array shape for image: {data.shape}")
 
@@ -186,9 +187,9 @@ class Image(File):
 
         # Handle PIL Image
         try:
-            from PIL import Image as PILImage  # type: ignore[import-not-found]
+            pil_image = import_module("PIL.Image")
 
-            if isinstance(data, PILImage.Image):
+            if isinstance(data, pil_image.Image):
                 img = data
 
         except ImportError:

@@ -33,6 +33,7 @@ from litlogger.types import MediaType
 
 _base_classes: list[type] = []
 _F = TypeVar("_F", bound=Callable[..., Any])
+_ScanCheckpointsFn = Callable[[Any, dict[Any, Any]], list[tuple[float, str, float, str]]]
 
 log = logging.getLogger(__name__)
 
@@ -58,15 +59,18 @@ if _base_classes:
         pass
 
 else:
+    _scan_checkpoints: _ScanCheckpointsFn
+
     if module_available("lightning"):
         from lightning.fabric.loggers.logger import Logger as _LightningLogger
         from lightning.fabric.loggers.logger import rank_zero_experiment
         from lightning.fabric.utilities.cloud_io import get_filesystem
         from lightning.fabric.utilities.logger import _add_prefix
         from lightning.fabric.utilities.rank_zero import rank_zero_only
-        from lightning.pytorch.loggers.utilities import _scan_checkpoints
+        from lightning.pytorch.loggers.utilities import _scan_checkpoints as _lightning_scan_checkpoints
 
         _base_classes.append(_LightningLogger)
+        _scan_checkpoints = cast(_ScanCheckpointsFn, _lightning_scan_checkpoints)
 
     if module_available("pytorch_lightning"):
         from lightning_fabric.loggers.logger import Logger as _PytorchLightningLogger
@@ -74,9 +78,10 @@ else:
         from lightning_fabric.utilities.cloud_io import get_filesystem
         from lightning_fabric.utilities.logger import _add_prefix
         from lightning_fabric.utilities.rank_zero import rank_zero_only
-        from pytorch_lightning.loggers.utilities import _scan_checkpoints
+        from pytorch_lightning.loggers.utilities import _scan_checkpoints as _pytorch_scan_checkpoints
 
         _base_classes.append(_PytorchLightningLogger)
+        _scan_checkpoints = cast(_ScanCheckpointsFn, _pytorch_scan_checkpoints)
 
     if not _base_classes:
         raise ModuleNotFoundError("Either `lightning` or `pytorch_lightning` must be installed")
@@ -236,9 +241,9 @@ else:
             self._step = self._step + 1 if step is None else step
             self._store_step = True
 
-            metrics = _add_prefix(metrics, self._prefix, self.LOGGER_JOIN_CHAR)
-            metrics = {k: v.item() if isinstance(v, Tensor) else v for k, v in metrics.items()}
-            self._require_experiment().log_metrics(metrics, step=self._step)
+            prefixed_metrics = _add_prefix(metrics, self._prefix, self.LOGGER_JOIN_CHAR)
+            normalized_metrics = {k: v.item() if isinstance(v, Tensor) else v for k, v in prefixed_metrics.items()}
+            self._require_experiment().log_metrics(normalized_metrics, step=self._step)
 
         @override
         @_typed_rank_zero_only

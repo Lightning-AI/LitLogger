@@ -23,10 +23,12 @@ __version__ = "2026.03.09"
 # Import core classes
 # Import preinit utilities
 from litlogger._preinit import pre_init_callable
-from litlogger.experiment import Experiment
+from litlogger.experiment import Experiment, LegacyExperiment
 
 # Import SDK functions
 from litlogger.init import finish, get_metadata, init
+from litlogger.media import File, Image, Text
+from litlogger.series import Series
 
 # Global variables
 experiment: Experiment | None = None
@@ -43,6 +45,11 @@ finalize = pre_init_callable("litlogger.finalize", Experiment.finalize)
 
 __all__ = [
     "Experiment",
+    "LegacyExperiment",
+    "Series",
+    "File",
+    "Image",
+    "Text",
     "init",
     "finish",
     "experiment",

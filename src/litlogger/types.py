@@ -37,6 +37,7 @@ class MediaType(str, Enum):
 
     IMAGE = "image"
     TEXT = "text"
+    FILE = "file"
 
 
 @dataclass

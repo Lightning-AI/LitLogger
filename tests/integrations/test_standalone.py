@@ -21,6 +21,9 @@ from lightning_sdk.utils.resolve import _get_cloud_url
 from litlogger.api.client import LitRestClient
 from litlogger.experiment import Experiment
 
+# Suppress deprecation warnings from legacy API usage in integration tests
+pytestmark = pytest.mark.filterwarnings("ignore::DeprecationWarning")
+
 
 @pytest.mark.cloud()
 def test_module_level_api_basic():
@@ -878,4 +881,170 @@ def test_get_or_create_experiment_metrics():
     client.lit_logger_service_delete_metrics_stream(
         project_id=teamspace_id,
         body=LitLoggerServiceDeleteMetricsStreamBody(ids=[original_id, new_experiment.id]),
+    )
+
+
+@pytest.mark.cloud()
+def test_new_dict_api_metrics():
+    """Test the new dict-like API for logging metrics."""
+    experiment_name = f"standalone_dict_api_test-{uuid.uuid4().hex}"
+    exp = litlogger.init(name=experiment_name, teamspace="oss-litlogger")
+
+    # Log metrics using the new dict API with step
+    for i in range(10):
+        exp["loss"].append(1.0 / (i + 1), step=i)
+        exp["accuracy"].append(i / 10.0, step=i)
+
+    # Verify local series tracking
+    assert len(exp["loss"]) == 10
+    assert len(exp["accuracy"]) == 10
+    assert list(exp["loss"])[0] == 1.0
+    assert list(exp["accuracy"])[9] == 0.9
+
+    # Test extend with start_step
+    exp["val_loss"].extend([0.5, 0.4, 0.3], start_step=0)
+    assert len(exp["val_loss"]) == 3
+
+    # Verify metrics property
+    assert set(exp.metrics.keys()) == {"loss", "accuracy", "val_loss"}
+
+    litlogger.finalize()
+
+    # Verify metrics were uploaded
+    project_id = exp._teamspace.id
+    stream_id = exp._metrics_store.id
+
+    client = LitRestClient()
+    for _ in range(30):
+        response = client.lit_logger_service_get_logger_metrics(project_id=project_id, ids=[stream_id])
+        if response.named_metrics != {}:
+            metrics = response.named_metrics
+            if len(metrics.get("loss", {}).ids_metrics.get(stream_id, {}).metrics_values or []) == 10:
+                break
+        sleep(1)
+
+    # Cleanup
+    client.lit_logger_service_delete_metrics_stream(
+        project_id=project_id,
+        body=LitLoggerServiceDeleteMetricsStreamBody(ids=[stream_id]),
+    )
+
+    # Verify all metrics were logged
+    assert "loss" in response.named_metrics
+    assert "accuracy" in response.named_metrics
+    assert "val_loss" in response.named_metrics
+    assert len(response.named_metrics["loss"].ids_metrics[stream_id].metrics_values) == 10
+
+
+@pytest.mark.cloud()
+def test_new_dict_api_metadata():
+    """Test the new dict-like API for setting metadata."""
+    experiment_name = f"standalone_dict_metadata_test-{uuid.uuid4().hex}"
+    exp = litlogger.init(name=experiment_name, teamspace="oss-litlogger")
+
+    # Set metadata using the new dict API
+    exp["model"] = "ResNet50"
+    exp["dataset"] = "CIFAR10"
+
+    # Verify local tracking
+    assert exp["model"] == "ResNet50"
+    assert exp["dataset"] == "CIFAR10"
+
+    # Log a metric to ensure it doesn't conflict
+    exp["loss"].append(0.5, step=0)
+
+    litlogger.finalize()
+
+    # Verify metadata was stored in the cloud
+    project_id = exp._teamspace.id
+    stream_id = exp._metrics_store.id
+
+    client = LitRestClient()
+    for _ in range(30):
+        response = client.lit_logger_service_list_metrics_streams(project_id=project_id)
+        if response.metrics_streams:
+            break
+        sleep(1)
+
+    metrics_stream = next((ms for ms in response.metrics_streams if ms.id == stream_id), None)
+    assert metrics_stream is not None
+
+    if hasattr(metrics_stream, "tags") and metrics_stream.tags:
+        stream_metadata = {tag.name: tag.value for tag in metrics_stream.tags}
+        assert stream_metadata.get("model") == "ResNet50"
+        assert stream_metadata.get("dataset") == "CIFAR10"
+
+    # Cleanup
+    client.lit_logger_service_delete_metrics_stream(
+        project_id=project_id,
+        body=LitLoggerServiceDeleteMetricsStreamBody(ids=[stream_id]),
+    )
+
+
+@pytest.mark.cloud()
+def test_new_dict_api_static_file():
+    """Test the new dict-like API for logging static files."""
+    from litlogger import File
+
+    experiment_name = f"standalone_dict_file_test-{uuid.uuid4().hex}"
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        exp = litlogger.init(
+            name=experiment_name,
+            teamspace="oss-litlogger",
+            root_dir=tmpdir,
+        )
+
+        # Create and log a static file using new API
+        config_path = os.path.join(tmpdir, "config.yaml")
+        with open(config_path, "w") as f:
+            f.write("learning_rate: 0.001\n")
+
+        exp["config"] = File(config_path)
+
+        # Verify local tracking
+        assert isinstance(exp["config"], File)
+        assert exp.artifacts.get("config") is not None
+
+        litlogger.finalize()
+
+        # Cleanup
+        project_id = exp._teamspace.id
+        stream_id = exp._metrics_store.id
+        client = LitRestClient()
+        client.lit_logger_service_delete_metrics_stream(
+            project_id=project_id,
+            body=LitLoggerServiceDeleteMetricsStreamBody(ids=[stream_id]),
+        )
+
+
+@pytest.mark.cloud()
+def test_new_dict_api_key_uniqueness():
+    """Test that key uniqueness is enforced across the new dict API."""
+    experiment_name = f"standalone_dict_uniqueness_test-{uuid.uuid4().hex}"
+    exp = litlogger.init(name=experiment_name, teamspace="oss-litlogger")
+
+    # Set a metadata key
+    exp["tag"] = "value"
+
+    # Trying to use the same key for metrics should raise
+    with pytest.raises(KeyError, match="already used"):
+        exp["tag"].append(0.5)
+
+    # Set a metric key
+    exp["loss"].append(0.5, step=0)
+
+    # Trying to use the same key for metadata should raise
+    with pytest.raises(KeyError, match="already used"):
+        exp["loss"] = "not-a-metric"
+
+    litlogger.finalize()
+
+    # Cleanup
+    project_id = exp._teamspace.id
+    stream_id = exp._metrics_store.id
+    client = LitRestClient()
+    client.lit_logger_service_delete_metrics_stream(
+        project_id=project_id,
+        body=LitLoggerServiceDeleteMetricsStreamBody(ids=[stream_id]),
     )

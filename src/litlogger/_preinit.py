@@ -79,7 +79,7 @@ def pre_init_callable(
             params = list(sig.parameters.values())
             if params and params[0].name == "self":
                 params = params[1:]
-            preinit_wrapper.__signature__ = sig.replace(parameters=params)
+            preinit_wrapper.__signature__ = sig.replace(parameters=params)  # type: ignore[attr-defined]
         except (ValueError, TypeError):
             pass
     return preinit_wrapper

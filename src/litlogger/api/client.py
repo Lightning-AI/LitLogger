@@ -37,13 +37,17 @@ def _should_retry(ex: BaseException) -> bool:
     if "not found" in str(ex):
         return False
 
-    if str(ex.status).startswith("4") and ex.status not in (400, 401, 404):
+    status = getattr(ex, "status", None)
+    if status is None:
+        return False
+
+    if str(status).startswith("4") and status not in (400, 401, 404):
         return True
 
-    return str(ex.status).startswith("5")
+    return str(status).startswith("5")
 
 
-def _retry_wrapper(self: Any, func: Callable, max_retries: int = -1) -> Callable:
+def _retry_wrapper(self: Any, func: Callable[..., Any], max_retries: int = -1) -> Callable[..., Any]:
     """Returns the function decorated by a wrapper that retries the call several times if a connection error occurs.
 
     The retries follow an exponential backoff.
@@ -78,7 +82,7 @@ def _retry_wrapper(self: Any, func: Callable, max_retries: int = -1) -> Callable
     return wrapped
 
 
-class LitRestClient(GridRestClient):
+class LitRestClient(GridRestClient):  # type: ignore[misc]
     """The LitRestClient is a wrapper around the GridRestClient.
 
     It wraps all methods to monitor connection exceptions and employs a retry strategy.

@@ -21,16 +21,16 @@ from litlogger._preinit import pre_init_callable
 
 def set_global(
     experiment: Any | None = None,
-    log: Callable | None = None,
-    log_metrics: Callable | None = None,
-    log_file: Callable | None = None,
-    get_file: Callable | None = None,
-    log_model: Callable | None = None,
-    get_model: Callable | None = None,
-    log_model_artifact: Callable | None = None,
-    get_model_artifact: Callable | None = None,
-    log_metadata: Callable | None = None,
-    finalize: Callable | None = None,
+    log: Callable[..., Any] | None = None,
+    log_metrics: Callable[..., Any] | None = None,
+    log_file: Callable[..., Any] | None = None,
+    get_file: Callable[..., Any] | None = None,
+    log_model: Callable[..., Any] | None = None,
+    get_model: Callable[..., Any] | None = None,
+    log_model_artifact: Callable[..., Any] | None = None,
+    get_model_artifact: Callable[..., Any] | None = None,
+    log_metadata: Callable[..., Any] | None = None,
+    finalize: Callable[..., Any] | None = None,
 ) -> None:
     """Set global litlogger state after initialization."""
     if experiment:
@@ -79,13 +79,13 @@ def unset_globals() -> None:
     from litlogger.experiment import Experiment
 
     litlogger.experiment = None
-    litlogger.log = pre_init_callable("litlogger.log", Experiment.log_metrics)
-    litlogger.log_metrics = pre_init_callable("litlogger.log_metrics", Experiment.log_metrics)
+    litlogger.log = pre_init_callable("litlogger.log", Experiment.log_metrics)  # type: ignore[arg-type]
+    litlogger.log_metrics = pre_init_callable("litlogger.log_metrics", Experiment.log_metrics)  # type: ignore[arg-type]
     litlogger.log_file = pre_init_callable("litlogger.log_file", Experiment.log_file)
     litlogger.get_file = pre_init_callable("litlogger.get_file", Experiment.get_file)
     litlogger.log_model = pre_init_callable("litlogger.log_model", Experiment.log_model)
     litlogger.get_model = pre_init_callable("litlogger.get_model", Experiment.get_model)
     litlogger.log_model_artifact = pre_init_callable("litlogger.log_model_artifact", Experiment.log_model_artifact)
     litlogger.get_model_artifact = pre_init_callable("litlogger.get_model_artifact", Experiment.get_model_artifact)
-    litlogger.log_metadata = pre_init_callable("litlogger.log_metadata", Experiment.log_metadata)
+    litlogger.log_metadata = pre_init_callable("litlogger.log_metadata", Experiment.log_metadata)  # type: ignore[arg-type]
     litlogger.finalize = pre_init_callable("litlogger.finalize", Experiment.finalize)

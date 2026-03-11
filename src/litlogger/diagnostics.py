@@ -17,6 +17,7 @@ import re
 import subprocess
 import sys
 from importlib.metadata import distributions
+from typing import Any
 
 import psutil
 
@@ -69,14 +70,14 @@ def get_cpu_name() -> str:
         return ""
 
 
-def get_gpu_info() -> dict:
+def get_gpu_info() -> dict[str, str | int]:
     """Return Nvidia GPU info as a dict with keys: name, count, and memory_gb.
 
     The memory_gb value is a rounded integer number of gigabytes. If no NVIDIA GPUs are present
     or the 'nvidia-smi' command is unavailable, returns zeros and an empty name.
     Example: {"name": "NVIDIA T4", "count": 4, "memory_gb": 16}
     """
-    default_output = {
+    default_output: dict[str, str | int] = {
         "name": "",
         "count": 0,
         "memory_gb": 0,
@@ -153,7 +154,7 @@ def get_git_info(command: list[str], default_message: str, fallback_cwd: str | N
             return default_message
 
 
-def collect_system_info() -> dict:
+def collect_system_info() -> dict[str, Any]:
     """Collect git, system, hardware, environment and CLI information.
 
     Returns a dictionary including (when available):

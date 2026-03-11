@@ -21,12 +21,12 @@ import os
 import subprocess
 import sys
 import threading
-from typing import BinaryIO
+from typing import IO
 
 from rich.text import Text
 
 
-def _stream_reader(stream: BinaryIO, log_file: BinaryIO, lock: threading.Lock) -> None:
+def _stream_reader(stream: IO[bytes], log_file: IO[bytes], lock: threading.Lock) -> None:
     """Read from a stream and write to both stdout and log file.
 
     Args:

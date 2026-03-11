@@ -45,7 +45,7 @@ def _to_v1_metric_value(value: MetricValue) -> V1MetricValue:
         created_at_str = value.created_at.strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "+00:00"
 
     # Build kwargs, excluding None values that the API might not accept
-    kwargs = {"value": value.value}
+    kwargs: dict[str, float | int | str] = {"value": value.value}
     if value.step is not None:
         kwargs["step"] = value.step
     if created_at_str is not None:
@@ -131,7 +131,7 @@ def _to_v1_phase_type(phase: PhaseType) -> str:
         PhaseType.FAILED: V1PhaseType.FAILED,
         PhaseType.STOPPED: V1PhaseType.COMPLETED,
     }
-    return phase_map[phase]
+    return str(phase_map[phase])
 
 
 class MetricsApi:

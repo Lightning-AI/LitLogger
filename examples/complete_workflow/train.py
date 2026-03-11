@@ -14,19 +14,23 @@
 import json
 
 import litlogger
+from litlogger import File
 
 config = {"model": "ResNet50", "lr": 0.001}
 with open("config.json", "w") as f:
     json.dump(config, f)
 
-litlogger.init(
-    name="image-classifier",
-    metadata={"model": "ResNet50", "dataset": "CIFAR10"},
-)
-litlogger.log_file("config.json")
+experiment = litlogger.init(name="image-classifier")
 
+# Set metadata
+experiment["model"] = "ResNet50"
+experiment["dataset"] = "CIFAR10"
+
+# Log a static file
+experiment["config"] = File("config.json")
+
+# Log training metrics
 for epoch in range(10):
-    # some dummy loss to mimic training
-    litlogger.log_metrics({"loss": 1.0 / (epoch + 1)}, step=epoch)
+    experiment["loss"].append(1.0 / (epoch + 1), step=epoch)
 
-litlogger.finalize()
+experiment.finalize()

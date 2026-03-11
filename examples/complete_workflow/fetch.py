@@ -11,17 +11,27 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+"""Fetch data from a previously logged experiment.
+
+This script resumes the 'image-classifier' experiment and reads back
+metadata and artifacts using the dict-like API.
+"""
+
 import json
 
 import litlogger
 
-litlogger.init(name="image-classifier")
+experiment = litlogger.init(name="image-classifier")
 
-metadata = litlogger.get_metadata()
+# Read metadata via property
+metadata = experiment.metadata
 print(f"Metadata: {metadata}")
 
-litlogger.get_file("/tmp/config.json", remote_path="config.json")
-with open("/tmp/config.json") as f:
-    print(f"Config: {json.load(f)}")
+# Read artifacts and download
+artifacts = experiment.artifacts
+if "config" in artifacts:
+    artifacts["config"].save("/tmp/config.json")
+    with open("/tmp/config.json") as f:
+        print(f"Config: {json.load(f)}")
 
-litlogger.finalize()
+experiment.finalize()

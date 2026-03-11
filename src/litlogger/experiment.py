@@ -608,13 +608,17 @@ class Experiment(LegacyExperiment):
 
     # ---- Dict-like API ----
 
-    def __getitem__(self, key: str) -> "Series | str | File":
+    def __getitem__(self, key: str) -> Series:
         """Get a time series, metadata value, or static file by key.
 
         For time-series keys (metrics or file series), returns a list-like Series object.
-        For metadata keys, returns the string value.
-        For static file keys, returns the File object.
+        For metadata keys, returns the string value (at runtime).
+        For static file keys, returns the File object (at runtime).
         For unknown keys, returns a new empty Series ready for appending.
+
+        The return type is annotated as Series since that is the primary use case
+        (``experiment["key"].append(value)``).  Metadata and static-file lookups
+        return ``str`` or ``File`` at runtime.
 
         Args:
             key: The data key.
@@ -625,9 +629,9 @@ class Experiment(LegacyExperiment):
         if key in self._key_types:
             kt = self._key_types[key]
             if kt == "metadata":
-                return self._metadata_values[key]
+                return self._metadata_values[key]  # type: ignore[return-value]
             if kt == "static_file":
-                return self._static_files[key]
+                return self._static_files[key]  # type: ignore[return-value]
             # 'metric' or 'file_series'
             return self._series[key]
         # New key - return a series proxy for future appends

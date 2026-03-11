@@ -289,6 +289,24 @@ class TestMetadataTypeConflicts:
         with pytest.raises(KeyError, match="time series"):
             exp["loss"] = "oops"
 
+    def test_setitem_over_untyped_series_ok(self):
+        """Assigning metadata to a key with an untyped (empty) series replaces the series."""
+        exp = _make_exp()
+        # Access creates an empty series
+        _ = exp["maybe"]
+        assert "maybe" in exp._series
+
+        exp["maybe"] = "value"
+        assert exp._key_types["maybe"] == "metadata"
+        assert "maybe" not in exp._series
+
+    def test_setitem_invalid_type_raises(self):
+        """Setting an unsupported type (e.g. int) via __setitem__ raises TypeError."""
+        exp = _make_exp()
+
+        with pytest.raises(TypeError, match="Can only assign"):
+            exp["bad"] = 42  # type: ignore[assignment]
+
     def test_update_rejects_unsupported_type(self):
         exp = _make_exp()
 

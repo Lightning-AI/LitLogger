@@ -13,6 +13,7 @@
 # limitations under the License.
 """Initialize litlogger experiment for standalone usage (without PyTorch Lightning)."""
 
+import warnings
 from pathlib import Path
 from typing import Any
 
@@ -123,12 +124,19 @@ def init(
 def finish(status: str | None = None) -> None:
     """Finalize the current experiment.
 
-    This is an alias for litlogger.finalize().
+    .. deprecated::
+        Use ``experiment.finalize()`` instead.
 
     Args:
         status: Optional status string to mark the experiment with.
     """
     import litlogger
+
+    warnings.warn(
+        "litlogger.finish() is deprecated. Use experiment.finalize() instead.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
 
     if litlogger.experiment is None:
         raise RuntimeError("You must call litlogger.init() before litlogger.finish()")
@@ -139,6 +147,9 @@ def finish(status: str | None = None) -> None:
 def get_metadata() -> dict[str, str]:
     """Get the metadata associated with the current experiment.
 
+    .. deprecated::
+        Use ``experiment.metadata`` instead.
+
     Returns:
         dict[str, str]: The metadata dictionary with key-value pairs from the metrics stream.
 
@@ -146,6 +157,12 @@ def get_metadata() -> dict[str, str]:
         RuntimeError: If litlogger.init() has not been called.
     """
     import litlogger
+
+    warnings.warn(
+        "litlogger.get_metadata() is deprecated. Use experiment.metadata instead.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
 
     if litlogger.experiment is None:
         raise RuntimeError("You must call litlogger.init() before litlogger.get_metadata()")

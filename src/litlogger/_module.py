@@ -13,7 +13,7 @@
 # limitations under the License.
 """Global state management for litlogger."""
 
-from typing import Any, Callable, Dict
+from typing import Any, Callable
 
 import litlogger
 from litlogger._preinit import pre_init_callable
@@ -57,7 +57,7 @@ def set_global(
         litlogger.finalize = finalize
 
 
-def get_global() -> Dict[str, Any]:
+def get_global() -> dict[str, Any]:
     """Get the global litlogger state."""
     return {
         "experiment": litlogger.experiment,

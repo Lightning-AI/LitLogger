@@ -14,7 +14,7 @@
 """API layer for metrics and experiment operations."""
 
 import os
-from typing import Any, Dict, List
+from typing import Any
 
 from google.protobuf import timestamp_pb2
 from google.protobuf.json_format import MessageToDict
@@ -180,7 +180,7 @@ class MetricsApi:
         self,
         teamspace_id: str,
         name: str,
-        metadata: Dict[str, str] | None = None,
+        metadata: dict[str, str] | None = None,
         light_color: str | None = None,
         dark_color: str | None = None,
         store_step: bool = True,
@@ -220,7 +220,7 @@ class MetricsApi:
         self,
         teamspace_id: str,
         name: str,
-        metadata: Dict[str, str] | None = None,
+        metadata: dict[str, str] | None = None,
         light_color: str | None = None,
         dark_color: str | None = None,
         store_step: bool = True,
@@ -277,7 +277,7 @@ class MetricsApi:
         self,
         teamspace_id: str,
         metrics_store_id: str,
-        metrics: List[Metrics],
+        metrics: list[Metrics],
     ) -> None:
         """Append metrics to an existing experiment metrics store.
 
@@ -303,8 +303,8 @@ class MetricsApi:
         metrics_store_id: str,
         persisted: bool = True,
         phase: PhaseType = PhaseType.COMPLETED,
-        trackers: Dict[str, MetricsTracker] | None = None,
-        metadata: Dict[str, str] | None = None,
+        trackers: dict[str, MetricsTracker] | None = None,
+        metadata: dict[str, str] | None = None,
     ) -> None:
         """Update an experiment metrics store with completion status, trackers, and/or metadata.
 
@@ -337,7 +337,7 @@ class MetricsApi:
             ),
         )
 
-    def get_trackers_from_metrics_store(self, metrics_store: Any) -> Dict[str, MetricsTracker] | None:
+    def get_trackers_from_metrics_store(self, metrics_store: Any) -> dict[str, MetricsTracker] | None:
         """Extract and convert trackers from a metrics store object.
 
         Args:
@@ -352,7 +352,7 @@ class MetricsApi:
         return {name: _from_v1_metrics_tracker(v1_tracker) for name, v1_tracker in metrics_store.trackers.items()}
 
     @staticmethod
-    def _metadata_to_tags(metadata: Dict[str, Any] | None) -> list[V1MetricsTags]:
+    def _metadata_to_tags(metadata: dict[str, Any] | None) -> list[V1MetricsTags]:
         """Convert a metadata dictionary to a list of V1MetricsTags.
 
         Args:

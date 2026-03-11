@@ -14,21 +14,20 @@
 """Initialize litlogger experiment for standalone usage (without PyTorch Lightning)."""
 
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Dict, Union
+from typing import Any
+
+from lightning_sdk import Teamspace
 
 from litlogger._module import set_global
 from litlogger.experiment import Experiment
 from litlogger.generator import _create_name
 
-if TYPE_CHECKING:
-    from lightning_sdk import Teamspace
-
 
 def init(
     name: str | None = None,
     root_dir: str | None = None,
-    teamspace: Union[str, "Teamspace"] | None = None,
-    metadata: Dict[str, str] | None = None,
+    teamspace: str | Teamspace | None = None,
+    metadata: dict[str, str] | None = None,
     store_step: bool | None = True,
     store_created_at: bool | None = False,
     save_logs: bool = False,
@@ -137,11 +136,11 @@ def finish(status: str | None = None) -> None:
     litlogger.experiment.finalize(status)
 
 
-def get_metadata() -> Dict[str, str]:
+def get_metadata() -> dict[str, str]:
     """Get the metadata associated with the current experiment.
 
     Returns:
-        Dict[str, str]: The metadata dictionary with key-value pairs from the metrics stream.
+        dict[str, str]: The metadata dictionary with key-value pairs from the metrics stream.
 
     Raises:
         RuntimeError: If litlogger.init() has not been called.

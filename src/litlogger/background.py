@@ -21,7 +21,6 @@ import queue
 from multiprocessing import Queue
 from threading import Event, Thread
 from time import sleep, time
-from typing import Dict, List
 
 from lightning_sdk.lightning_cloud.openapi.rest import ApiException
 
@@ -67,7 +66,7 @@ class _BackgroundThread(Thread):
         store_created_at: bool,
         rate_limiting_interval: int = 1,
         max_batch_size: int = 1000,
-        trackers_init: Dict[str, MetricsTracker] | None = None,
+        trackers_init: dict[str, MetricsTracker] | None = None,
     ) -> None:
         super().__init__(daemon=True)
         self.teamspace_id = teamspace_id
@@ -80,7 +79,7 @@ class _BackgroundThread(Thread):
         self.is_ready_event = is_ready_event
         self.stop_event = stop_event
         self.done_event = done_event
-        self.metrics: Dict[str, Metrics] = {}
+        self.metrics: dict[str, Metrics] = {}
         self.exception = None
 
         self.store_step = store_step
@@ -96,7 +95,7 @@ class _BackgroundThread(Thread):
             client=metrics_api.client,
         )
 
-        self.trackers: Dict[str, MetricsTracker] = trackers_init if trackers_init is not None else {}
+        self.trackers: dict[str, MetricsTracker] = trackers_init if trackers_init is not None else {}
 
     def run(self) -> None:
         self._run()
@@ -233,7 +232,7 @@ class _BackgroundThread(Thread):
 
             tracker.num_rows += 1
 
-    def _send_metrics(self, metrics: List[Metrics]) -> None:
+    def _send_metrics(self, metrics: list[Metrics]) -> None:
         """Send metrics to the API, chunking into batches of max_batch_size values per request.
 
         In normal operation, this should never receive more than max_batch_size values at a time.
@@ -243,7 +242,7 @@ class _BackgroundThread(Thread):
         Args:
             metrics: List of metrics to send.
         """
-        current_chunk: List[Metrics] = []
+        current_chunk: list[Metrics] = []
         current_count = 0
         chunks_sent = 0
 

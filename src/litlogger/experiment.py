@@ -25,8 +25,9 @@ from multiprocessing import JoinableQueue
 from threading import Event
 from time import sleep
 from types import FrameType
-from typing import TYPE_CHECKING, Any, Dict, List, Union
+from typing import Any
 
+from lightning_sdk import Teamspace
 from lightning_sdk.lightning_cloud.openapi import V1MediaType
 
 from litlogger.api.artifacts_api import ArtifactsApi
@@ -39,9 +40,6 @@ from litlogger.background import PhaseType, _BackgroundThread
 from litlogger.capture import rerun_and_record
 from litlogger.printer import Printer, RunStats
 from litlogger.types import MediaType, Metrics, MetricValue
-
-if TYPE_CHECKING:
-    from lightning_sdk import Teamspace
 
 
 class Experiment:
@@ -61,10 +59,10 @@ class Experiment:
         name: str,
         log_dir: str = "lightning_logs",
         save_logs: bool = False,
-        teamspace: Union[str, "Teamspace"] | None = None,
+        teamspace: str | Teamspace | None = None,
         light_color: str | None = None,
         dark_color: str | None = None,
-        metadata: Dict[str, str] | None = None,
+        metadata: dict[str, str] | None = None,
         store_step: bool | None = True,
         store_created_at: bool | None = False,
         max_batch_size: int = 1000,
@@ -191,7 +189,7 @@ class Experiment:
         return self._url
 
     @property
-    def teamspace(self) -> "Teamspace":
+    def teamspace(self) -> Teamspace:
         """Get the teamspace for this experiment.
 
         Returns:
@@ -200,17 +198,17 @@ class Experiment:
         return self._teamspace
 
     @property
-    def metadata(self) -> Dict[str, str]:
+    def metadata(self) -> dict[str, str]:
         """Get the metadata associated with this experiment from the metrics stream.
 
         Returns:
-            Dict[str, str]: The metadata dictionary with key-value pairs from code-defined tags.
+            dict[str, str]: The metadata dictionary with key-value pairs from code-defined tags.
         """
         self._update_metrics_store()
         tags = getattr(self._metrics_store, "tags", None) or []
         return {tag.name: tag.value for tag in tags if tag.from_code}
 
-    def log_metrics(self, metrics: Dict[str, float] | None = None, step: int | None = None, **kwargs: float) -> None:
+    def log_metrics(self, metrics: dict[str, float] | None = None, step: int | None = None, **kwargs: float) -> None:
         """Log metrics to the experiment with background uploading.
 
         Metrics are buffered locally and uploaded to the cloud in batches to optimize performance.
@@ -229,7 +227,7 @@ class Experiment:
         if self._manager.exception is not None:
             raise self._manager.exception
 
-        batch: Dict[str, Metrics] = {}
+        batch: dict[str, Metrics] = {}
 
         if metrics is None:
             metrics = {}
@@ -255,7 +253,7 @@ class Experiment:
         if batch:
             self._metrics_queue.put(batch)
 
-    def log_metadata(self, metadata: Dict[str, str] | None = None, **kwargs: str) -> None:
+    def log_metadata(self, metadata: dict[str, str] | None = None, **kwargs: str) -> None:
         """Add or update metadata tags on the experiment.
 
         Merges the provided key-value pairs into the experiment's existing metadata
@@ -282,7 +280,7 @@ class Experiment:
             metadata=current_tags,
         )
 
-    def log_metrics_batch(self, metrics: Dict[str, List[Dict[str, float]]]) -> None:
+    def log_metrics_batch(self, metrics: dict[str, list[dict[str, float]]]) -> None:
         """Log a batch of metrics through the background queue.
 
         This method converts the batch format to Metrics objects and pushes them
@@ -314,7 +312,7 @@ class Experiment:
         if not metrics:
             return
 
-        batch: Dict[str, Metrics] = {}
+        batch: dict[str, Metrics] = {}
         for name, values in metrics.items():
             metric_values = []
             for v in values:
@@ -401,7 +399,7 @@ class Experiment:
     def log_files(
         self,
         paths: list[str],
-        remote_paths: List[str] | None = None,
+        remote_paths: list[str] | None = None,
         max_workers: int = 10,
     ) -> None:
         """Upload multiple file artifacts to the cloud in parallel.

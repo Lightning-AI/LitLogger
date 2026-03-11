@@ -60,6 +60,17 @@ Experiment
 
 ----
 
+Types
+=====
+
+.. currentmodule:: litlogger.types
+
+.. autoclass:: MediaType
+    :members:
+    :undoc-members:
+
+----
+
 LightningLogger
 ================
 

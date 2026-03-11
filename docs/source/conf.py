@@ -82,21 +82,20 @@ intersphinx_mapping = {
 nitpicky = True
 
 nitpick_ignore = [
-    ("py:class", "typing.Self"),
-    ("py:data", "typing.Union"),
-    ("py:class", "Tensor"),
-    ("py:class", "Module"),
-    ("py:class", "Namespace"),
-    ("py:class", "_PATH"),
-    ("py:class", "Teamspace"),
-    ("py:class", "lightning_sdk.Teamspace"),
-    ("py:class", "litlogger.types.MediaType"),
-    ("py:class", "MediaType"),
-    ("py:class", "lightning.fabric.loggers.logger.Logger"),
-    ("py:class", "lightning.fabric.utilities.types._PATH"),
-    ("py:class", "lightning_sdk.teamspace.Teamspace"),
+    # External Lightning/PyTorch — mocked, can't resolve
     ("py:class", "pytorch_lightning.loggers.LitLogger"),
     ("py:class", "lightning.pytorch.loggers.LitLogger"),
+    ("py:class", "lightning.pytorch.loggers.litlogger.LitLogger"),
+    ("py:class", "lightning.fabric.loggers.logger.Logger"),
+    ("py:class", "lightning.fabric.utilities.types._PATH"),
+    # lightning_sdk — mocked
+    ("py:class", "Teamspace"),
+    ("py:class", "lightning_sdk.Teamspace"),
+    ("py:class", "lightning_sdk.teamspace.Teamspace"),
+    # Internal type aliases
+    ("py:class", "_PATH"),
+    # typing.Union — inherited from LitLogger parent class, role mismatch (py:data vs py:class)
+    ("py:data", "typing.Union"),
 ]
 
 # -- Options for autodoc -----------------------------------------------------
@@ -104,6 +103,8 @@ nitpick_ignore = [
 autosummary_generate = True
 autodoc_member_order = "groupwise"
 autoclass_content = "both"
+autodoc_typehints = "description"
+typehints_description_target = "documented_params"
 
 autodoc_default_options = {
     "members": True,

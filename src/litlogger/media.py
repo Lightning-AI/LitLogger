@@ -20,7 +20,7 @@ them to temporary files for upload.
 
 import os
 import tempfile
-from typing import Any
+from typing import Any, Callable
 
 from typing_extensions import override
 
@@ -40,7 +40,7 @@ class File:
         self.name: str = ""
         self.description = description
         self._temp_path: str | None = None
-        self._download_fn: Any | None = None
+        self._download_fn: Callable[[str], str] | None = None
 
     def _get_upload_path(self) -> str:
         """Get a stable path for upload.
@@ -156,10 +156,10 @@ class Image(File):
 
         # Handle numpy array
         try:
-            import numpy as np
+            import numpy as np  # type: ignore[import-not-found]
 
             if isinstance(data, np.ndarray):
-                from PIL import Image as PILImage
+                from PIL import Image as PILImage  # type: ignore[import-not-found]
 
                 if data.dtype != np.uint8:
                     data = (data * 255).astype(np.uint8) if data.max() <= 1.0 else data.astype(np.uint8)
@@ -181,7 +181,7 @@ class Image(File):
 
         # Handle PIL Image
         try:
-            from PIL import Image as PILImage
+            from PIL import Image as PILImage  # type: ignore[import-not-found]
 
             if isinstance(data, PILImage.Image):
                 img = data
@@ -212,8 +212,6 @@ class Text(File):
         description: Optional human-readable description of the text.
     """
 
-    _media_type: str = "text"
-
     def __init__(self, content: str, description: str = "") -> None:
         self._content = content
         super().__init__("", description=description)
@@ -234,5 +232,6 @@ class Text(File):
         return path
 
     @property
+    @override
     def _media_type(self) -> MediaType:
         return MediaType.TEXT

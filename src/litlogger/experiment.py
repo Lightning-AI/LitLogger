@@ -26,7 +26,7 @@ from multiprocessing import JoinableQueue
 from threading import Event
 from time import sleep
 from types import FrameType
-from typing import Any, Callable
+from typing import TYPE_CHECKING, Any, Callable, cast
 
 from lightning_sdk import Teamspace
 from lightning_sdk.lightning_cloud.openapi import V1MediaType
@@ -46,6 +46,9 @@ from litlogger.types import MediaType, Metrics, MetricValue, PhaseType
 
 _deprecation_warnings_issued: set[str] = set()
 
+if TYPE_CHECKING:
+    from litlogger.printer import Printer, RunStats
+
 
 def _warn_deprecated(method: str, message: str) -> None:
     """Issue a deprecation warning for a legacy method, at most once per method."""
@@ -60,6 +63,20 @@ class LegacyExperiment:
     Provides deprecated methods like log_metrics(), log_file(), log_model(), etc.
     These are inherited by Experiment so existing code continues to work.
     """
+
+    if TYPE_CHECKING:
+        name: str
+        _teamspace: Teamspace
+        _printer: Printer
+        _stats: RunStats
+        _media_api: MediaApi
+        _metrics_store: Any
+
+        def __getitem__(self, key: str) -> Series | str | File: ...  # noqa: D105
+
+        def __setitem__(self, key: str, value: str | File) -> None: ...  # noqa: D105
+
+        def update(self, data: dict[str, str | float | int | File | list[float | int | File]]) -> None: ...
 
     def log_metrics(self, metrics: dict[str, float] | None = None, step: int | None = None, **kwargs: float) -> None:
         """Log metrics to the experiment with background uploading.
@@ -87,7 +104,7 @@ class LegacyExperiment:
             metrics = {}
         metrics.update(kwargs)
         for name, value in metrics.items():
-            self[name].append(float(value), step=step)
+            cast(Series, self[name]).append(float(value), step=step)
 
     def log_metadata(self, metadata: dict[str, str] | None = None, **kwargs: str) -> None:
         """Add or update metadata tags on the experiment.
@@ -246,7 +263,7 @@ class LegacyExperiment:
                 rel = None
             remote_path = rel if rel is not None and not rel.startswith("..") else os.path.basename(path)
             remote_path = remote_path.replace("\\", "/")
-        return self[remote_path].save(path)
+        return cast(File, self[remote_path]).save(path)
 
     def log_model_artifact(self, path: str, verbose: bool = False, version: str | None = None) -> None:
         """Upload a model file or directory to cloud storage using litmodels.

@@ -16,6 +16,7 @@ from litlogger.background import _BackgroundThread
 from litlogger.types import Metrics, MetricValue
 
 experiment_module = sys.modules["litlogger.experiment"]
+legacy_experiment_module = sys.modules["litlogger.experiment_legacy"]
 
 
 class TestBackgroundThread(_BackgroundThread):
@@ -181,7 +182,7 @@ class TestExperimentArtifactMethods:
         mock_file.save.assert_called_once_with("test.txt")
         assert result == "/path/to/file.txt"
 
-    @patch.object(experiment_module, "ModelArtifact")
+    @patch.object(legacy_experiment_module, "ModelArtifact")
     def test_log_model_artifact(self, mock_model_artifact_class):
         """Test log_model_artifact method."""
         mock_model_artifact = MagicMock()
@@ -203,7 +204,7 @@ class TestExperimentArtifactMethods:
         # Verify log was called
         mock_model_artifact.log.assert_called_once()
 
-    @patch.object(experiment_module, "ModelArtifact")
+    @patch.object(legacy_experiment_module, "ModelArtifact")
     def test_get_model_artifact(self, mock_model_artifact_class):
         """Test get_model_artifact method."""
         mock_model_artifact = MagicMock()
@@ -227,7 +228,7 @@ class TestExperimentArtifactMethods:
         mock_model_artifact.get.assert_called_once()
         assert result == "/path/to/model.pt"
 
-    @patch.object(experiment_module, "Model")
+    @patch.object(legacy_experiment_module, "Model")
     def test_log_model(self, mock_model_class):
         """Test log_model method."""
         mock_model = MagicMock()
@@ -257,7 +258,7 @@ class TestExperimentArtifactMethods:
         # Verify log was called
         mock_model.log.assert_called_once()
 
-    @patch.object(experiment_module, "Model")
+    @patch.object(legacy_experiment_module, "Model")
     def test_get_model(self, mock_model_class):
         """Test get_model method."""
         mock_model = MagicMock()
@@ -984,7 +985,7 @@ class TestExperimentStatsTracking:
         assert key == "file.txt"
         assert isinstance(value, File)
 
-    @patch.object(experiment_module, "ModelArtifact")
+    @patch.object(legacy_experiment_module, "ModelArtifact")
     def test_log_model_artifact_tracks_model_count(self, mock_model_artifact_class):
         """Test log_model_artifact increments models_logged."""
         mock_model_artifact_class.return_value = MagicMock()
@@ -999,7 +1000,7 @@ class TestExperimentStatsTracking:
         Experiment.log_model_artifact(exp, "model.pt", verbose=False)
         assert exp._stats.models_logged == 1
 
-    @patch.object(experiment_module, "Model")
+    @patch.object(legacy_experiment_module, "Model")
     def test_log_model_tracks_model_count(self, mock_model_class):
         """Test log_model increments models_logged."""
         mock_model_class.return_value = MagicMock()

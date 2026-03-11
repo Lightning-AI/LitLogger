@@ -54,13 +54,9 @@ Experiment
 
 .. currentmodule:: litlogger.experiment
 
-.. autoclass:: LegacyExperiment
-    :members:
-
 .. autoclass:: Experiment
     :members:
     :inherited-members:
-    :show-inheritance:
 
 ----
 

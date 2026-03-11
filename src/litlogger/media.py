@@ -73,7 +73,12 @@ class File:
     def _cleanup(self) -> None:
         """Clean up any temporary files created during upload."""
         if self._temp_path is not None and os.path.exists(self._temp_path):
-            os.unlink(self._temp_path)
+            try:
+                os.unlink(self._temp_path)
+            except PermissionError:
+                # Windows cannot unlink a file while another handle is still open.
+                # Leave the temp path in place so a later cleanup attempt can retry.
+                return
             self._temp_path = None
 
     def save(self, path: str) -> str:
@@ -226,10 +231,13 @@ class Text(File):
         fd, path = tempfile.mkstemp(suffix=".txt")
         os.close(fd)
         self._temp_path = path
-        with open(path, "w") as f:
+        with open(path, "w", encoding="utf-8") as f:
             f.write(self._content)
         self.path = path
         return path
+
+    def __repr__(self) -> str:  # noqa: D105
+        return f"{type(self).__name__}('{self.path}')"
 
     @property
     @override

@@ -31,7 +31,7 @@ from litlogger.experiment import Experiment
 from litlogger.generator import _create_name
 from litlogger.types import MediaType
 
-_base_classes = []
+_base_classes: list[type] = []
 
 log = logging.getLogger(__name__)
 
@@ -73,7 +73,7 @@ else:
         from lightning_fabric.utilities.cloud_io import get_filesystem
         from lightning_fabric.utilities.logger import _add_prefix
         from lightning_fabric.utilities.rank_zero import rank_zero_only
-        from pytorch_lightning.loggers.utilities import _scan_checkpoints
+        from pytorch_lightning.loggers.utilities import _scan_checkpoints  # type: ignore[assignment]
 
         _base_classes.append(_PytorchLightningLogger)
 
@@ -185,7 +185,7 @@ else:
             return self._sub_dir
 
         @property
-        @rank_zero_experiment  # type: ignore[untyped-decorator]
+        @rank_zero_experiment
         def experiment(self) -> Experiment | None:
             if self._experiment is not None:
                 return self._experiment
@@ -194,7 +194,7 @@ else:
                 # Set ready and continue to create experiment
                 self._is_ready = True
 
-            assert rank_zero_only.rank == 0, "tried to init log dirs in non global_rank=0"
+            assert rank_zero_only.rank == 0, "tried to init log dirs in non global_rank=0"  # type: ignore[attr-defined]
             if self.root_dir:
                 self._fs.makedirs(self.root_dir, exist_ok=True)
 
@@ -211,14 +211,14 @@ else:
             return self._experiment
 
         @property
-        @rank_zero_only  # type: ignore[untyped-decorator]
+        @rank_zero_only
         def url(self) -> str:
             return str(self.experiment.url)
 
         @override
-        @rank_zero_only  # type: ignore[untyped-decorator]
+        @rank_zero_only
         def log_metrics(self, metrics: Mapping[str, float], step: int | None = None) -> None:
-            assert rank_zero_only.rank == 0, "experiment tried to log from global_rank != 0"
+            assert rank_zero_only.rank == 0, "experiment tried to log from global_rank != 0"  # type: ignore[attr-defined]
 
             self._is_ready = True
 
@@ -226,12 +226,12 @@ else:
             self._step = self._step + 1 if step is None else step
             self._store_step = True
 
-            metrics = _add_prefix(metrics, self._prefix, self.LOGGER_JOIN_CHAR)
+            metrics = _add_prefix(metrics, self._prefix, self.LOGGER_JOIN_CHAR)  # type: ignore[assignment]
             metrics = {k: v.item() if isinstance(v, Tensor) else v for k, v in metrics.items()}
             self.experiment.log_metrics(metrics, step=self._step)
 
         @override
-        @rank_zero_only  # type: ignore[untyped-decorator]
+        @rank_zero_only
         def log_hyperparams(
             self,
             params: dict[str, Any] | Namespace,
@@ -243,7 +243,7 @@ else:
             params.update(self._metadata or {})
             self._metadata = params
 
-        @rank_zero_only  # type: ignore[untyped-decorator]
+        @rank_zero_only
         def log_metadata(
             self,
             params: dict[str, Any] | Namespace,
@@ -255,11 +255,11 @@ else:
             self._metadata = params
 
         @override
-        @rank_zero_only  # type: ignore[untyped-decorator]
+        @rank_zero_only
         def log_graph(self, model: Module, input_array: Tensor | None = None) -> None:
             warnings.warn("LightningLogger does not support `log_graph`", UserWarning, stacklevel=2)
 
-        @rank_zero_only  # type: ignore[untyped-decorator]
+        @rank_zero_only
         def log_model(
             self,
             model: Any,
@@ -281,7 +281,7 @@ else:
             self._store_step = True
             self.experiment.log_model(model, staging_dir, verbose, version, metadata)
 
-        @rank_zero_only  # type: ignore[untyped-decorator]
+        @rank_zero_only
         def log_model_artifact(
             self,
             path: str,
@@ -299,7 +299,7 @@ else:
             self._store_step = True
             self.experiment.log_model_artifact(path, verbose, version)
 
-        @rank_zero_only  # type: ignore[untyped-decorator]
+        @rank_zero_only
         def get_file(self, path: str, verbose: bool = True) -> str:
             """Download a file artifact from the cloud for this experiment.
 
@@ -314,7 +314,7 @@ else:
             self._store_step = True
             return str(self.experiment.get_file(path, verbose=verbose))
 
-        @rank_zero_only  # type: ignore[untyped-decorator]
+        @rank_zero_only
         def get_model(self, staging_dir: str | None = None, verbose: bool = False, version: str | None = None) -> Any:
             """Download and load a model object using litmodels.
 
@@ -330,7 +330,7 @@ else:
             self._store_step = True
             return self.experiment.get_model(staging_dir, verbose, version)
 
-        @rank_zero_only  # type: ignore[untyped-decorator]
+        @rank_zero_only
         def get_model_artifact(self, path: str, verbose: bool = False, version: str | None = None) -> str:
             """Download a model artifact file or directory from cloud storage using litmodels.
 
@@ -347,12 +347,12 @@ else:
             return str(self.experiment.get_model_artifact(path, verbose, version))
 
         @override
-        @rank_zero_only  # type: ignore[untyped-decorator]
+        @rank_zero_only
         def save(self) -> None:
             pass
 
         @override
-        @rank_zero_only  # type: ignore[untyped-decorator]
+        @rank_zero_only
         def finalize(self, status: str | None = None) -> None:
             if self._experiment is not None:
                 self._experiment.finalize(status)

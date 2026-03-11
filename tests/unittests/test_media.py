@@ -435,7 +435,7 @@ class TestTextUploadPath:
 
         assert path.endswith(".txt")
         assert os.path.exists(path)
-        with open(path) as f:
+        with open(path, encoding="utf-8") as f:
             assert f.read() == "hello world"
         t._cleanup()
 
@@ -452,7 +452,7 @@ class TestTextUploadPath:
         p2 = t._get_upload_path()
         # After first render, path is set and file exists, so super()._get_upload_path()
         # creates a hardlink. Both should have the same content.
-        with open(p1) as f1, open(p2) as f2:
+        with open(p1, encoding="utf-8") as f1, open(p2, encoding="utf-8") as f2:
             assert f1.read() == f2.read()
         t._cleanup()
         # Clean up the hardlinked temp from second call
@@ -462,14 +462,14 @@ class TestTextUploadPath:
     def test_unicode_content(self):
         t = Text("unicode: \u2603 \u2764 \U0001f680")
         path = t._get_upload_path()
-        with open(path) as f:
+        with open(path, encoding="utf-8") as f:
             assert f.read() == "unicode: \u2603 \u2764 \U0001f680"
         t._cleanup()
 
     def test_empty_string(self):
         t = Text("")
         path = t._get_upload_path()
-        with open(path) as f:
+        with open(path, encoding="utf-8") as f:
             assert f.read() == ""
         t._cleanup()
 
@@ -477,7 +477,7 @@ class TestTextUploadPath:
         content = "line 1\nline 2\nline 3"
         t = Text(content)
         path = t._get_upload_path()
-        with open(path) as f:
+        with open(path, encoding="utf-8") as f:
             assert f.read() == content
         t._cleanup()
 

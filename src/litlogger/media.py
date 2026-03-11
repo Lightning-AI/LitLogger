@@ -20,7 +20,9 @@ them to temporary files for upload.
 
 import os
 import tempfile
-from typing import Any, override
+from typing import Any
+
+from typing_extensions import override
 
 from litlogger.types import MediaType
 

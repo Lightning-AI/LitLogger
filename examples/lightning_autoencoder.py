@@ -15,7 +15,6 @@ import os
 
 import lightning as L
 from litlogger import LightningLogger
-from psutil import cpu_count
 from torch import nn, optim
 from torch.utils.data import DataLoader
 from torchvision.datasets import MNIST
@@ -54,7 +53,7 @@ if __name__ == "__main__":
         dataset=MNIST(os.getcwd(), download=True, transform=ToTensor()),
         batch_size=32,
         shuffle=True,
-        num_workers=cpu_count(),
+        num_workers=os.cpu_count(),
         persistent_workers=True,
     )
 

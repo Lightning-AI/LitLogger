@@ -216,6 +216,7 @@ class TestArtifact:
                     teamspace=mock_teamspace,
                     remote_path=artifact.remote_path,
                     local_path=local_path,
+                    cloud_account=None,
                 )
 
 

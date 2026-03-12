@@ -27,7 +27,7 @@ from litlogger.api.artifacts_api import ArtifactsApi
 from litlogger.api.client import LitRestClient
 
 # Re-export for backwards compatibility
-__all__ = ["Artifact", "Model", "ModelArtifact", "upload_model", "download_model"]
+__all__ = ["Artifact", "Model", "ModelArtifact", "download_model", "upload_model"]
 
 
 def _sanitize_version_for_model_name(version: str) -> str:
@@ -117,10 +117,15 @@ class Artifact:
         Returns:
             str: The local path where the file was saved.
         """
+        cloud_account = getattr(self.metrics_store, "cluster_id", None)
+        if not isinstance(cloud_account, str):
+            cloud_account = None
+
         return self._api.download_file(
             teamspace=self.teamspace,
             remote_path=self.remote_path,
             local_path=self.path,
+            cloud_account=cloud_account,
         )
 
 

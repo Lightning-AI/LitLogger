@@ -6,6 +6,7 @@ from time import sleep
 from unittest.mock import MagicMock, patch
 
 import pytest
+from lightning_sdk.lightning_cloud.openapi import V1MediaType
 
 # Suppress expected deprecation warnings from legacy method tests
 pytestmark = pytest.mark.filterwarnings("ignore::DeprecationWarning")
@@ -13,10 +14,20 @@ pytestmark = pytest.mark.filterwarnings("ignore::DeprecationWarning")
 # Trigger package import
 import litlogger  # noqa: F401
 from litlogger.background import _BackgroundThread
-from litlogger.types import Metrics, MetricValue
+from litlogger.experiment import Experiment
+from litlogger.types import MediaType, Metrics, MetricValue
 
 experiment_module = sys.modules["litlogger.experiment"]
 legacy_experiment_module = sys.modules["litlogger.experiment_legacy"]
+
+
+def _bind_media_upload(exp: MagicMock) -> None:
+    exp._media_type_to_v1 = lambda media_type: Experiment._media_type_to_v1(exp, media_type)
+
+    def _upload_media(name, path, media_type, step=None, epoch=None, caption=None):
+        return Experiment._upload_media(exp, name, path, media_type, step=step, epoch=epoch, caption=caption)
+
+    exp._upload_media = _upload_media
 
 
 class TestBackgroundThread(_BackgroundThread):
@@ -384,9 +395,6 @@ class TestExperimentLogMetrics:
         exp = _make_metric_exp()
         exp._manager.exception = RuntimeError("Background thread error")
 
-        import pytest
-        from litlogger.experiment import Experiment
-
         with pytest.raises(RuntimeError, match="Background thread error"):
             Experiment.log_metrics(exp, {"loss": 0.5}, step=1)
 
@@ -448,9 +456,6 @@ class TestExperimentLogMetricsBatch:
         """Test that log_metrics_batch raises if background thread has exception."""
         exp = _make_metric_exp()
         exp._manager.exception = RuntimeError("Background thread error")
-
-        import pytest
-        from litlogger.experiment import Experiment
 
         with pytest.raises(RuntimeError, match="Background thread error"):
             Experiment.log_metrics_batch(exp, {"loss": [{"step": 0, "value": 1.0}]})
@@ -602,9 +607,6 @@ class TestExperimentLogFiles:
         """Test that log_files raises error when remote_paths length doesn't match."""
         exp = MagicMock()
 
-        import pytest
-        from litlogger.experiment import Experiment
-
         with pytest.raises(ValueError, match="remote_paths length"):
             Experiment.log_files(exp, ["a.txt", "b.txt"], remote_paths=["only_one.txt"])
 
@@ -633,16 +635,14 @@ class TestExperimentLogMedia:
         exp.name = "test_exp"
         exp._manager = MagicMock()
         exp._media_api = MagicMock()
+        exp._metrics_store = MagicMock()
+        exp._metrics_store.id = "store-1"
+        exp._teamspace = MagicMock()
         exp._printer = MagicMock()
         exp._stats = MagicMock()
         exp._stats.media_logged = 0
 
-        # Import MediaType from types
-        from unittest.mock import patch
-
-        from lightning_sdk.lightning_cloud.openapi import V1MediaType
-        from litlogger.experiment import Experiment
-        from litlogger.types import MediaType
+        _bind_media_upload(exp)
 
         with patch("os.path.exists", return_value=True):
             Experiment.log_media(exp, "image", "/path/to/image.png", kind=MediaType.IMAGE)
@@ -658,14 +658,14 @@ class TestExperimentLogMedia:
         """Test media upload with guessed image type."""
         exp = MagicMock()
         exp._media_api = MagicMock()
+        exp._metrics_store = MagicMock()
+        exp._metrics_store.id = "store-1"
+        exp._teamspace = MagicMock()
         exp._printer = MagicMock()
         exp._stats = MagicMock()
         exp._stats.media_logged = 0
 
-        from unittest.mock import patch
-
-        from lightning_sdk.lightning_cloud.openapi import V1MediaType
-        from litlogger.experiment import Experiment
+        _bind_media_upload(exp)
 
         with patch("os.path.exists", return_value=True):
             Experiment.log_media(exp, "image", "/path/to/image.jpg")
@@ -678,14 +678,14 @@ class TestExperimentLogMedia:
         """Test media upload with guessed text type."""
         exp = MagicMock()
         exp._media_api = MagicMock()
+        exp._metrics_store = MagicMock()
+        exp._metrics_store.id = "store-1"
+        exp._teamspace = MagicMock()
         exp._printer = MagicMock()
         exp._stats = MagicMock()
         exp._stats.media_logged = 0
 
-        from unittest.mock import patch
-
-        from lightning_sdk.lightning_cloud.openapi import V1MediaType
-        from litlogger.experiment import Experiment
+        _bind_media_upload(exp)
 
         with patch("os.path.exists", return_value=True):
             Experiment.log_media(exp, "file", "/path/to/file.txt")
@@ -698,30 +698,23 @@ class TestExperimentLogMedia:
         """Test log_media raises ValueError for guessed unsupported media type."""
         exp = MagicMock()
         exp._media_api = MagicMock()
+        exp._metrics_store = MagicMock()
+        exp._metrics_store.id = "store-1"
+        exp._teamspace = MagicMock()
         exp._printer = MagicMock()
         exp._stats = MagicMock()
         exp._stats.media_logged = 0
 
-        from unittest.mock import patch
-
-        import pytest
-        from litlogger.experiment import Experiment
-
         with (
             patch("os.path.exists", return_value=True),
             patch("mimetypes.guess_type", return_value=("application/zip", None)),
-            pytest.raises(ValueError, match="Unsupported media type for file: /path/to/file.txt"),
+            pytest.raises(ValueError, match=r"Unsupported media type for file: /path/to/file\.txt"),
         ):
             Experiment.log_media(exp, "file", "/path/to/file.txt")
 
     def test_log_media_raises_file_not_found(self):
         """Test log_media raises FileNotFoundError."""
         exp = MagicMock()
-
-        from unittest.mock import patch
-
-        import pytest
-        from litlogger.experiment import Experiment
 
         with patch("os.path.exists", return_value=False), pytest.raises(FileNotFoundError):
             Experiment.log_media(exp, "file", "/non/existent/file.png")
@@ -730,14 +723,14 @@ class TestExperimentLogMedia:
         """Test log_media passes step, epoch, and caption to upload_media."""
         exp = MagicMock()
         exp._media_api = MagicMock()
+        exp._metrics_store = MagicMock()
+        exp._metrics_store.id = "store-1"
+        exp._teamspace = MagicMock()
         exp._printer = MagicMock()
         exp._stats = MagicMock()
         exp._stats.media_logged = 0
 
-        from unittest.mock import patch
-
-        from litlogger.experiment import Experiment
-        from litlogger.types import MediaType
+        _bind_media_upload(exp)
 
         with patch("os.path.exists", return_value=True):
             Experiment.log_media(

@@ -50,7 +50,7 @@ class TestSeriesAppend:
         assert series[0] is f
         assert series._type == "file"
         exp._register_key_type.assert_called_once_with("files", "file_series")
-        exp._log_file_series_value.assert_called_once_with("files", f, 0)
+        exp._log_file_series_value.assert_called_once_with("files", f, 0, step=None)
 
     def test_append_with_step(self):
         """Test appending a metric with an explicit step."""
@@ -61,8 +61,8 @@ class TestSeriesAppend:
 
         exp._log_metric_value.assert_called_once_with("loss", 0.5, step=10)
 
-    def test_append_file_ignores_step(self):
-        """Test that step is accepted but irrelevant for file series."""
+    def test_append_file_passes_step_through(self):
+        """Test that file-like series preserve the provided step."""
         exp = MagicMock(spec=Experiment)
         exp._key_types = {}
         f = File("test.txt")
@@ -70,6 +70,7 @@ class TestSeriesAppend:
         series.append(f, step=5)
 
         assert len(series) == 1
+        exp._log_file_series_value.assert_called_once_with("files", f, 0, step=5)
 
     def test_append_invalid_type(self):
         """Test that appending unsupported type raises TypeError."""
@@ -105,8 +106,8 @@ class TestSeriesAppend:
 
         assert len(series) == 2
         calls = exp._log_file_series_value.call_args_list
-        assert calls[0][0] == ("files", f1, 0)
-        assert calls[1][0] == ("files", f2, 1)
+        assert calls[0] == (("files", f1, 0), {"step": None})
+        assert calls[1] == (("files", f2, 1), {"step": None})
 
 
 class TestSeriesTypeSafety:

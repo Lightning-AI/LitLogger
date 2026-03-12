@@ -20,7 +20,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import TYPE_CHECKING, Any, cast
 
 from lightning_sdk import Teamspace
-from lightning_sdk.lightning_cloud.openapi import V1MediaType
+from typing_extensions import Self
 
 from litlogger.api.media_api import MediaApi
 from litlogger.artifacts import Model, ModelArtifact
@@ -47,7 +47,7 @@ class _MetadataValue(str):
     __slots__ = ("_key",)
     _key: str
 
-    def __new__(cls, key: str, value: str) -> "_MetadataValue":
+    def __new__(cls, key: str, value: str) -> Self:
         obj = super().__new__(cls, value)
         obj._key = key
         return obj
@@ -79,6 +79,16 @@ class LegacyExperiment:
         def __setitem__(self, key: str, value: str | File) -> None: ...  # noqa: D105
 
         def update(self, data: dict[str, str | float | int | File | list[float | int | File]]) -> None: ...
+
+        def _upload_media(
+            self,
+            name: str,
+            file_path: str,
+            media_type: MediaType,
+            step: int | None = None,
+            epoch: int | None = None,
+            caption: str | None = None,
+        ) -> None: ...
 
     def log_metrics(self, metrics: dict[str, float] | None = None, step: int | None = None, **kwargs: float) -> None:
         """Log metrics to the experiment with background uploading.
@@ -443,34 +453,19 @@ class LegacyExperiment:
         if not os.path.exists(path):
             raise FileNotFoundError(f"Media file not found: {path}")
 
-        media_type = V1MediaType.UNSPECIFIED
+        resolved_kind: MediaType | None = kind
 
-        if kind is not None:
-            if kind == MediaType.IMAGE:
-                media_type = V1MediaType.IMAGE
-            elif kind == MediaType.TEXT:
-                media_type = V1MediaType.TEXT
-        else:
+        if resolved_kind is None:
             mime_type, _ = mimetypes.guess_type(path)
             if mime_type:
                 if mime_type.startswith("image/"):
-                    media_type = V1MediaType.IMAGE
+                    resolved_kind = MediaType.IMAGE
                 elif mime_type.startswith("text/"):
-                    media_type = V1MediaType.TEXT
+                    resolved_kind = MediaType.TEXT
 
-        if media_type == V1MediaType.UNSPECIFIED:
+        if resolved_kind is None:
             raise ValueError(f"Unsupported media type for file: {path}")
 
-        self._media_api.upload_media(
-            experiment_id=self._metrics_store.id,
-            teamspace=self._teamspace,
-            file_path=path,
-            name=name,
-            media_type=media_type,
-            step=step,
-            epoch=epoch,
-            caption=caption,
-        )
-        self._stats.media_logged += 1
+        self._upload_media(name, path, resolved_kind, step=step, epoch=epoch, caption=caption)
         if verbose:
             self._printer.media_logged(path, step)

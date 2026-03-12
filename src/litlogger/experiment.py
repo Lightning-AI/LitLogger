@@ -16,6 +16,7 @@
 import atexit
 import contextlib
 import os
+import re
 import signal
 import sys
 from datetime import datetime
@@ -26,6 +27,7 @@ from types import FrameType
 from typing import Callable
 
 from lightning_sdk import Teamspace
+from lightning_sdk.lightning_cloud.openapi import V1MediaType
 
 from litlogger.api.artifacts_api import ArtifactsApi
 from litlogger.api.auth_api import AuthApi
@@ -36,10 +38,10 @@ from litlogger.artifacts import Artifact
 from litlogger.background import _BackgroundThread
 from litlogger.capture import rerun_and_record
 from litlogger.experiment_legacy import LegacyExperiment, _MetadataValue
-from litlogger.media import File
+from litlogger.media import File, Image, Text
 from litlogger.printer import Printer, RunStats
 from litlogger.series import Series
-from litlogger.types import Metrics, MetricValue, PhaseType
+from litlogger.types import MediaType, Metrics, MetricValue, PhaseType
 
 
 class Experiment(LegacyExperiment):
@@ -337,6 +339,42 @@ class Experiment(LegacyExperiment):
                 file._download_fn = self._create_download_fn(key)
                 self._static_files[key] = file
 
+        with contextlib.suppress(AttributeError):
+            media_response = self._media_api.client.lit_logger_service_list_lit_logger_media(
+                project_id=self._teamspace.id,
+                metrics_stream_id=self._metrics_store.id,
+            )
+            media_items = getattr(media_response, "media", None)
+            if not isinstance(media_items, list):
+                media_items = []
+            series_entries: dict[str, list[tuple[int, File]]] = {}
+            for media in media_items:
+                name = media.name or media.storage_path or media.id
+                storage_path = media.storage_path or name
+                wrapped = self._wrap_media_file(name, media.media_type)
+                wrapped.name = name
+                wrapped._download_fn = self._create_media_download_fn(storage_path, media.cluster_id)
+
+                match = re.match(r"^(?P<key>.+)/(?P<index>\d+)$", name)
+                if match:
+                    key = match.group("key")
+                    index = int(match.group("index"))
+                    if key in self._key_types and self._key_types[key] != "file_series":
+                        continue
+                    self._key_types[key] = "file_series"
+                    series_entries.setdefault(key, []).append((index, wrapped))
+                    continue
+
+                if name not in self._key_types:
+                    self._key_types[name] = "static_file"
+                    self._static_files[name] = wrapped
+
+            for key, entries in series_entries.items():
+                series = Series(self, key)
+                series._type = "file"
+                series._values = [value for _, value in sorted(entries, key=lambda item: item[0])]
+                self._series[key] = series
+
     def _create_download_fn(self, key: str) -> Callable[[str], str]:
         """Create a download function for a given artifact key."""
 
@@ -352,6 +390,25 @@ class Experiment(LegacyExperiment):
             return artifact.get()
 
         return _download
+
+    def _create_media_download_fn(self, storage_path: str, cloud_account: str | None = None) -> Callable[[str], str]:
+        """Create a download function for a media entry."""
+
+        def _download(path: str) -> str:
+            self._teamspace.download_file(storage_path, file_path=path, cloud_account=cloud_account)
+            return path
+
+        return _download
+
+    def _wrap_media_file(self, media_name: str, media_type: V1MediaType) -> File:
+        """Create the appropriate file wrapper for a media entry."""
+        if media_type == V1MediaType.IMAGE:
+            return Image(media_name)
+        if media_type == V1MediaType.TEXT:
+            text = Text("")
+            text.path = media_name
+            return text
+        return File(media_name)
 
     def _log_metric_value(self, key: str, value: float, step: int | None = None) -> None:
         """Internal: log a single metric value to the background queue.
@@ -371,14 +428,65 @@ class Experiment(LegacyExperiment):
         self._metrics_queue.put(batch)
         self._stats.record_metric(key, value)
 
-    def _log_file_series_value(self, key: str, value: File, index: int) -> None:
+    def _media_type_to_v1(self, media_type: MediaType) -> V1MediaType:
+        """Map litlogger media types to Lightning SDK media types."""
+        if media_type == MediaType.IMAGE:
+            return V1MediaType.IMAGE
+        if media_type == MediaType.TEXT:
+            return V1MediaType.TEXT
+        raise ValueError(f"Unsupported media type for file upload: {media_type}")
+
+    def _upload_media(
+        self,
+        name: str,
+        file_path: str,
+        media_type: MediaType,
+        step: int | None = None,
+        epoch: int | None = None,
+        caption: str | None = None,
+    ) -> None:
+        """Upload media through the media API."""
+        self._media_api.upload_media(
+            experiment_id=self._metrics_store.id,
+            teamspace=self._teamspace,
+            file_path=file_path,
+            name=name,
+            media_type=self._media_type_to_v1(media_type),
+            step=step,
+            epoch=epoch,
+            caption=caption,
+        )
+        self._stats.media_logged += 1
+
+    def _upload_media_value(
+        self,
+        key: str,
+        value: File,
+        name: str | None = None,
+        step: int | None = None,
+        epoch: int | None = None,
+        caption: str | None = None,
+    ) -> None:
+        """Upload a non-file media value using the media API."""
+        upload_path = value._get_upload_path()
+        media_name = name or key
+        self._upload_media(media_name, upload_path, value._media_type, step=step, epoch=epoch, caption=caption)
+        value.name = media_name
+        value._cleanup()
+
+    def _log_file_series_value(self, key: str, value: File, index: int, step: int | None = None) -> None:
         """Internal: upload a file as part of a time series.
 
         Args:
             key: Series key.
             value: File to upload.
             index: Index in the series (used for naming).
+            step: Optional step to associate with media uploads.
         """
+        if value._media_type != MediaType.FILE:
+            self._upload_media_value(key, value, name=f"{key}/{index}", step=step)
+            return
+
         upload_path = value._get_upload_path()
         remote_path = f"{key}/{index}"
         artifact = Artifact(
@@ -420,6 +528,10 @@ class Experiment(LegacyExperiment):
             key: Artifact key (used as remote path).
             value: File to upload.
         """
+        if value._media_type != MediaType.FILE:
+            self._upload_media_value(key, value)
+            return
+
         upload_path = value._get_upload_path()
         artifact = Artifact(
             path=upload_path,

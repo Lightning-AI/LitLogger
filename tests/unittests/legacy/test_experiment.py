@@ -193,35 +193,26 @@ class TestExperimentArtifactMethods:
         mock_file.save.assert_called_once_with("test.txt")
         assert result == "/path/to/file.txt"
 
-    @patch.object(legacy_experiment_module, "ModelArtifact")
-    def test_log_model_artifact(self, mock_model_artifact_class):
+    @patch.object(legacy_experiment_module.MediaModel, "log_model", return_value="owner/team/test_exp:v2.0")
+    def test_log_model_artifact(self, mock_log_model):
         """Test log_model_artifact method."""
-        mock_model_artifact = MagicMock()
-        mock_model_artifact_class.return_value = mock_model_artifact
-
         exp = MagicMock()
         exp.name = "test_exp"
         exp._teamspace = MagicMock()
+        exp._metrics_store = MagicMock()
+        exp._metrics_store.cluster_id = "acc-1"
 
         # Call the actual method implementation
         from litlogger.experiment import Experiment
 
         Experiment.log_model_artifact(exp, "model.pt", verbose=False, version="v2.0")
 
-        # Verify ModelArtifact was created correctly
-        mock_model_artifact_class.assert_called_once_with(
-            path="model.pt", experiment_name="test_exp", teamspace=exp._teamspace, version="v2.0", verbose=False
-        )
-        # Verify log was called
-        mock_model_artifact.log.assert_called_once()
+        mock_log_model.assert_called_once()
 
-    @patch.object(legacy_experiment_module, "ModelArtifact")
-    def test_get_model_artifact(self, mock_model_artifact_class):
+    @patch.object(legacy_experiment_module.MediaModel, "save", return_value="/path/to/model.pt")
+    @patch.object(legacy_experiment_module.MediaModel, "bind_remote_model")
+    def test_get_model_artifact(self, mock_bind_remote_model, mock_save):
         """Test get_model_artifact method."""
-        mock_model_artifact = MagicMock()
-        mock_model_artifact.get.return_value = "/path/to/model.pt"
-        mock_model_artifact_class.return_value = mock_model_artifact
-
         exp = MagicMock()
         exp.name = "test_exp"
         exp._teamspace = MagicMock()
@@ -231,23 +222,18 @@ class TestExperimentArtifactMethods:
 
         result = Experiment.get_model_artifact(exp, "model.pt", verbose=False)
 
-        # Verify ModelArtifact was created correctly
-        mock_model_artifact_class.assert_called_once_with(
-            path="model.pt", experiment_name="test_exp", teamspace=exp._teamspace, version="latest", verbose=False
-        )
-        # Verify get was called and result returned
-        mock_model_artifact.get.assert_called_once()
+        mock_bind_remote_model.assert_called_once()
+        mock_save.assert_called_once_with("model.pt")
         assert result == "/path/to/model.pt"
 
-    @patch.object(legacy_experiment_module, "Model")
-    def test_log_model(self, mock_model_class):
+    @patch.object(legacy_experiment_module.MediaModel, "log_model", return_value="owner/team/test_exp:latest")
+    def test_log_model(self, mock_log_model):
         """Test log_model method."""
-        mock_model = MagicMock()
-        mock_model_class.return_value = mock_model
-
         exp = MagicMock()
         exp.name = "test_exp"
         exp._teamspace = MagicMock()
+        exp._metrics_store = MagicMock()
+        exp._metrics_store.cluster_id = "acc-1"
 
         mock_model_obj = MagicMock()
 
@@ -256,26 +242,14 @@ class TestExperimentArtifactMethods:
 
         Experiment.log_model(exp, mock_model_obj, staging_dir="/tmp/staging", verbose=False, metadata={"key": "value"})
 
-        # Verify Model was created correctly
-        mock_model_class.assert_called_once_with(
-            model=mock_model_obj,
-            experiment_name="test_exp",
-            teamspace=exp._teamspace,
-            version="latest",
-            verbose=False,
-            metadata={"key": "value"},
-            staging_dir="/tmp/staging",
-        )
-        # Verify log was called
-        mock_model.log.assert_called_once()
+        mock_log_model.assert_called_once()
 
-    @patch.object(legacy_experiment_module, "Model")
-    def test_get_model(self, mock_model_class):
+    @patch.object(legacy_experiment_module.MediaModel, "load")
+    @patch.object(legacy_experiment_module.MediaModel, "bind_remote_model")
+    def test_get_model(self, mock_bind_remote_model, mock_load):
         """Test get_model method."""
-        mock_model = MagicMock()
         mock_loaded_model = MagicMock()
-        mock_model.get.return_value = mock_loaded_model
-        mock_model_class.return_value = mock_model
+        mock_load.return_value = mock_loaded_model
 
         exp = MagicMock()
         exp.name = "test_exp"
@@ -286,17 +260,8 @@ class TestExperimentArtifactMethods:
 
         result = Experiment.get_model(exp, staging_dir="/tmp/staging", verbose=False)
 
-        # Verify Model was created correctly
-        mock_model_class.assert_called_once_with(
-            model=None,
-            experiment_name="test_exp",
-            teamspace=exp._teamspace,
-            version="latest",
-            verbose=False,
-            staging_dir="/tmp/staging",
-        )
-        # Verify get was called and result returned
-        mock_model.get.assert_called_once()
+        mock_bind_remote_model.assert_called_once()
+        mock_load.assert_called_once_with("/tmp/staging")
         assert result == mock_loaded_model
 
 
@@ -978,34 +943,38 @@ class TestExperimentStatsTracking:
         assert key == "file.txt"
         assert isinstance(value, File)
 
-    @patch.object(legacy_experiment_module, "ModelArtifact")
-    def test_log_model_artifact_tracks_model_count(self, mock_model_artifact_class):
+    @patch.object(legacy_experiment_module.MediaModel, "log_model", return_value="owner/team/test:latest")
+    def test_log_model_artifact_tracks_model_count(self, mock_log_model):
         """Test log_model_artifact increments models_logged."""
-        mock_model_artifact_class.return_value = MagicMock()
         exp = MagicMock()
         exp.name = "test"
         exp._teamspace = MagicMock()
+        exp._metrics_store = MagicMock()
+        exp._metrics_store.cluster_id = "acc-1"
         exp._stats = MagicMock()
         exp._stats.models_logged = 0
 
         from litlogger.experiment import Experiment
 
         Experiment.log_model_artifact(exp, "model.pt", verbose=False)
+        mock_log_model.assert_called_once()
         assert exp._stats.models_logged == 1
 
-    @patch.object(legacy_experiment_module, "Model")
-    def test_log_model_tracks_model_count(self, mock_model_class):
+    @patch.object(legacy_experiment_module.MediaModel, "log_model", return_value="owner/team/test:latest")
+    def test_log_model_tracks_model_count(self, mock_log_model):
         """Test log_model increments models_logged."""
-        mock_model_class.return_value = MagicMock()
         exp = MagicMock()
         exp.name = "test"
         exp._teamspace = MagicMock()
+        exp._metrics_store = MagicMock()
+        exp._metrics_store.cluster_id = "acc-1"
         exp._stats = MagicMock()
         exp._stats.models_logged = 0
 
         from litlogger.experiment import Experiment
 
         Experiment.log_model(exp, MagicMock(), verbose=False)
+        mock_log_model.assert_called_once()
         assert exp._stats.models_logged == 1
 
 

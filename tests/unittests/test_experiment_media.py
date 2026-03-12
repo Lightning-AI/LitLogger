@@ -4,16 +4,14 @@
 #
 """Tests for adding and retrieving files/media via the experiment dict-like API."""
 
-import sys
+import tempfile
 from unittest.mock import MagicMock, patch
 
 import pytest
 from lightning_sdk.lightning_cloud.openapi import V1MediaType
 from litlogger.experiment import Experiment
-from litlogger.media import File, Image, Text
+from litlogger.media import File, Image, Model, Text
 from litlogger.series import Series
-
-experiment_module = sys.modules["litlogger.experiment"]
 
 
 def _make_exp(**overrides):
@@ -32,6 +30,7 @@ def _make_exp(**overrides):
     exp._stats = MagicMock()
     exp._stats.artifacts_logged = 0
     exp._stats.media_logged = 0
+    exp._stats.models_logged = 0
 
     type(exp).__getitem__ = lambda self, key: Experiment.__getitem__(self, key)
     type(exp).__setitem__ = lambda self, key, value: Experiment.__setitem__(self, key, value)
@@ -102,45 +101,42 @@ class TestAddStaticFile:
 class TestAddStaticFileBindings:
     """Test that _set_static_file binds name and _download_fn."""
 
-    @patch.object(experiment_module, "Artifact")
-    def test_binds_name(self, mock_artifact_cls):
-        mock_artifact_cls.return_value = MagicMock()
-
+    def test_binds_name(self):
         exp = MagicMock(spec=Experiment)
         exp.name = "exp1"
         exp._teamspace = MagicMock()
         exp._metrics_store = MagicMock()
+        exp._metrics_store.id = "store-1"
+        exp._metrics_store.cluster_id = "acc-1"
         exp._artifacts_api = MagicMock()
         exp._stats = MagicMock()
         exp._stats.artifacts_logged = 0
-        exp._create_download_fn = lambda key: Experiment._create_download_fn(exp, key)
 
-        f = File("local.txt")
-        Experiment._set_static_file(exp, "remote/key", f)
+        with tempfile.NamedTemporaryFile(suffix=".txt") as tmp:
+            f = File(tmp.name)
+            Experiment._set_static_file(exp, "remote/key", f)
 
-        assert f.name == "remote/key"
+            assert f.name == "remote/key"
 
-    @patch.object(experiment_module, "Artifact")
-    def test_binds_download_fn(self, mock_artifact_cls):
-        mock_artifact_cls.return_value = MagicMock()
-
+    def test_binds_download_fn(self):
         exp = MagicMock(spec=Experiment)
         exp.name = "exp1"
         exp._teamspace = MagicMock()
         exp._metrics_store = MagicMock()
+        exp._metrics_store.id = "store-1"
+        exp._metrics_store.cluster_id = "acc-1"
         exp._artifacts_api = MagicMock()
         exp._stats = MagicMock()
         exp._stats.artifacts_logged = 0
-        exp._create_download_fn = lambda key: Experiment._create_download_fn(exp, key)
 
-        f = File("local.txt")
-        Experiment._set_static_file(exp, "remote/key", f)
+        with tempfile.NamedTemporaryFile(suffix=".txt") as tmp:
+            f = File(tmp.name)
+            Experiment._set_static_file(exp, "remote/key", f)
 
-        assert f._download_fn is not None
-        assert callable(f._download_fn)
+            assert f._download_fn is not None
+            assert callable(f._download_fn)
 
-    @patch.object(experiment_module, "Artifact")
-    def test_non_file_media_uses_media_api(self, mock_artifact_cls):
+    def test_non_file_media_uses_media_api(self):
         exp = MagicMock(spec=Experiment)
         exp._media_api = MagicMock()
         exp._metrics_store = MagicMock()
@@ -175,13 +171,56 @@ class TestAddStaticFileBindings:
         image = Image("local.png")
         Experiment._set_static_file(exp, "photo", image)
 
-        mock_artifact_cls.assert_not_called()
         exp._media_api.upload_media.assert_called_once()
         _, kwargs = exp._media_api.upload_media.call_args
         assert kwargs["name"] == "photo"
         assert kwargs["file_path"] == "local.png"
         assert kwargs["media_type"] == V1MediaType.IMAGE
         assert exp._stats.media_logged == 1
+
+    @patch.object(Model, "log_model", return_value="owner/team/exp-model:latest")
+    def test_model_artifact_uses_litmodels(self, mock_log_model):
+        exp = Experiment.__new__(Experiment)
+        exp.name = "exp"
+        exp._teamspace = MagicMock()
+        exp._metrics_store = MagicMock()
+        exp._metrics_store.id = "store-1"
+        exp._metrics_store.cluster_id = "acc-1"
+        exp._metrics_store.tags = []
+        exp._metrics_api = MagicMock()
+        exp._update_metrics_store = MagicMock()
+        exp._stats = MagicMock()
+        exp._stats.models_logged = 0
+
+        model = Model("model.ckpt")
+        Experiment._set_static_file(exp, "checkpoint", model)
+
+        mock_log_model.assert_called_once()
+        assert model._model_name == "owner/team/exp-model:latest"
+        assert model._download_fn is not None
+        assert exp._stats.models_logged == 1
+
+    @patch.object(Model, "log_model", return_value="owner/team/exp-model-object:latest")
+    def test_model_object_uses_litmodels(self, mock_log_model):
+        exp = Experiment.__new__(Experiment)
+        exp.name = "exp"
+        exp._teamspace = MagicMock()
+        exp._metrics_store = MagicMock()
+        exp._metrics_store.id = "store-1"
+        exp._metrics_store.cluster_id = "acc-1"
+        exp._metrics_store.tags = []
+        exp._metrics_api = MagicMock()
+        exp._update_metrics_store = MagicMock()
+        exp._stats = MagicMock()
+        exp._stats.models_logged = 0
+
+        model = Model(object())
+        Experiment._set_static_file(exp, "model-object", model)
+
+        mock_log_model.assert_called_once()
+        assert model._model_name == "owner/team/exp-model-object:latest"
+        assert model._load_fn is not None
+        assert exp._stats.models_logged == 1
 
 
 # ---------------------------------------------------------------------------
@@ -245,66 +284,61 @@ class TestAddFileSeries:
 class TestFileSeriesBindings:
     """Test that _log_file_series_value binds name and _download_fn."""
 
-    @patch.object(experiment_module, "Artifact")
-    def test_binds_name_with_index(self, mock_artifact_cls):
-        mock_artifact_cls.return_value = MagicMock()
-
+    def test_binds_name_with_index(self):
         exp = MagicMock(spec=Experiment)
         exp.name = "exp1"
         exp._teamspace = MagicMock()
         exp._metrics_store = MagicMock()
+        exp._metrics_store.id = "store-1"
+        exp._metrics_store.cluster_id = "acc-1"
         exp._artifacts_api = MagicMock()
         exp._stats = MagicMock()
         exp._stats.artifacts_logged = 0
-        exp._create_download_fn = lambda key: Experiment._create_download_fn(exp, key)
 
-        f = File("frame.png")
-        Experiment._log_file_series_value(exp, "images", f, 5)
+        with tempfile.NamedTemporaryFile(suffix=".png") as tmp:
+            f = File(tmp.name)
+            Experiment._log_file_series_value(exp, "images", f, 5)
 
-        assert f.name == "images/5"
+            assert f.name == "images/5"
 
-    @patch.object(experiment_module, "Artifact")
-    def test_binds_download_fn(self, mock_artifact_cls):
-        mock_artifact_cls.return_value = MagicMock()
-
+    def test_binds_download_fn(self):
         exp = MagicMock(spec=Experiment)
         exp.name = "exp1"
         exp._teamspace = MagicMock()
         exp._metrics_store = MagicMock()
+        exp._metrics_store.id = "store-1"
+        exp._metrics_store.cluster_id = "acc-1"
         exp._artifacts_api = MagicMock()
         exp._stats = MagicMock()
         exp._stats.artifacts_logged = 0
-        exp._create_download_fn = lambda key: Experiment._create_download_fn(exp, key)
 
-        f = File("frame.png")
-        Experiment._log_file_series_value(exp, "images", f, 0)
+        with tempfile.NamedTemporaryFile(suffix=".png") as tmp:
+            f = File(tmp.name)
+            Experiment._log_file_series_value(exp, "images", f, 0)
 
-        assert f._download_fn is not None
+            assert f._download_fn is not None
 
-    @patch.object(experiment_module, "Artifact")
-    def test_file_series_entry_saveable(self, mock_artifact_cls):
+    def test_file_series_entry_saveable(self):
         """Individual files in a series can be downloaded via .save()."""
-        mock_artifact = MagicMock()
-        mock_artifact.get.return_value = "/downloaded"
-        mock_artifact_cls.return_value = mock_artifact
-
         exp = MagicMock(spec=Experiment)
         exp.name = "exp1"
         exp._teamspace = MagicMock()
         exp._metrics_store = MagicMock()
+        exp._metrics_store.id = "store-1"
+        exp._metrics_store.cluster_id = "acc-1"
         exp._artifacts_api = MagicMock()
         exp._stats = MagicMock()
         exp._stats.artifacts_logged = 0
-        exp._create_download_fn = lambda key: Experiment._create_download_fn(exp, key)
 
-        f = File("frame.png")
-        Experiment._log_file_series_value(exp, "frames", f, 0)
+        with tempfile.NamedTemporaryFile(suffix=".png") as tmp, tempfile.TemporaryDirectory() as tmpdir:
+            f = File(tmp.name)
+            Experiment._log_file_series_value(exp, "frames", f, 0)
 
-        result = f.save("/output/frame.png")
-        assert result == "/downloaded"
+            download_path = f"{tmpdir}/frame.png"
+            result = f.save(download_path)
+            assert result == download_path
 
-    @patch.object(experiment_module, "Artifact")
-    def test_non_file_series_uses_media_api(self, mock_artifact_cls):
+    def test_non_file_series_uses_media_api(self):
         exp = MagicMock(spec=Experiment)
         exp._media_api = MagicMock()
         exp._metrics_store = MagicMock()
@@ -339,13 +373,33 @@ class TestFileSeriesBindings:
         text = Text("hello world")
         Experiment._log_file_series_value(exp, "logs", text, 2, step=7)
 
-        mock_artifact_cls.assert_not_called()
         exp._media_api.upload_media.assert_called_once()
         _, kwargs = exp._media_api.upload_media.call_args
         assert kwargs["name"] == "logs/2"
         assert kwargs["step"] == 7
         assert kwargs["media_type"] == V1MediaType.TEXT
         assert exp._stats.media_logged == 1
+
+    @patch.object(Model, "log_model", return_value="owner/team/exp-model-series:latest")
+    def test_model_series_uses_indexed_model_key(self, mock_log_model):
+        exp = Experiment.__new__(Experiment)
+        exp.name = "exp"
+        exp._teamspace = MagicMock()
+        exp._metrics_store = MagicMock()
+        exp._metrics_store.id = "store-1"
+        exp._metrics_store.cluster_id = "acc-1"
+        exp._metrics_store.tags = []
+        exp._metrics_api = MagicMock()
+        exp._update_metrics_store = MagicMock()
+        exp._stats = MagicMock()
+        exp._stats.models_logged = 0
+
+        model = Model("checkpoint.ckpt")
+        Experiment._log_file_series_value(exp, "models", model, 2)
+
+        mock_log_model.assert_called_once()
+        assert model.name == "models/2"
+        assert exp._stats.models_logged == 1
 
 
 # ---------------------------------------------------------------------------

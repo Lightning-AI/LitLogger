@@ -2,13 +2,13 @@
 # Licensed under the Apache License, Version 2.0 (the "License");
 #     http://www.apache.org/licenses/LICENSE-2.0
 #
-"""Tests for File, Image, and Text media types."""
+"""Tests for File, Image, Text, and Model media types."""
 
 import os
 import tempfile
 
 import pytest
-from litlogger.media import File, Image, Text
+from litlogger.media import File, Image, Model, Text, _sanitize_version_for_model_name
 from litlogger.types import MediaType
 
 
@@ -515,3 +515,30 @@ class TestTextRepr:
         assert "Text(" in repr(t)
         assert t.path in repr(t)
         t._cleanup()
+
+
+class TestModelInit:
+    def test_init_with_path(self):
+        model = Model("checkpoint.ckpt")
+        assert model.path == "checkpoint.ckpt"
+        assert model._media_type == MediaType.MODEL
+        assert model._model_kind == "artifact"
+
+    def test_init_with_object(self):
+        model = Model(object())
+        assert model.path == ""
+        assert model._media_type == MediaType.MODEL
+        assert model._model_kind == "object"
+
+    def test_from_remote_artifact(self):
+        model = Model.from_remote("owner/team/model:latest", "artifact")
+        assert model._model_kind == "artifact"
+        assert model.path == "owner/team/model:latest"
+
+    def test_load_without_remote_context_raises(self):
+        model = Model(object())
+        with pytest.raises(RuntimeError, match="no remote load context"):
+            model.load()
+
+    def test_version_sanitization_replaces_colons(self):
+        assert _sanitize_version_for_model_name("2024-01-15:12:30:45") == "2024-01-15-12-30-45"

@@ -62,13 +62,15 @@ Quick Example
 Documentation Map
 =================
 
-`Tutorials <#tutorials>`_ provide end-to-end, task-oriented walkthroughs.
+:ref:`Tutorials <tutorials-section>` provide end-to-end, task-oriented walkthroughs.
 
-`Guides <#guides>`_ explain workflows, migration paths, and logging patterns in more depth.
+:ref:`Guides <guides-section>` explain workflows, migration paths, and logging patterns in more depth.
 
-`Examples <#examples>`_ include every runnable example currently shipped in the repository.
+:ref:`Examples <examples-section>` include every runnable example currently shipped in the repository.
 
-The `API reference <#api-reference>`_ documents the public classes, functions, and enums.
+The :ref:`API reference <api-reference-section>` documents the public classes, functions, and enums.
+
+.. _start-section:
 
 Start
 =====
@@ -77,6 +79,8 @@ Start
     :maxdepth: 1
 
     install
+
+.. _tutorials-section:
 
 Tutorials
 =========
@@ -89,6 +93,8 @@ Tutorials
     tutorials/lightning
     tutorials/complete_workflow
     tutorials/litserve
+
+.. _guides-section:
 
 Guides
 ======
@@ -103,10 +109,14 @@ Guides
     guide/workflows
     guide/examples
 
+.. _examples-section:
+
 Examples
 ========
 
 See :doc:`guide/examples` for the full list of runnable repository examples.
+
+.. _api-reference-section:
 
 API Reference
 =============

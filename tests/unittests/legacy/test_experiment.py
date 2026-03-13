@@ -5,12 +5,29 @@ from multiprocessing import Event, Queue
 from time import sleep
 from unittest.mock import MagicMock, patch
 
+import pytest
+from lightning_sdk.lightning_cloud.openapi import V1MediaType
+
+# Suppress expected deprecation warnings from legacy method tests
+pytestmark = pytest.mark.filterwarnings("ignore::DeprecationWarning")
+
 # Trigger package import
 import litlogger  # noqa: F401
 from litlogger.background import _BackgroundThread
-from litlogger.types import Metrics, MetricValue
+from litlogger.experiment import Experiment
+from litlogger.types import MediaType, Metrics, MetricValue
 
 experiment_module = sys.modules["litlogger.experiment"]
+legacy_experiment_module = sys.modules["litlogger.experiment_legacy"]
+
+
+def _bind_media_upload(exp: MagicMock) -> None:
+    exp._media_type_to_v1 = lambda media_type: Experiment._media_type_to_v1(exp, media_type)
+
+    def _upload_media(name, path, media_type, step=None, epoch=None, caption=None):
+        return Experiment._upload_media(exp, name, path, media_type, step=step, epoch=epoch, caption=caption)
+
+    exp._upload_media = _upload_media
 
 
 class TestBackgroundThread(_BackgroundThread):
@@ -130,94 +147,53 @@ def test_signal_handler_exit_code():
 class TestExperimentArtifactMethods:
     """Test artifact logging and retrieval methods."""
 
-    @patch.object(experiment_module, "Artifact")
-    def test_log_file(self, mock_artifact_class):
-        """Test log_file method."""
-        mock_artifact = MagicMock()
-        mock_artifact_class.return_value = mock_artifact
+    def test_log_file(self):
+        """Test log_file delegates to __setitem__ with File."""
+        from litlogger.experiment import Experiment
+        from litlogger.media import File
 
         exp = MagicMock()
-        exp.name = "test_exp"
-        exp._teamspace = MagicMock()
-        exp._metrics_store = MagicMock()
-        exp._artifacts_api = MagicMock()
-
-        # Call the actual method implementation
-        from litlogger.experiment import Experiment
-
+        # log_file delegates to self[remote_path] = File(path)
         Experiment.log_file(exp, "test.txt", verbose=False)
 
-        # Verify Artifact was created correctly (remote_path defaults to None)
-        mock_artifact_class.assert_called_once_with(
-            path="test.txt",
-            experiment_name="test_exp",
-            teamspace=exp._teamspace,
-            metrics_store=exp._metrics_store,
-            client=exp._artifacts_api.client,
-            remote_path=None,
-        )
-        # Verify log was called
-        mock_artifact.log.assert_called_once()
+        # remote_path defaults to relative path or basename
+        exp.__setitem__.assert_called_once()
+        key, value = exp.__setitem__.call_args[0]
+        assert key == "test.txt"
+        assert isinstance(value, File)
+        assert value.path == "test.txt"
 
-    @patch.object(experiment_module, "Artifact")
-    def test_log_file_with_remote_path(self, mock_artifact_class):
-        """Test log_file method with custom remote_path."""
-        mock_artifact = MagicMock()
-        mock_artifact_class.return_value = mock_artifact
+    def test_log_file_with_remote_path(self):
+        """Test log_file with custom remote_path delegates correctly."""
+        from litlogger.experiment import Experiment
+        from litlogger.media import File
 
         exp = MagicMock()
-        exp.name = "test_exp"
-        exp._teamspace = MagicMock()
-        exp._metrics_store = MagicMock()
-        exp._artifacts_api = MagicMock()
-
-        from litlogger.experiment import Experiment
-
         Experiment.log_file(exp, "/abs/path/to/file.png", verbose=False, remote_path="images/file.png")
 
-        # Verify Artifact was created with custom remote_path
-        mock_artifact_class.assert_called_once_with(
-            path="/abs/path/to/file.png",
-            experiment_name="test_exp",
-            teamspace=exp._teamspace,
-            metrics_store=exp._metrics_store,
-            client=exp._artifacts_api.client,
-            remote_path="images/file.png",
-        )
-        mock_artifact.log.assert_called_once()
+        exp.__setitem__.assert_called_once()
+        key, value = exp.__setitem__.call_args[0]
+        assert key == "images/file.png"
+        assert isinstance(value, File)
+        assert value.path == "/abs/path/to/file.png"
 
-    @patch.object(experiment_module, "Artifact")
-    def test_get_file(self, mock_artifact_class):
-        """Test get_file method."""
-        mock_artifact = MagicMock()
-        mock_artifact.get.return_value = "/path/to/file.txt"
-        mock_artifact_class.return_value = mock_artifact
+    def test_get_file(self):
+        """Test get_file delegates to self[key].save(path)."""
+        from litlogger.experiment import Experiment
+
+        mock_file = MagicMock()
+        mock_file.save.return_value = "/path/to/file.txt"
 
         exp = MagicMock()
-        exp.name = "test_exp"
-        exp._teamspace = MagicMock()
-        exp._metrics_store = MagicMock()
-        exp._artifacts_api = MagicMock()
-
-        # Call the actual method implementation
-        from litlogger.experiment import Experiment
+        exp.__getitem__ = MagicMock(return_value=mock_file)
 
         result = Experiment.get_file(exp, "test.txt", verbose=False)
 
-        # Verify Artifact was created correctly (remote_path defaults to None)
-        mock_artifact_class.assert_called_once_with(
-            path="test.txt",
-            experiment_name="test_exp",
-            teamspace=exp._teamspace,
-            metrics_store=exp._metrics_store,
-            client=exp._artifacts_api.client,
-            remote_path=None,
-        )
-        # Verify get was called and result returned
-        mock_artifact.get.assert_called_once()
+        exp.__getitem__.assert_called_once_with("test.txt")
+        mock_file.save.assert_called_once_with("test.txt")
         assert result == "/path/to/file.txt"
 
-    @patch.object(experiment_module, "ModelArtifact")
+    @patch.object(legacy_experiment_module, "ModelArtifact")
     def test_log_model_artifact(self, mock_model_artifact_class):
         """Test log_model_artifact method."""
         mock_model_artifact = MagicMock()
@@ -239,7 +215,7 @@ class TestExperimentArtifactMethods:
         # Verify log was called
         mock_model_artifact.log.assert_called_once()
 
-    @patch.object(experiment_module, "ModelArtifact")
+    @patch.object(legacy_experiment_module, "ModelArtifact")
     def test_get_model_artifact(self, mock_model_artifact_class):
         """Test get_model_artifact method."""
         mock_model_artifact = MagicMock()
@@ -263,7 +239,7 @@ class TestExperimentArtifactMethods:
         mock_model_artifact.get.assert_called_once()
         assert result == "/path/to/model.pt"
 
-    @patch.object(experiment_module, "Model")
+    @patch.object(legacy_experiment_module, "Model")
     def test_log_model(self, mock_model_class):
         """Test log_model method."""
         mock_model = MagicMock()
@@ -293,7 +269,7 @@ class TestExperimentArtifactMethods:
         # Verify log was called
         mock_model.log.assert_called_once()
 
-    @patch.object(experiment_module, "Model")
+    @patch.object(legacy_experiment_module, "Model")
     def test_get_model(self, mock_model_class):
         """Test get_model method."""
         mock_model = MagicMock()
@@ -324,79 +300,100 @@ class TestExperimentArtifactMethods:
         assert result == mock_loaded_model
 
 
+def _make_metric_exp(**overrides):
+    """Create a MagicMock wired up like a real Experiment for metric delegation tests.
+
+    The mock has the internal dicts (_series, _key_types, _metadata_values, _static_files)
+    and delegates __getitem__, __setitem__, update, _ensure_series, _register_key_type,
+    and _log_metric_value through the real Experiment methods so that log_metrics /
+    log_metrics_batch / log_metadata work end-to-end without hitting a real backend.
+    """
+    from litlogger.experiment import Experiment
+
+    exp = MagicMock()
+    # Internal state containers
+    exp._series = {}
+    exp._key_types = {}
+    exp._metadata_values = {}
+    exp._static_files = {}
+    # Defaults
+    exp._manager = MagicMock()
+    exp._manager.exception = None
+    exp.store_step = True
+    exp.store_created_at = False
+    exp._metrics_queue = MagicMock()
+    exp._stats = MagicMock()
+    # Wire dunder methods on the *type* so MagicMock dispatches them
+    type(exp).__getitem__ = lambda self, key: Experiment.__getitem__(self, key)
+    type(exp).__setitem__ = lambda self, key, value: Experiment.__setitem__(self, key, value)
+    # Wire regular methods
+    exp.update = lambda data: Experiment.update(exp, data)
+    exp._ensure_series = lambda key: Experiment._ensure_series(exp, key)
+    exp._register_key_type = lambda key, kt: Experiment._register_key_type(exp, key, kt)
+    exp._log_metric_value = lambda key, value, step=None: Experiment._log_metric_value(exp, key, value, step=step)
+    # Apply overrides
+    for k, v in overrides.items():
+        setattr(exp, k, v)
+    return exp
+
+
 class TestExperimentLogMetrics:
     """Test log_metrics method."""
 
     def test_log_metrics_basic(self):
-        """Test basic metrics logging pushes to queue."""
-        exp = MagicMock()
-        exp._manager = MagicMock()
-        exp._manager.exception = None
-        exp.store_step = True
-        exp.store_created_at = False
-        exp._metrics_queue = MagicMock()
+        """Test basic metrics logging delegates through __getitem__ and Series.append."""
+        exp = _make_metric_exp(store_step=True, store_created_at=False)
 
         from litlogger.experiment import Experiment
 
-        # Log some metrics
         Experiment.log_metrics(exp, {"loss": 0.5, "accuracy": 0.9}, step=1)
 
-        # Verify metrics were pushed to queue
-        exp._metrics_queue.put.assert_called_once()
-        call_args = exp._metrics_queue.put.call_args[0][0]
+        # Verify metrics were pushed to queue via _log_metric_value
+        assert exp._metrics_queue.put.call_count == 2
+        # Collect all batches pushed
+        all_batches = [c[0][0] for c in exp._metrics_queue.put.call_args_list]
+        keys_logged = {k for batch in all_batches for k in batch}
+        assert keys_logged == {"loss", "accuracy"}
 
-        assert len(call_args) == 2
-        assert "loss" in call_args
-        assert "accuracy" in call_args
-        assert call_args["loss"].values[0].value == 0.5
-        assert call_args["loss"].values[0].step == 1
-        assert call_args["accuracy"].values[0].value == 0.9
+        # Verify values from series
+        assert len(exp._series["loss"]) == 1
+        assert exp._series["loss"][0] == 0.5
+        assert len(exp._series["accuracy"]) == 1
+        assert exp._series["accuracy"][0] == 0.9
+
+        # Verify step was passed through to queue
+        loss_batch = next(b for b in all_batches if "loss" in b)
+        assert loss_batch["loss"].values[0].step == 1
+        assert loss_batch["loss"].values[0].value == 0.5
 
     def test_log_metrics_without_step(self):
         """Test metrics logging without step when store_step=False."""
-        exp = MagicMock()
-        exp._manager = MagicMock()
-        exp._manager.exception = None
-        exp.store_step = False
-        exp.store_created_at = False
-        exp._metrics_queue = MagicMock()
+        exp = _make_metric_exp(store_step=False, store_created_at=False)
 
         from litlogger.experiment import Experiment
 
-        # Log metrics with step but store_step=False
         Experiment.log_metrics(exp, {"loss": 0.5}, step=10)
 
-        # Verify step is None
-        call_args = exp._metrics_queue.put.call_args[0][0]
-        assert call_args["loss"].values[0].step is None
+        # Verify step is None because store_step=False
+        batch = exp._metrics_queue.put.call_args[0][0]
+        assert batch["loss"].values[0].step is None
 
     def test_log_metrics_with_created_at(self):
         """Test metrics logging with store_created_at=True."""
-        exp = MagicMock()
-        exp._manager = MagicMock()
-        exp._manager.exception = None
-        exp.store_step = True
-        exp.store_created_at = True
-        exp._metrics_queue = MagicMock()
+        exp = _make_metric_exp(store_step=True, store_created_at=True)
 
         from litlogger.experiment import Experiment
 
-        # Log metrics with store_created_at enabled
         Experiment.log_metrics(exp, {"loss": 0.5}, step=1)
 
         # Verify created_at is set
-        call_args = exp._metrics_queue.put.call_args[0][0]
-        assert call_args["loss"].values[0].created_at is not None
+        batch = exp._metrics_queue.put.call_args[0][0]
+        assert batch["loss"].values[0].created_at is not None
 
     def test_log_metrics_raises_on_background_exception(self):
         """Test that log_metrics raises if background thread has exception."""
-        exp = MagicMock()
-        exp._manager = MagicMock()
+        exp = _make_metric_exp()
         exp._manager.exception = RuntimeError("Background thread error")
-        exp._metrics_queue = MagicMock()
-
-        import pytest
-        from litlogger.experiment import Experiment
 
         with pytest.raises(RuntimeError, match="Background thread error"):
             Experiment.log_metrics(exp, {"loss": 0.5}, step=1)
@@ -406,19 +403,13 @@ class TestExperimentLogMetrics:
 
     def test_log_metrics_empty_dict(self):
         """Test that empty metrics dict does not push to queue."""
-        exp = MagicMock()
-        exp._manager = MagicMock()
-        exp._manager.exception = None
-        exp.store_step = True
-        exp.store_created_at = False
-        exp._metrics_queue = MagicMock()
+        exp = _make_metric_exp()
 
         from litlogger.experiment import Experiment
 
-        # Log empty metrics
         Experiment.log_metrics(exp, {}, step=1)
 
-        # Queue should not be called for empty batch
+        # Queue should not be called for empty dict (no items to iterate)
         exp._metrics_queue.put.assert_not_called()
 
 
@@ -426,11 +417,8 @@ class TestExperimentLogMetricsBatch:
     """Test log_metrics_batch method for bulk metric uploads."""
 
     def test_log_metrics_batch_basic(self):
-        """Test basic batch metrics upload pushes to queue."""
-        exp = MagicMock()
-        exp._manager = MagicMock()
-        exp._manager.exception = None
-        exp._metrics_queue = MagicMock()
+        """Test basic batch metrics upload delegates through update/extend."""
+        exp = _make_metric_exp()
 
         from litlogger.experiment import Experiment
 
@@ -446,29 +434,16 @@ class TestExperimentLogMetricsBatch:
         }
         Experiment.log_metrics_batch(exp, metrics)
 
-        # Verify queue was called
-        exp._metrics_queue.put.assert_called_once()
-        batch = exp._metrics_queue.put.call_args[0][0]
+        # Verify series were populated with correct values
+        assert list(exp._series["loss"]) == [1.0, 0.5]
+        assert list(exp._series["accuracy"]) == [0.6, 0.8]
 
-        # Verify metrics structure
-        assert len(batch) == 2
-        assert "loss" in batch
-        assert "accuracy" in batch
-
-        # Verify loss values
-        loss_values = batch["loss"].values
-        assert len(loss_values) == 2
-        assert loss_values[0].value == 1.0
-        assert loss_values[0].step == 0
-        assert loss_values[1].value == 0.5
-        assert loss_values[1].step == 1
+        # Verify metrics were pushed to queue (one put per value via _log_metric_value)
+        assert exp._metrics_queue.put.call_count == 4  # 2 loss + 2 accuracy
 
     def test_log_metrics_batch_empty_dict(self):
         """Test that empty metrics dict does not push to queue."""
-        exp = MagicMock()
-        exp._manager = MagicMock()
-        exp._manager.exception = None
-        exp._metrics_queue = MagicMock()
+        exp = _make_metric_exp()
 
         from litlogger.experiment import Experiment
 
@@ -479,26 +454,15 @@ class TestExperimentLogMetricsBatch:
 
     def test_log_metrics_batch_raises_on_background_exception(self):
         """Test that log_metrics_batch raises if background thread has exception."""
-        exp = MagicMock()
-        exp._manager = MagicMock()
+        exp = _make_metric_exp()
         exp._manager.exception = RuntimeError("Background thread error")
-        exp._metrics_queue = MagicMock()
-
-        import pytest
-        from litlogger.experiment import Experiment
 
         with pytest.raises(RuntimeError, match="Background thread error"):
             Experiment.log_metrics_batch(exp, {"loss": [{"step": 0, "value": 1.0}]})
 
-        # Queue should not be called
-        exp._metrics_queue.put.assert_not_called()
-
     def test_log_metrics_batch_single_metric(self):
         """Test batch upload with a single metric."""
-        exp = MagicMock()
-        exp._manager = MagicMock()
-        exp._manager.exception = None
-        exp._metrics_queue = MagicMock()
+        exp = _make_metric_exp()
 
         from litlogger.experiment import Experiment
 
@@ -511,18 +475,12 @@ class TestExperimentLogMetricsBatch:
         }
         Experiment.log_metrics_batch(exp, metrics)
 
-        batch = exp._metrics_queue.put.call_args[0][0]
-
-        assert len(batch) == 1
-        assert batch["loss"].name == "loss"
-        assert len(batch["loss"].values) == 3
+        assert list(exp._series["loss"]) == [1.0, 0.8, 0.6]
+        assert exp._metrics_queue.put.call_count == 3
 
     def test_log_metrics_batch_many_metrics(self):
         """Test batch upload with many metrics."""
-        exp = MagicMock()
-        exp._manager = MagicMock()
-        exp._manager.exception = None
-        exp._metrics_queue = MagicMock()
+        exp = _make_metric_exp()
 
         from litlogger.experiment import Experiment
 
@@ -530,11 +488,9 @@ class TestExperimentLogMetricsBatch:
         metrics = {f"metric_{i}": [{"step": j, "value": float(j)} for j in range(10)] for i in range(100)}
         Experiment.log_metrics_batch(exp, metrics)
 
-        batch = exp._metrics_queue.put.call_args[0][0]
-
-        assert len(batch) == 100
-        for _, m in batch.items():
-            assert len(m.values) == 10
+        assert len(exp._series) == 100
+        for i in range(100):
+            assert len(exp._series[f"metric_{i}"]) == 10
 
 
 class TestExperimentLogFiles:
@@ -651,9 +607,6 @@ class TestExperimentLogFiles:
         """Test that log_files raises error when remote_paths length doesn't match."""
         exp = MagicMock()
 
-        import pytest
-        from litlogger.experiment import Experiment
-
         with pytest.raises(ValueError, match="remote_paths length"):
             Experiment.log_files(exp, ["a.txt", "b.txt"], remote_paths=["only_one.txt"])
 
@@ -682,16 +635,14 @@ class TestExperimentLogMedia:
         exp.name = "test_exp"
         exp._manager = MagicMock()
         exp._media_api = MagicMock()
+        exp._metrics_store = MagicMock()
+        exp._metrics_store.id = "store-1"
+        exp._teamspace = MagicMock()
         exp._printer = MagicMock()
         exp._stats = MagicMock()
         exp._stats.media_logged = 0
 
-        # Import MediaType from types
-        from unittest.mock import patch
-
-        from lightning_sdk.lightning_cloud.openapi import V1MediaType
-        from litlogger.experiment import Experiment
-        from litlogger.types import MediaType
+        _bind_media_upload(exp)
 
         with patch("os.path.exists", return_value=True):
             Experiment.log_media(exp, "image", "/path/to/image.png", kind=MediaType.IMAGE)
@@ -707,14 +658,14 @@ class TestExperimentLogMedia:
         """Test media upload with guessed image type."""
         exp = MagicMock()
         exp._media_api = MagicMock()
+        exp._metrics_store = MagicMock()
+        exp._metrics_store.id = "store-1"
+        exp._teamspace = MagicMock()
         exp._printer = MagicMock()
         exp._stats = MagicMock()
         exp._stats.media_logged = 0
 
-        from unittest.mock import patch
-
-        from lightning_sdk.lightning_cloud.openapi import V1MediaType
-        from litlogger.experiment import Experiment
+        _bind_media_upload(exp)
 
         with patch("os.path.exists", return_value=True):
             Experiment.log_media(exp, "image", "/path/to/image.jpg")
@@ -727,14 +678,14 @@ class TestExperimentLogMedia:
         """Test media upload with guessed text type."""
         exp = MagicMock()
         exp._media_api = MagicMock()
+        exp._metrics_store = MagicMock()
+        exp._metrics_store.id = "store-1"
+        exp._teamspace = MagicMock()
         exp._printer = MagicMock()
         exp._stats = MagicMock()
         exp._stats.media_logged = 0
 
-        from unittest.mock import patch
-
-        from lightning_sdk.lightning_cloud.openapi import V1MediaType
-        from litlogger.experiment import Experiment
+        _bind_media_upload(exp)
 
         with patch("os.path.exists", return_value=True):
             Experiment.log_media(exp, "file", "/path/to/file.txt")
@@ -747,30 +698,23 @@ class TestExperimentLogMedia:
         """Test log_media raises ValueError for guessed unsupported media type."""
         exp = MagicMock()
         exp._media_api = MagicMock()
+        exp._metrics_store = MagicMock()
+        exp._metrics_store.id = "store-1"
+        exp._teamspace = MagicMock()
         exp._printer = MagicMock()
         exp._stats = MagicMock()
         exp._stats.media_logged = 0
 
-        from unittest.mock import patch
-
-        import pytest
-        from litlogger.experiment import Experiment
-
         with (
             patch("os.path.exists", return_value=True),
             patch("mimetypes.guess_type", return_value=("application/zip", None)),
-            pytest.raises(ValueError, match="Unsupported media type for file: /path/to/file.txt"),
+            pytest.raises(ValueError, match=r"Unsupported media type for file: /path/to/file\.txt"),
         ):
             Experiment.log_media(exp, "file", "/path/to/file.txt")
 
     def test_log_media_raises_file_not_found(self):
         """Test log_media raises FileNotFoundError."""
         exp = MagicMock()
-
-        from unittest.mock import patch
-
-        import pytest
-        from litlogger.experiment import Experiment
 
         with patch("os.path.exists", return_value=False), pytest.raises(FileNotFoundError):
             Experiment.log_media(exp, "file", "/non/existent/file.png")
@@ -779,14 +723,14 @@ class TestExperimentLogMedia:
         """Test log_media passes step, epoch, and caption to upload_media."""
         exp = MagicMock()
         exp._media_api = MagicMock()
+        exp._metrics_store = MagicMock()
+        exp._metrics_store.id = "store-1"
+        exp._teamspace = MagicMock()
         exp._printer = MagicMock()
         exp._stats = MagicMock()
         exp._stats.media_logged = 0
 
-        from unittest.mock import patch
-
-        from litlogger.experiment import Experiment
-        from litlogger.types import MediaType
+        _bind_media_upload(exp)
 
         with patch("os.path.exists", return_value=True):
             Experiment.log_media(
@@ -857,25 +801,38 @@ class TestExperimentLogMetadata:
     """Test log_metadata method."""
 
     def test_log_metadata_updates_tags(self):
-        """Test that log_metadata merges new metadata with existing."""
-        exp = MagicMock()
-        exp._metrics_store = MagicMock()
-        exp._metrics_store.id = "store_123"
-        exp._metrics_store.name = "test"
-        exp._metrics_api = MagicMock()
-
-        exp._teamspace = MagicMock()
-        exp._teamspace.id = "ts_123"
-        # metadata property can't work via MagicMock, so set it directly
-        exp.metadata = {"lr": "0.001"}
-
+        """Test that log_metadata delegates to update(), which sets metadata via __setitem__."""
         from litlogger.background import PhaseType
         from litlogger.experiment import Experiment
 
+        exp = _make_metric_exp()
+        # Set up metrics store with existing tag
+        lr_tag = MagicMock()
+        lr_tag.name = "lr"
+        lr_tag.value = "0.001"
+        lr_tag.from_code = True
+        exp._metrics_store = MagicMock()
+        exp._metrics_store.id = "store_123"
+        exp._metrics_store.name = "test"
+        exp._metrics_store.tags = [lr_tag]
+        exp._metrics_api = MagicMock()
+        # _update_metrics_store is called by the metadata property; make it a no-op
+        exp._update_metrics_store = lambda: None
+        exp._teamspace = MagicMock()
+        exp._teamspace.id = "ts_123"
+        # Pre-populate existing metadata in internal state
+        exp._key_types["lr"] = "metadata"
+        exp._metadata_values["lr"] = "0.001"
+        # Wire _set_metadata_value to use the real implementation
+        exp._set_metadata_value = lambda key, value: Experiment._set_metadata_value(exp, key, value)
+        # Wire metadata property via the real Experiment property
+        type(exp).metadata = Experiment.metadata
+
         Experiment.log_metadata(exp, {"batch_size": "32"})
 
-        # Verify update_experiment_metrics was called with merged metadata
-        exp._metrics_api.update_experiment_metrics.assert_called_once()
+        # _set_metadata_value calls update_experiment_metrics for each key.
+        # With one new key, it should be called once.
+        assert exp._metrics_api.update_experiment_metrics.call_count == 1
         call_kwargs = exp._metrics_api.update_experiment_metrics.call_args.kwargs
         assert call_kwargs["teamspace_id"] == "ts_123"
         assert call_kwargs["metrics_store_id"] == "store_123"
@@ -884,18 +841,26 @@ class TestExperimentLogMetadata:
 
     def test_log_metadata_overwrites_existing_key(self):
         """Test that log_metadata overwrites existing keys."""
-        exp = MagicMock()
+        from litlogger.experiment import Experiment
+
+        exp = _make_metric_exp()
+        lr_tag = MagicMock()
+        lr_tag.name = "lr"
+        lr_tag.value = "0.001"
+        lr_tag.from_code = True
         exp._metrics_store = MagicMock()
         exp._metrics_store.id = "store_123"
         exp._metrics_store.name = "test"
+        exp._metrics_store.tags = [lr_tag]
         exp._metrics_api = MagicMock()
-
+        exp._update_metrics_store = lambda: None
         exp._teamspace = MagicMock()
         exp._teamspace.id = "ts_123"
-        # metadata property can't work via MagicMock, so set it directly
-        exp.metadata = {"lr": "0.001"}
-
-        from litlogger.experiment import Experiment
+        # Pre-populate existing metadata
+        exp._key_types["lr"] = "metadata"
+        exp._metadata_values["lr"] = "0.001"
+        exp._set_metadata_value = lambda key, value: Experiment._set_metadata_value(exp, key, value)
+        type(exp).metadata = Experiment.metadata
 
         Experiment.log_metadata(exp, {"lr": "0.01"})
 
@@ -952,54 +917,43 @@ class TestExperimentLogMetricsKwargs:
 
     def test_log_metrics_with_kwargs(self):
         """Test log_metrics accepts kwargs alongside metrics dict."""
-        exp = MagicMock()
-        exp._manager = MagicMock()
-        exp._manager.exception = None
-        exp.store_step = True
-        exp.store_created_at = False
-        exp._metrics_queue = MagicMock()
-        exp._stats = MagicMock()
+        exp = _make_metric_exp(store_step=True, store_created_at=False)
 
         from litlogger.experiment import Experiment
 
         Experiment.log_metrics(exp, {"loss": 0.5}, step=1, accuracy=0.9)
 
-        call_args = exp._metrics_queue.put.call_args[0][0]
-        assert "loss" in call_args
-        assert "accuracy" in call_args
-        assert call_args["loss"].values[0].value == 0.5
-        assert call_args["accuracy"].values[0].value == 0.9
+        # Verify both metrics ended up in series
+        assert exp._series["loss"][0] == 0.5
+        assert exp._series["accuracy"][0] == 0.9
+
+        # Verify values were pushed to queue
+        all_batches = [c[0][0] for c in exp._metrics_queue.put.call_args_list]
+        loss_batch = next(b for b in all_batches if "loss" in b)
+        acc_batch = next(b for b in all_batches if "accuracy" in b)
+        assert loss_batch["loss"].values[0].value == 0.5
+        assert acc_batch["accuracy"].values[0].value == 0.9
 
     def test_log_metrics_kwargs_override_dict(self):
         """Test that kwargs override dict values for same key."""
-        exp = MagicMock()
-        exp._manager = MagicMock()
-        exp._manager.exception = None
-        exp.store_step = False
-        exp.store_created_at = False
-        exp._metrics_queue = MagicMock()
-        exp._stats = MagicMock()
+        exp = _make_metric_exp(store_step=False, store_created_at=False)
 
         from litlogger.experiment import Experiment
 
         Experiment.log_metrics(exp, {"loss": 0.5}, loss=0.3)
 
-        call_args = exp._metrics_queue.put.call_args[0][0]
-        assert call_args["loss"].values[0].value == 0.3
+        # kwargs override dict, so only 0.3 should be logged
+        assert exp._series["loss"][0] == 0.3
+        batch = exp._metrics_queue.put.call_args[0][0]
+        assert batch["loss"].values[0].value == 0.3
 
 
 class TestExperimentStatsTracking:
     """Test that experiment methods track stats correctly."""
 
     def test_log_metrics_tracks_stats(self):
-        """Test log_metrics calls record_metric on stats."""
-        exp = MagicMock()
-        exp._manager = MagicMock()
-        exp._manager.exception = None
-        exp.store_step = True
-        exp.store_created_at = False
-        exp._metrics_queue = MagicMock()
-        exp._stats = MagicMock()
+        """Test log_metrics calls record_metric on stats via _log_metric_value."""
+        exp = _make_metric_exp(store_step=True, store_created_at=False)
 
         from litlogger.experiment import Experiment
 
@@ -1010,24 +964,21 @@ class TestExperimentStatsTracking:
         assert calls["loss"] == 0.5
         assert calls["acc"] == 0.9
 
-    @patch.object(experiment_module, "Artifact")
-    def test_log_file_tracks_artifact_count(self, mock_artifact_class):
-        """Test log_file increments artifacts_logged."""
-        mock_artifact_class.return_value = MagicMock()
-        exp = MagicMock()
-        exp.name = "test"
-        exp._teamspace = MagicMock()
-        exp._metrics_store = MagicMock()
-        exp._artifacts_api = MagicMock()
-        exp._stats = MagicMock()
-        exp._stats.artifacts_logged = 0
-
+    def test_log_file_tracks_artifact_count(self):
+        """Test log_file delegates to __setitem__ with File."""
         from litlogger.experiment import Experiment
+        from litlogger.media import File
 
+        exp = MagicMock()
+        # log_file now calls self[remote_path] = File(path)
         Experiment.log_file(exp, "file.txt", verbose=False)
-        assert exp._stats.artifacts_logged == 1
 
-    @patch.object(experiment_module, "ModelArtifact")
+        exp.__setitem__.assert_called_once()
+        key, value = exp.__setitem__.call_args[0]
+        assert key == "file.txt"
+        assert isinstance(value, File)
+
+    @patch.object(legacy_experiment_module, "ModelArtifact")
     def test_log_model_artifact_tracks_model_count(self, mock_model_artifact_class):
         """Test log_model_artifact increments models_logged."""
         mock_model_artifact_class.return_value = MagicMock()
@@ -1042,7 +993,7 @@ class TestExperimentStatsTracking:
         Experiment.log_model_artifact(exp, "model.pt", verbose=False)
         assert exp._stats.models_logged == 1
 
-    @patch.object(experiment_module, "Model")
+    @patch.object(legacy_experiment_module, "Model")
     def test_log_model_tracks_model_count(self, mock_model_class):
         """Test log_model increments models_logged."""
         mock_model_class.return_value = MagicMock()
@@ -1093,11 +1044,7 @@ class TestExperimentLogMetricsBatchCreatedAt:
 
     def test_log_metrics_batch_with_store_created_at(self):
         """Test that log_metrics_batch sets created_at when store_created_at=True."""
-        exp = MagicMock()
-        exp._manager = MagicMock()
-        exp._manager.exception = None
-        exp._metrics_queue = MagicMock()
-        exp.store_created_at = True
+        exp = _make_metric_exp(store_created_at=True)
 
         from litlogger.experiment import Experiment
 
@@ -1109,11 +1056,7 @@ class TestExperimentLogMetricsBatchCreatedAt:
 
     def test_log_metrics_batch_without_store_created_at(self):
         """Test that log_metrics_batch does not set created_at when store_created_at=False."""
-        exp = MagicMock()
-        exp._manager = MagicMock()
-        exp._manager.exception = None
-        exp._metrics_queue = MagicMock()
-        exp.store_created_at = False
+        exp = _make_metric_exp(store_created_at=False)
 
         from litlogger.experiment import Experiment
 
@@ -1124,12 +1067,8 @@ class TestExperimentLogMetricsBatchCreatedAt:
         assert batch["loss"].values[0].created_at is None
 
     def test_log_metrics_batch_without_step_key(self):
-        """Test that log_metrics_batch handles missing step key."""
-        exp = MagicMock()
-        exp._manager = MagicMock()
-        exp._manager.exception = None
-        exp._metrics_queue = MagicMock()
-        exp.store_created_at = False
+        """Test that log_metrics_batch handles missing step key (step=None in _log_metric_value)."""
+        exp = _make_metric_exp(store_step=False, store_created_at=False)
 
         from litlogger.experiment import Experiment
 

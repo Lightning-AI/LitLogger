@@ -56,7 +56,33 @@ Experiment
 
 .. autoclass:: Experiment
     :members:
-    :show-inheritance:
+    :inherited-members:
+
+----
+
+Media
+=====
+
+.. currentmodule:: litlogger.media
+
+.. autoclass:: File
+    :members:
+
+.. autoclass:: Image
+    :members:
+
+.. autoclass:: Text
+    :members:
+
+----
+
+Series
+======
+
+.. currentmodule:: litlogger.series
+
+.. autoclass:: Series
+    :members:
 
 ----
 

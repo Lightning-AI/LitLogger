@@ -32,6 +32,7 @@ class TestArtifactsApi:
     def test_upload_file_success(self):
         """Test successful file upload."""
         mock_teamspace = MagicMock()
+        mock_teamspace.default_cloud_account = "acc-default"
         mock_client = MagicMock()
         api = ArtifactsApi(client=mock_client)
 
@@ -51,6 +52,7 @@ class TestArtifactsApi:
                 file_path=temp_file,
                 remote_path="experiments/test/file.txt",
                 progress_bar=False,
+                cloud_account="acc-default",
             )
         finally:
             os.unlink(temp_file)
@@ -70,6 +72,7 @@ class TestArtifactsApi:
     def test_download_file_success(self):
         """Test successful file download."""
         mock_teamspace = MagicMock()
+        mock_teamspace.default_cloud_account = "acc-default"
         api = ArtifactsApi()
 
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -85,6 +88,7 @@ class TestArtifactsApi:
             mock_teamspace.download_file.assert_called_once_with(
                 remote_path="experiments/test/file.txt",
                 file_path=local_path,
+                cloud_account="acc-default",
             )
 
     def test_download_file_creates_directory(self):
@@ -111,6 +115,7 @@ class TestArtifactsApi:
         mock_teamspace.id = "ts-123"
         mock_metrics_store = MagicMock()
         mock_metrics_store.id = "ms-456"
+        mock_metrics_store.cluster_id = "acc-456"
         mock_client = MagicMock()
 
         api = ArtifactsApi(client=mock_client)
@@ -133,6 +138,7 @@ class TestArtifactsApi:
                 file_path=temp_file,
                 remote_path="experiments/my-experiment/data.txt",
                 progress_bar=False,
+                cloud_account="acc-456",
             )
 
             # Check that artifact was registered with metrics stream
@@ -146,6 +152,7 @@ class TestArtifactsApi:
     def test_download_experiment_file_artifact(self):
         """Test experiment-specific file download."""
         mock_teamspace = MagicMock()
+        mock_teamspace.default_cloud_account = "acc-default"
         api = ArtifactsApi()
 
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -162,6 +169,7 @@ class TestArtifactsApi:
             mock_teamspace.download_file.assert_called_once()
             call_args = mock_teamspace.download_file.call_args
             assert "experiments/my-experiment/result.txt" in call_args[1]["remote_path"]
+            assert call_args[1]["cloud_account"] == "acc-default"
 
     def test_upload_metrics_binary(self):
         """Test uploading metrics binary tar.gz file."""
@@ -292,6 +300,7 @@ class TestArtifact:
                 teamspace=mock_teamspace,
                 remote_path=artifact.remote_path,
                 local_path=local_path,
+                cloud_account=None,
             )
 
 

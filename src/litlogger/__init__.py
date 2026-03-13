@@ -27,6 +27,7 @@ from litlogger.experiment import Experiment
 
 # Import SDK functions
 from litlogger.init import finish, get_metadata, init
+from litlogger.media import File, Image, Text
 
 # Global variables
 experiment: Experiment | None = None
@@ -43,18 +44,13 @@ finalize = pre_init_callable("litlogger.finalize", Experiment.finalize)
 
 __all__ = [
     "Experiment",
+    "File",
+    "Image",
+    "Text",
     "init",
-    "finish",
     "experiment",
-    "log",
-    "log_metrics",
-    "log_file",
-    "get_file",
-    "log_model",
-    "get_model",
-    "log_model_artifact",
-    "get_model_artifact",
     "finalize",
+    "finish",
     "get_metadata",
     "log_metadata",
 ]

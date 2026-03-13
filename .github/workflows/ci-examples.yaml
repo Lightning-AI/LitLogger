@@ -11,15 +11,60 @@ on:
 
 jobs:
   examples:
+    name: ${{ matrix.name }} (${{ matrix.auth_mode }})
     runs-on: ${{ matrix.os }}
     if: github.event.pull_request.draft == false
     strategy:
       fail-fast: false
       matrix:
-        os: ["ubuntu-latest"]
-        auth_mode: ["guest", "user"]
-        example: ["standalone_usage.py", "lightning_autoencoder.py"]
-        python-version: ["3.10"]
+        include:
+          - os: "ubuntu-latest"
+            python-version: "3.10"
+            auth_mode: "guest"
+            name: "standalone_usage.py"
+            extra_packages: ""
+            run: "uv run python examples/standalone_usage.py"
+          - os: "ubuntu-latest"
+            python-version: "3.10"
+            auth_mode: "user"
+            name: "standalone_usage.py"
+            extra_packages: ""
+            run: "uv run python examples/standalone_usage.py"
+          - os: "ubuntu-latest"
+            python-version: "3.10"
+            auth_mode: "guest"
+            name: "lightning_autoencoder.py"
+            extra_packages: ""
+            run: "uv run python examples/lightning_autoencoder.py"
+          - os: "ubuntu-latest"
+            python-version: "3.10"
+            auth_mode: "user"
+            name: "lightning_autoencoder.py"
+            extra_packages: ""
+            run: "uv run python examples/lightning_autoencoder.py"
+          - os: "ubuntu-latest"
+            python-version: "3.10"
+            auth_mode: "guest"
+            name: "complete_workflow"
+            extra_packages: ""
+            run: |
+              uv run python examples/complete_workflow/train.py
+              uv run python examples/complete_workflow/fetch.py
+          - os: "ubuntu-latest"
+            python-version: "3.10"
+            auth_mode: "user"
+            name: "complete_workflow"
+            extra_packages: ""
+            run: |
+              uv run python examples/complete_workflow/train.py
+              uv run python examples/complete_workflow/fetch.py
+          - os: "ubuntu-latest"
+            python-version: "3.10"
+            auth_mode: "guest"
+            name: "litserve_inference.py"
+            extra_packages: "litgpt litserve"
+            run: |
+              uv run python -c "import runpy; runpy.run_path('examples/litserve_inference.py', run_name='litserve_example_smoke')"
 
     timeout-minutes: 15
     env:
@@ -40,6 +85,10 @@ jobs:
         uv sync --group tests
         uv pip list
 
+    - name: Install example-specific dependencies
+      if: matrix.extra_packages != ''
+      run: uv pip install ${{ matrix.extra_packages }}
+
     - name: Enable Guest Mode
       if: matrix.auth_mode == 'guest'
       shell: bash
@@ -53,8 +102,8 @@ jobs:
         echo "LIGHTNING_API_KEY=${{ secrets.LIGHTNING_STAGING_API_KEY }}" >> $GITHUB_ENV
 
     - name: Run example
-      run: |
-        uv run python examples/${{ matrix.example }}
+      shell: bash
+      run: ${{ matrix.run }}
 
   guardian-examples:
     runs-on: ubuntu-latest

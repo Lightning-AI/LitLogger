@@ -32,6 +32,15 @@ class ArtifactsApi:
         """
         self.client = client or LitRestClient(max_retries=5)
 
+    @staticmethod
+    def _resolve_cloud_account(teamspace: Teamspace, cloud_account: str | None = None) -> str | None:
+        """Resolve the cloud account to use for teamspace file operations."""
+        if cloud_account is not None:
+            return cloud_account
+
+        default_cloud_account = getattr(teamspace, "default_cloud_account", None)
+        return default_cloud_account if isinstance(default_cloud_account, str) else None
+
     def upload_experiment_file_artifact(
         self,
         teamspace: Teamspace,
@@ -57,8 +66,14 @@ class ArtifactsApi:
 
         # Upload to teamspace drive under experiments folder
         full_remote_path = f"experiments/{experiment_name}/{remote_path}"
+        cloud_account = self._resolve_cloud_account(teamspace, getattr(metrics_store, "cluster_id", None))
 
-        teamspace.upload_file(file_path=file_path, remote_path=full_remote_path, progress_bar=False)
+        teamspace.upload_file(
+            file_path=file_path,
+            remote_path=full_remote_path,
+            progress_bar=False,
+            cloud_account=cloud_account,
+        )
 
         # Register the artifact with the metrics stream
         self.client.lit_logger_service_create_logger_artifact(
@@ -73,6 +88,7 @@ class ArtifactsApi:
         experiment_name: str,
         filename: str,
         local_path: str | None = None,
+        cloud_account: str | None = None,
     ) -> str:
         """Download a file artifact from the teamspace drive.
 
@@ -82,6 +98,8 @@ class ArtifactsApi:
             filename: Name of the file to download.
             local_path: Optional local path where the file should be saved.
                        If None, saves to current directory with the same filename.
+            cloud_account: Optional cloud account to use for the download.
+                If None, falls back to the teamspace default cloud account.
 
         Raises:
             FileNotFoundError: If the remote file doesn't exist.
@@ -104,7 +122,11 @@ class ArtifactsApi:
             os.makedirs(local_dir, exist_ok=True)
 
         # Download from teamspace drive
-        teamspace.download_file(remote_path=remote_path, file_path=local_path)
+        teamspace.download_file(
+            remote_path=remote_path,
+            file_path=local_path,
+            cloud_account=self._resolve_cloud_account(teamspace, cloud_account),
+        )
 
         return local_path
 
@@ -113,6 +135,7 @@ class ArtifactsApi:
         teamspace: Teamspace,
         local_path: str,
         remote_path: str,
+        cloud_account: str | None = None,
     ) -> str:
         """Upload a file to the teamspace drive (generic, not experiment-specific).
 
@@ -120,6 +143,8 @@ class ArtifactsApi:
             teamspace: Teamspace object where the file will be uploaded.
             local_path: Local path to the file to upload.
             remote_path: Remote path in the teamspace drive.
+            cloud_account: Optional cloud account to use for the upload.
+                If None, falls back to the teamspace default cloud account.
 
         Returns:
             str: The remote path where the file was uploaded.
@@ -131,7 +156,12 @@ class ArtifactsApi:
             raise FileNotFoundError(f"File not found: {local_path}")
 
         # Upload to teamspace drive
-        teamspace.upload_file(file_path=local_path, remote_path=remote_path, progress_bar=False)
+        teamspace.upload_file(
+            file_path=local_path,
+            remote_path=remote_path,
+            progress_bar=False,
+            cloud_account=self._resolve_cloud_account(teamspace, cloud_account),
+        )
 
         return remote_path
 
@@ -140,6 +170,7 @@ class ArtifactsApi:
         teamspace: Teamspace,
         remote_path: str,
         local_path: str,
+        cloud_account: str | None = None,
     ) -> str:
         """Download a file from the teamspace drive (generic, not experiment-specific).
 
@@ -147,6 +178,8 @@ class ArtifactsApi:
             teamspace: Teamspace object where the file is stored.
             remote_path: Remote path in the teamspace drive.
             local_path: Local path where the file should be saved.
+            cloud_account: Optional cloud account to use for the download.
+                If None, falls back to the teamspace default cloud account.
 
         Returns:
             str: The local path where the file was saved.
@@ -160,7 +193,11 @@ class ArtifactsApi:
             os.makedirs(local_dir, exist_ok=True)
 
         # Download from teamspace drive
-        teamspace.download_file(remote_path=remote_path, file_path=local_path)
+        teamspace.download_file(
+            remote_path=remote_path,
+            file_path=local_path,
+            cloud_account=self._resolve_cloud_account(teamspace, cloud_account),
+        )
 
         return local_path
 

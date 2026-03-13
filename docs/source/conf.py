@@ -4,6 +4,7 @@
 # http://www.sphinx-doc.org/en/master/config
 
 import os
+import socket
 import sys
 
 _PATH_HERE = os.path.abspath(os.path.dirname(__file__))
@@ -73,12 +74,24 @@ htmlhelp_basename = project + "-doc"
 
 # -- Options for intersphinx extension ---------------------------------------
 
-intersphinx_mapping = {
-    "python": ("https://docs.python.org/3", None),
-    "torch": ("https://pytorch.org/docs/stable/", None),
-    "lightning": ("https://lightning.ai/docs/pytorch/stable/", None),
-    "lightning.fabric": ("https://lightning.ai/docs/fabric/stable/", None),
-}
+
+def _can_resolve_host(hostname: str) -> bool:
+    try:
+        socket.getaddrinfo(hostname, 443)
+    except OSError:
+        return False
+    return True
+
+
+if all(_can_resolve_host(host) for host in ("docs.python.org", "pytorch.org", "lightning.ai")):
+    intersphinx_mapping = {
+        "python": ("https://docs.python.org/3", None),
+        "torch": ("https://pytorch.org/docs/stable/", None),
+        "lightning": ("https://lightning.ai/docs/pytorch/stable/", None),
+        "lightning.fabric": ("https://lightning.ai/docs/fabric/stable/", None),
+    }
+else:
+    intersphinx_mapping = {}
 nitpicky = True
 
 nitpick_ignore = [
@@ -94,6 +107,11 @@ nitpick_ignore = [
     ("py:class", "lightning_sdk.teamspace.Teamspace"),
     # Internal type aliases
     ("py:class", "_PATH"),
+    ("py:data", "typing.Any"),
+    ("py:data", "typing.Optional"),
+    ("py:class", "pathlib.Path"),
+    ("py:class", "enum.Enum"),
+    ("py:class", "litlogger.experiment_legacy.LegacyExperiment"),
     # typing.Union — inherited from LitLogger parent class, role mismatch (py:data vs py:class)
     ("py:data", "typing.Union"),
 ]

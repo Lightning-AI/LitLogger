@@ -144,6 +144,7 @@ ignore = [
     "ANN101", # Missing type annotation for `self` in method
     "UP006",  # Use list instead of List
     "UP035",  # typing.List is deprecated
+    "RUF015",  # Prefer `next(iter(iterable))` over single element slice
 ]
 unfixable = ["F401"]
 

@@ -100,9 +100,15 @@ jobs:
         echo "linkcheck: ${{ needs.docs-linkcheck.result }}"
         echo "doctest: ${{ needs.docs-doctest.result }}"
     - name: failing...
-      if: contains(fromJSON('["failure"]'), needs.docs-build.result)
+      if: |
+        needs.docs-build.result == 'failure' ||
+        needs.docs-linkcheck.result == 'failure' ||
+        needs.docs-doctest.result == 'failure'
       run: exit 1
     - name: cancelled or skipped...
-      if: contains(fromJSON('["cancelled", "skipped"]'), needs.docs-build.result)
+      if: |
+        contains(fromJSON('["cancelled", "skipped"]'), needs.docs-build.result) ||
+        contains(fromJSON('["cancelled", "skipped"]'), needs.docs-linkcheck.result) ||
+        contains(fromJSON('["cancelled", "skipped"]'), needs.docs-doctest.result)
       timeout-minutes: 1
       run: sleep 90

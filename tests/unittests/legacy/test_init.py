@@ -13,6 +13,9 @@ import litlogger
 import pytest
 from litlogger.init import finish, init
 
+# Suppress deprecation warnings from deprecated functions under test
+pytestmark = pytest.mark.filterwarnings("ignore::DeprecationWarning")
+
 # Import the module from sys.modules to avoid the shadowing issue
 # (litlogger.init function shadows the module)
 init_module = sys.modules["litlogger.init"]

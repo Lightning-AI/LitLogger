@@ -2,189 +2,116 @@
 Experiment Management
 ######################
 
-Lightning AI comes with a free, bundled experiment manager called LitLogger.
-Experiment managers let you track, compare and share ML model training runs.
-It keeps them organized and reproducible, providing clear visibility into model
-performance.
+LitLogger is the experiment tracker built into Lightning AI. It supports
+standalone scripts, the new dict-style
+:class:`~litlogger.experiment.Experiment` API, Lightning/Fabric integration,
+files, media, models, and retrieval workflows.
 
 .. image:: https://storage.googleapis.com/lightning-avatars/litpages/01jrbsmwcrgj50pbybv827wc5d/9ee96e2e-58bd-4031-991f-1cff59009d19.png
    :alt: LitLogger experiment dashboard
 
-----
+These docs are organized as a narrative:
 
-Why LitLogger
-=============
+- tutorials to get from zero to a working flow
+- guides for specific workflows and API patterns
+- runnable examples from the repository
+- an API reference for the public surface
 
-Without reliable experiment management, teams lose history, cannot compare
-experiments, and struggle to reproduce or audit their work. LitLogger solves
-this with a built-in, persistent experiment manager that automatically
-organizes every run -- centralizing metrics, metadata, and artifacts so
-experiments can be compared, restored, and shared easily. The result is
-clarity of research results, faster iteration, and reproducible model
-development without having to pay for a standalone platform.
+Start Here
+==========
 
-Key features:
+Use this path if you are new to LitLogger:
 
-- Generous free tier
-- PyTorch optimized
-- Share with anyone
-- Granular permissions (RBAC)
-- Granular project management
+1. :doc:`install`
+2. :doc:`tutorials/quickstart`
+3. :doc:`tutorials/file_media_model`
+4. :doc:`tutorials/lightning`
+5. :doc:`tutorials/complete_workflow`
 
-----
-
-Quick Start
-===========
-
-Install
--------
-
-.. code-block:: bash
-
-   pip install litlogger
-
-See more details at :doc:`install`
-
-Hello World
------------
-
-Enable logging by adding this to ANY Python code:
-
-.. code-block:: python
-
-   import litlogger
-
-   litlogger.init()
-
-   for i in range(10):
-       litlogger.log({"my_metric": i})
-
-   litlogger.finalize()
-
-----
-
-APIs
-====
-
-LitLogger provides two APIs: a **standalone API** for any Python code, and an
-**Experiment** class for more control.
-
-Standalone API
---------------
-
-The standalone API uses :func:`litlogger.init() <litlogger.init.init>` and
-module-level functions. This is the recommended approach for most use cases.
-
-.. code-block:: python
-
-   import litlogger
-
-   litlogger.init(
-       name="my-experiment",
-       metadata={"model": "ResNet50", "lr": "0.001"},
-   )
-
-   for epoch in range(10):
-       litlogger.log_metrics({"loss": 1.0 / (epoch + 1)}, step=epoch)
-
-   litlogger.finalize()
-
-See :doc:`guide/standalone` for the full guide.
-
-Experiment
-----------
-
-:func:`litlogger.init() <litlogger.init.init>` returns an
-:class:`~litlogger.experiment.Experiment` instance. You can also create one
-directly for full control over the experiment lifecycle.
-
-.. code-block:: python
-
-   from litlogger import Experiment
-
-   exp = Experiment(
-       name="my-experiment",
-       metadata={"model": "ResNet50", "lr": "0.001"},
-   )
-
-   for epoch in range(10):
-       exp.log_metrics({"loss": 1.0 / (epoch + 1)}, step=epoch)
-
-   exp.log_file("config.yaml")
-   exp.log_model(model)
-   exp.finalize()
-
-See the :doc:`api` reference for all available methods.
-
-----
-
-PyTorch Lightning Integration
-=============================
-
-The :class:`~litlogger.logger.LightningLogger` class integrates directly with
-the PyTorch Lightning Trainer, so every ``self.log()`` call is automatically
-forwarded to Lightning.ai.
-
-.. code-block:: python
-
-   from lightning import Trainer
-   from litlogger import LightningLogger
-
-   logger = LightningLogger(
-       name="my-experiment",
-       metadata={"model": "ResNet50"},
-   )
-
-   trainer = Trainer(max_epochs=10, logger=logger)
-   trainer.fit(model, datamodule)
-
-See :doc:`guide/lightning` for the full guide.
-
-----
-
-View and Share Runs
+Supported Workflows
 ===================
 
-All experiments are collected in the "Experiments" tab in your Teamspace.
+LitLogger currently supports these main workflows:
 
-.. image:: https://storage.googleapis.com/lightning-avatars/litpages/01j07an7zgc2ewmnnxj8gngg72/889a6cdd-c27f-499e-8d4b-6856e575e97a.png
-   :alt: Experiments tab in your Teamspace
+- standalone logging with the dict-style ``Experiment`` API
+- legacy module-level logging helpers for existing scripts
+- Lightning and Fabric integration through :class:`~litlogger.logger.LightningLogger`
+- file, image, text, and model logging through dedicated wrappers
+- experiment resume and later retrieval by name
+- inference logging from a LitServe endpoint
 
-Open an experiment detail to share with everyone or specific users.
+Quick Example
+=============
 
-.. image:: https://storage.googleapis.com/lightning-avatars/litpages/01j07an7zgc2ewmnnxj8gngg72/19d278b1-32a4-43ac-9a03-200aa0687e69.png
-   :alt: Sharing option for experiments
+.. code-block:: python
 
-----
+   import litlogger
+   from litlogger import File, Text
 
-.. raw:: html
+   experiment = litlogger.init(name="quickstart")
 
-    <div style="display:none">
+   experiment["model"] = "resnet50"
+   experiment["notes"] = Text("first run")
+
+   for step in range(10):
+       experiment["train/loss"].append(1.0 / (step + 1), step=step)
+
+   experiment["config"] = File("config.yaml")
+   experiment.finalize()
+
+Documentation Map
+=================
+
+`Tutorials <#tutorials>`_ provide end-to-end, task-oriented walkthroughs.
+
+`Guides <#guides>`_ explain workflows, migration paths, and logging patterns in more depth.
+
+`Examples <#examples>`_ include every runnable example currently shipped in the repository.
+
+The `API reference <#api-reference>`_ documents the public classes, functions, and enums.
+
+Start
+=====
 
 .. toctree::
     :maxdepth: 1
-    :name: start
-    :caption: Home
 
-    self
-    Install <install>
+    install
+
+Tutorials
+=========
 
 .. toctree::
     :maxdepth: 1
-    :caption: Guides
+
+    tutorials/quickstart
+    tutorials/file_media_model
+    tutorials/lightning
+    tutorials/complete_workflow
+    tutorials/litserve
+
+Guides
+======
+
+.. toctree::
+    :maxdepth: 1
 
     guide/standalone
     guide/lightning
     guide/artifacts
     guide/media
+    guide/workflows
     guide/examples
+
+Examples
+========
+
+See :doc:`guide/examples` for the full list of runnable repository examples.
+
+API Reference
+=============
 
 .. toctree::
     :maxdepth: 1
-    :caption: API Reference
 
     api
-
-.. raw:: html
-
-    </div>

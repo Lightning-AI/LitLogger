@@ -99,7 +99,8 @@ class ExperimentStateSupport:
             if not isinstance(media_items, list):
                 media_items = []
             series_entries: dict[str, list[tuple[int, File]]] = {}
-            for media in media_items:
+            direct_media_entries: dict[str, list[tuple[int | None, int, File]]] = {}
+            for position, media in enumerate(media_items):
                 name = media.name or media.storage_path or media.id
                 storage_path = media.storage_path or name
                 wrapped = exp._wrap_media_file(name, media.media_type)
@@ -116,9 +117,24 @@ class ExperimentStateSupport:
                     series_entries.setdefault(key, []).append((index, wrapped))
                     continue
 
-                if name not in exp._key_types:
+                direct_media_entries.setdefault(name, []).append((getattr(media, "step", None), position, wrapped))
+
+            for name, entries in direct_media_entries.items():
+                if name in exp._key_types:
+                    continue
+                if len(entries) == 1 and name not in exp._key_types:
                     exp._key_types[name] = "static_file"
-                    exp._static_files[name] = wrapped
+                    exp._static_files[name] = entries[0][2]
+                    continue
+
+                exp._key_types[name] = "file_series"
+                series_entries.setdefault(name, []).extend(
+                    (
+                        step if isinstance(step, int) else position,
+                        wrapped,
+                    )
+                    for step, position, wrapped in entries
+                )
 
             for key, entries in series_entries.items():
                 series = Series(exp, key)
@@ -260,7 +276,7 @@ class ExperimentIOSupport:
             return
 
         if value._media_type != MediaType.FILE:
-            exp._upload_media_value(key, value, name=f"{key}/{index}", step=step)
+            exp._upload_media_value(key, value, name=key, step=step)
             return
 
         remote_path = f"{key}/{index}"

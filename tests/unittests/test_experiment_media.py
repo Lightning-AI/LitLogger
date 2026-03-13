@@ -375,7 +375,7 @@ class TestFileSeriesBindings:
 
         exp._media_api.upload_media.assert_called_once()
         _, kwargs = exp._media_api.upload_media.call_args
-        assert kwargs["name"] == "logs/2"
+        assert kwargs["name"] == "logs"
         assert kwargs["step"] == 7
         assert kwargs["media_type"] == V1MediaType.TEXT
         assert exp._stats.media_logged == 1
@@ -644,6 +644,50 @@ class TestRebuildStateFiles:
         assert isinstance(exp._series["logs"], Series)
         assert len(exp._series["logs"]) == 2
         assert all(isinstance(item, Text) for item in exp._series["logs"])
+
+    def test_rebuilds_same_name_media_series_with_wrapper(self):
+        media0 = MagicMock()
+        media0.name = "logs"
+        media0.step = 0
+        media0.storage_path = "media/logs-0.txt"
+        media0.cluster_id = "cloud-1"
+        media0.media_type = V1MediaType.TEXT
+        media0.id = "media-0"
+
+        media1 = MagicMock()
+        media1.name = "logs"
+        media1.step = 1
+        media1.storage_path = "media/logs-1.txt"
+        media1.cluster_id = "cloud-1"
+        media1.media_type = V1MediaType.TEXT
+        media1.id = "media-1"
+
+        exp = MagicMock(spec=Experiment)
+        exp._key_types = {}
+        exp._metadata_values = {}
+        exp._static_files = {}
+        exp._series = {}
+        exp._metrics_store = MagicMock()
+        exp._metrics_store.id = "store-1"
+        exp._metrics_store.tags = []
+        exp._metrics_store.artifacts = []
+        exp._metrics_api = MagicMock()
+        exp._metrics_api.get_trackers_from_metrics_store.return_value = []
+        exp._teamspace = MagicMock()
+        exp._teamspace.id = "ts-1"
+        exp._media_api = MagicMock()
+        exp._media_api.client.lit_logger_service_list_lit_logger_media.return_value.media = [media1, media0]
+        exp._wrap_media_file = lambda media_name, media_type: Experiment._wrap_media_file(exp, media_name, media_type)
+        exp._create_media_download_fn = lambda storage_path, cloud_account=None: Experiment._create_media_download_fn(
+            exp, storage_path, cloud_account
+        )
+
+        Experiment._rebuild_state(exp)
+
+        assert exp._key_types["logs"] == "file_series"
+        assert isinstance(exp._series["logs"], Series)
+        assert len(exp._series["logs"]) == 2
+        assert [item.path for item in exp._series["logs"]] == ["logs", "logs"]
 
 
 # ---------------------------------------------------------------------------

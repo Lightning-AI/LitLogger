@@ -3,28 +3,49 @@ Logging Artifacts
 #################
 
 LitLogger can store and retrieve files and model artifacts associated with
-your experiments.
+your experiments. The modern path is the file-like API with
+:class:`~litlogger.media.File` and :class:`~litlogger.media.Model`, while the
+older helper methods remain available for compatibility.
 
+New Dict-Style API
+==================
+
+Use the returned :class:`~litlogger.experiment.Experiment` and assign
+file-like wrappers directly:
+
+.. code-block:: python
+
+   import litlogger
+   from litlogger import File, Model
+
+   experiment = litlogger.init(name="my-experiment")
+   experiment["config"] = File("config.yaml")
+   experiment["checkpoint"] = Model("checkpoint.ckpt")
+
+   experiment["reports"].append(File("report-0.txt"))
+   experiment["checkpoints"].append(Model("checkpoint-1.ckpt", version="step-1"))
+
+   experiment.finalize()
 
 Log and Retrieve Files
 ======================
+
+The legacy helper API is still supported for explicit file upload/download
+workflows:
 
 .. code-block:: python
 
    import litlogger
 
-   # Log files
    litlogger.init(name="my-experiment")
    litlogger.log_file("config.yaml")
    litlogger.log_file("checkpoint.pt", remote_path="checkpoints/best.pt")
    litlogger.finalize()
 
-   # Retrieve files later
    litlogger.init(name="my-experiment")
    litlogger.get_file("/tmp/config.yaml", remote_path="config.yaml")
    litlogger.get_file("/tmp/best.pt", remote_path="checkpoints/best.pt")
    litlogger.finalize()
-
 
 Logging Multiple Files
 ======================
@@ -40,43 +61,41 @@ a list of files in parallel for better throughput:
        remote_paths=["images/0.png", "images/1.png", "images/2.png"],
    )
 
-
 Log and Retrieve Models
 =======================
 
-LitLogger integrates with ``litmodels`` for storing and loading model objects:
+LitLogger integrates with ``litmodels`` for storing and loading model objects.
+The legacy helper API still supports direct model-object logging:
 
 .. code-block:: python
 
    import torch.nn as nn
    import litlogger
 
-   # Log a model
    litlogger.init(name="my-experiment")
    model = nn.Linear(10, 1)
    litlogger.log_model(model)
    litlogger.finalize()
 
-   # Retrieve the model later
    litlogger.init(name="my-experiment")
    loaded_model = litlogger.get_model()
    litlogger.finalize()
 
+Logged models appear in the ``Weights`` tab of Lightning AI rather than the
+experiment's ``Experiments`` tab, because model storage is handled through the
+model registry rather than the artifact list. For background, see the
+`Lightning model registry docs <https://lightning.ai/docs/overview/model-registry>`_.
 
 Logging Model Files
 ===================
 
-If you already have saved model files on disk (weights, checkpoints, or full
-directories), use :meth:`litlogger.log_model_artifact() <litlogger.experiment.Experiment.log_model_artifact>`:
+If you already have saved model files on disk, use
+:meth:`litlogger.log_model_artifact() <litlogger.experiment.Experiment.log_model_artifact>`:
 
 .. code-block:: python
 
    exp = litlogger.init(name="my-experiment")
-
-   # Upload a single checkpoint file
    exp.log_model_artifact("checkpoints/epoch_10.ckpt", version="epoch-10")
-
-   # Upload an entire directory
    exp.log_model_artifact("model_export/", version="export-v2")
 
 Download model artifacts back:
@@ -85,11 +104,9 @@ Download model artifacts back:
 
    exp.get_model_artifact("local_checkpoint.ckpt", version="epoch-10")
 
-
 Automatic Checkpoint Logging
-=============================
+============================
 
-When using :class:`~litlogger.logger.LightningLogger` with
-``log_model=True``, checkpoints saved by Lightning's ``ModelCheckpoint``
-callback are automatically uploaded as model artifacts. See
-:doc:`lightning` for details.
+When using :class:`~litlogger.logger.LightningLogger` with ``log_model=True``,
+checkpoints saved by Lightning's ``ModelCheckpoint`` callback are
+automatically uploaded as model artifacts.

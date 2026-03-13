@@ -3,16 +3,15 @@ Lightning Integration
 #######################
 
 :class:`~litlogger.logger.LightningLogger` plugs directly into the PyTorch
-Lightning ``Trainer`` and Lightning Fabric, streaming metrics and artifacts to
-`lightning.ai <https://lightning.ai>`_.
-
+Lightning ``Trainer`` and Lightning Fabric, streaming metrics, metadata,
+artifacts, media, and models to `lightning.ai <https://lightning.ai>`_.
 
 Using with Trainer
 ==================
 
-Pass a :class:`~litlogger.logger.LightningLogger` as the ``logger`` argument to the Trainer.
-Every ``self.log()`` call inside your LightningModule is automatically
-forwarded to Lightning.ai:
+Pass a :class:`~litlogger.logger.LightningLogger` as the ``logger`` argument to
+the Trainer. Every ``self.log()`` call inside your LightningModule is
+forwarded automatically.
 
 .. code-block:: python
 
@@ -26,13 +25,11 @@ forwarded to Lightning.ai:
 After ``trainer.fit()`` starts, the logger prints a URL where you can view
 live training curves.
 
-
 Logging Hyperparameters
 =======================
 
 Lightning automatically calls ``log_hyperparams`` when your LightningModule
-defines ``self.save_hyperparameters()``. The hyperparameters appear as tags in
-the experiment UI:
+defines ``self.save_hyperparameters()``.
 
 .. code-block:: python
 
@@ -50,12 +47,11 @@ You can also pass metadata directly:
        metadata={"optimizer": "AdamW", "scheduler": "cosine"},
    )
 
-
 Automatic Checkpoint Logging
-=============================
+============================
 
 Set ``log_model=True`` to automatically upload checkpoints to the litmodels
-registry whenever Lightning saves a checkpoint:
+registry whenever Lightning saves a checkpoint.
 
 .. code-block:: python
 
@@ -70,7 +66,6 @@ registry whenever Lightning saves a checkpoint:
        callbacks=[checkpoint_cb],
    )
    trainer.fit(model, datamodule)
-
 
 Using with Fabric
 =================
@@ -90,19 +85,16 @@ Using with Fabric
        loss = train_step()
        fabric.log("train_loss", loss, step=step)
 
+Logging Files, Media, and Models
+================================
 
-Logging Files and Media
-========================
-
-The logger exposes :meth:`litlogger.log_file() <litlogger.experiment.Experiment.log_file>` and :meth:`litlogger.log_media() <litlogger.experiment.Experiment.log_media>` for uploading artifacts
-during training:
+The logger also exposes helper methods for artifact, media, and model logging:
 
 .. code-block:: python
 
-   # Inside a training callback or LightningModule
    trainer.logger.log_file("config.yaml")
    trainer.logger.log_media("sample", "output.png", step=epoch)
-
+   trainer.logger.log_model_artifact("checkpoints/best.ckpt", version="best")
 
 Accessing the Experiment URL
 ============================
@@ -113,11 +105,4 @@ Accessing the Experiment URL
    trainer = Trainer(logger=logger)
    trainer.fit(model, datamodule)
 
-   print(logger.url)  # direct link to the experiment
-
-
-Third-Party Loggers
-===================
-
-Use any third-party logger you want with Lightning. However, LitLogger is free
-and native to the Lightning platform.
+   print(logger.url)

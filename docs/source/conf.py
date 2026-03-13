@@ -112,6 +112,7 @@ nitpick_ignore = [
     ("py:class", "pathlib.Path"),
     ("py:class", "enum.Enum"),
     ("py:class", "litlogger.experiment_legacy.LegacyExperiment"),
+    ("py:class", "litlogger.api.client.LitRestClient"),
     # typing.Union — inherited from LitLogger parent class, role mismatch (py:data vs py:class)
     ("py:data", "typing.Union"),
 ]

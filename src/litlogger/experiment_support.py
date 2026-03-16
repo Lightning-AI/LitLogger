@@ -119,24 +119,24 @@ class ExperimentStateSupport:
 
                 direct_media_entries.setdefault(name, []).append((getattr(media, "step", None), position, wrapped))
 
-            for name, entries in direct_media_entries.items():
+            for name, media_entries in direct_media_entries.items():
                 if name in exp._key_types:
                     continue
-                if len(entries) == 1 and name not in exp._key_types:
+                if len(media_entries) == 1 and name not in exp._key_types:
                     exp._key_types[name] = "static_file"
-                    exp._static_files[name] = entries[0][2]
+                    exp._static_files[name] = media_entries[0][2]
                     continue
 
                 exp._key_types[name] = "file_series"
                 series_values = series_entries.setdefault(name, [])
-                for step, position, wrapped in entries:
+                for step, position, wrapped in media_entries:
                     sort_index = step if isinstance(step, int) else position
                     series_values.append((sort_index, wrapped))
 
-            for key, entries in series_entries.items():
+            for key, file_entries in series_entries.items():
                 series = Series(exp, key)
                 series._type = "file"
-                series._values = [value for _, value in sorted(entries)]
+                series._values = [value for _, value in sorted(file_entries)]
                 exp._series[key] = series
 
     @staticmethod

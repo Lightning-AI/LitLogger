@@ -18,7 +18,7 @@ Files, Media, and Models
 ========================
 
 A dict-style example showing static uploads, file and text series, image logging,
-and model artifacts with ``File``, ``Text``, ``Image``, and ``Model``.
+and the new ``Model`` API for artifacts, objects, and checkpoint series.
 
 .. literalinclude:: ../../../examples/file_media_model_usage.py
    :language: python

@@ -395,9 +395,12 @@ class Model(File):
             result = download_model(name=model_name, download_dir=path, progress_bar=False)
             return result if isinstance(result, str) else result[0]
 
+        def _load(staging_dir: str | None = None) -> Any:
+            return load_model(name=model_name, download_dir=staging_dir or ".")
+
         self._download_fn = _download
         if self._model_kind == "object":
-            self._load_fn = lambda staging_dir=None: load_model(name=model_name, download_dir=staging_dir or ".")
+            self._load_fn = _load
         else:
             self._load_fn = None
 

@@ -4,6 +4,7 @@
 #
 """Tests for adding and retrieving files/media via the experiment dict-like API."""
 
+import os
 import tempfile
 from unittest.mock import MagicMock, patch
 
@@ -334,7 +335,7 @@ class TestFileSeriesBindings:
             f = File(tmp.name)
             Experiment._log_file_series_value(exp, "frames", f, 0)
 
-            download_path = f"{tmpdir}/frame.png"
+            download_path = os.path.join(tmpdir, "frame.png")
             result = f.save(download_path)
             assert result == download_path
 

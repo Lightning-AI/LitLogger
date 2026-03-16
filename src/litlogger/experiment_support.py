@@ -128,18 +128,15 @@ class ExperimentStateSupport:
                     continue
 
                 exp._key_types[name] = "file_series"
-                series_entries.setdefault(name, []).extend(
-                    (
-                        step if isinstance(step, int) else position,
-                        wrapped,
-                    )
-                    for step, position, wrapped in entries
-                )
+                series_values = series_entries.setdefault(name, [])
+                for step, position, wrapped in entries:
+                    sort_index = step if isinstance(step, int) else position
+                    series_values.append((sort_index, wrapped))
 
             for key, entries in series_entries.items():
                 series = Series(exp, key)
                 series._type = "file"
-                series._values = [value for _, value in sorted(entries, key=lambda item: item[0])]
+                series._values = [value for _, value in sorted(entries)]
                 exp._series[key] = series
 
     @staticmethod
@@ -272,6 +269,8 @@ class ExperimentIOSupport:
     @staticmethod
     def log_file_series_value(exp: "Experiment", key: str, value: File, index: int, step: int | None = None) -> None:
         if value._media_type == MediaType.MODEL:
+            if not isinstance(value, Model):
+                raise TypeError("Model media values must use the Model wrapper.")
             exp._upload_model_value(f"{key}/{index}", value)
             return
 
@@ -303,6 +302,8 @@ class ExperimentIOSupport:
     @staticmethod
     def set_static_file(exp: "Experiment", key: str, value: File) -> None:
         if value._media_type == MediaType.MODEL:
+            if not isinstance(value, Model):
+                raise TypeError("Model media values must use the Model wrapper.")
             exp._upload_model_value(key, value)
             return
 

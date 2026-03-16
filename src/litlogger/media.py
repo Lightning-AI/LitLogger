@@ -425,6 +425,8 @@ class Model(File):
                 metadata=self.metadata,
             )
         else:
+            if self.staging_dir is not None:
+                os.makedirs(self.staging_dir, exist_ok=True)
             save_model(
                 name=model_name,
                 model=self._data,

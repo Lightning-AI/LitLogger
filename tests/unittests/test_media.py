@@ -6,6 +6,7 @@
 
 import os
 import tempfile
+from unittest.mock import MagicMock, patch
 
 import pytest
 from litlogger.media import File, Image, Model, Text, _sanitize_version_for_model_name
@@ -542,3 +543,19 @@ class TestModelInit:
 
     def test_version_sanitization_replaces_colons(self):
         assert _sanitize_version_for_model_name("2024-01-15:12:30:45") == "2024-01-15-12-30-45"
+
+    @patch("litlogger.media.save_model")
+    def test_log_model_creates_missing_staging_dir(self, mock_save_model):
+        teamspace = MagicMock()
+        teamspace.name = "teamspace"
+        teamspace.owner.name = "owner"
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            staging_dir = os.path.join(tmpdir, "nested", "staging")
+            model = Model(object(), staging_dir=staging_dir)
+
+            model._log_model(experiment_name="exp-name", teamspace=teamspace)
+
+            assert os.path.isdir(staging_dir)
+            mock_save_model.assert_called_once()
+            assert mock_save_model.call_args.kwargs["staging_dir"] == staging_dir

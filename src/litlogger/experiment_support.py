@@ -62,7 +62,49 @@ class ExperimentStateSupport:
     """Helpers for remote-state reconstruction and metadata refresh."""
 
     @staticmethod
-    def resolve_remote_model(exp: "Experiment", key: str) -> Model | None:
+    def natural_sort_key(value: str | None) -> tuple[object, ...]:
+        if not value:
+            return ("",)
+        parts = re.split(r"(\d+)", value)
+        key: list[object] = []
+        for part in parts:
+            if not part:
+                continue
+            key.append(int(part) if part.isdigit() else part)
+        return tuple(key)
+
+    @staticmethod
+    def model_version_sort_key(version_info: object) -> tuple[object, ...]:
+        index = getattr(version_info, "index", None)
+        if isinstance(index, int):
+            return (0, index)
+
+        created_at = getattr(version_info, "created_at", None)
+        if isinstance(created_at, datetime):
+            return (1, created_at)
+
+        updated_at = getattr(version_info, "updated_at", None)
+        if isinstance(updated_at, datetime):
+            return (2, updated_at)
+
+        version = getattr(version_info, "version", None)
+        return (3, *ExperimentStateSupport.natural_sort_key(version))
+
+    @staticmethod
+    def remote_model_from_version(exp: "Experiment", key: str, model_key: str, version_info: object) -> Model:
+        metadata = getattr(version_info, "metadata", None) or {}
+        kind = "object" if metadata.get("litModels.integration") == "save_model" else "artifact"
+        version = getattr(version_info, "version", None)
+        registry_name = f"{exp._teamspace.owner.name}/{exp._teamspace.name}/{model_key}"
+        if version:
+            registry_name += f":{version}"
+
+        model = Model.from_remote(registry_name, kind, version=version)
+        model._bind_remote_model(key=key, model_name=registry_name)
+        return model
+
+    @staticmethod
+    def resolve_remote_model(exp: "Experiment", key: str) -> Model | Series | None:
         cached = exp._model_lookup_cache.get(key)
         if cached is not None or key in exp._missing_model_keys:
             return cached
@@ -76,25 +118,25 @@ class ExperimentStateSupport:
                 return None
 
             versions = exp._teamspace.list_model_versions(model_key)
-            version_info = next(
-                (version for version in reversed(versions) if getattr(version, "upload_complete", True)),
-                None,
-            )
-            if version_info is None:
+            complete_versions = [version for version in versions if getattr(version, "upload_complete", True)]
+            if not complete_versions:
                 exp._missing_model_keys.add(key)
                 return None
+            complete_versions.sort(key=ExperimentStateSupport.model_version_sort_key)
 
-            metadata = getattr(version_info, "metadata", None) or {}
-            kind = "object" if metadata.get("litModels.integration") == "save_model" else "artifact"
-            version = getattr(version_info, "version", None)
-            registry_name = f"{exp._teamspace.owner.name}/{exp._teamspace.name}/{model_key}"
-            if version:
-                registry_name += f":{version}"
+            if len(complete_versions) == 1:
+                model = ExperimentStateSupport.remote_model_from_version(exp, key, model_key, complete_versions[0])
+                exp._model_lookup_cache[key] = model
+                return model
 
-            model = Model.from_remote(registry_name, kind, version=version)
-            model._bind_remote_model(key=key, model_name=registry_name)
-            exp._model_lookup_cache[key] = model
-            return model
+            series = Series(exp, key)
+            series._type = "file"
+            series._values = [
+                ExperimentStateSupport.remote_model_from_version(exp, key, model_key, version_info)
+                for version_info in complete_versions
+            ]
+            exp._model_lookup_cache[key] = series
+            return series
         except Exception:
             exp._missing_model_keys.add(key)
             return None

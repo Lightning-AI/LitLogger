@@ -512,6 +512,41 @@ class TestRetrieveRemoteModels:
         assert exp._key_types["models/latest"] == "static_file"
         assert exp._static_files["models/latest"] is result
 
+    def test_getitem_resolves_remote_model_series_from_multiple_versions(self):
+        exp = _make_exp()
+        exp.name = "exp1"
+        exp._teamspace = MagicMock()
+        exp._teamspace.name = "teamspace"
+        exp._teamspace.owner.name = "owner"
+
+        model_info = MagicMock()
+        model_info.name = "checkpoints"
+        exp._teamspace.list_models.return_value = [model_info]
+
+        version0 = MagicMock()
+        version0.version = "new-step-0"
+        version0.upload_complete = True
+        version0.metadata = {"litModels": "1.0.0"}
+
+        version1 = MagicMock()
+        version1.version = "new-step-1"
+        version1.upload_complete = True
+        version1.metadata = {"litModels": "1.0.0"}
+
+        exp._teamspace.list_model_versions.return_value = [version1, version0]
+
+        result = exp["checkpoints"]
+
+        assert isinstance(result, Series)
+        assert result._type == "file"
+        assert len(result) == 2
+        assert isinstance(result[0], Model)
+        assert isinstance(result[1], Model)
+        assert result[0]._model_name == "owner/teamspace/checkpoints:new-step-0"
+        assert result[1]._model_name == "owner/teamspace/checkpoints:new-step-1"
+        assert exp._key_types["checkpoints"] == "file_series"
+        assert exp._series["checkpoints"] is result
+
 
 class TestRetrieveArtifactsProperty:
     """Test experiment.artifacts property."""

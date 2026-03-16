@@ -231,7 +231,7 @@ class Experiment(LegacyExperiment):
                 self._series[key] = series
             return self._series[key]
         remote_model = self._resolve_remote_model(key)
-        if remote_model is not None:
+        if isinstance(remote_model, Model):
             self._key_types[key] = "static_file"
             self._static_files[key] = remote_model
             return remote_model  # type: ignore[return-value]

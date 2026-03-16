@@ -18,6 +18,27 @@ from litlogger.experiment import Experiment
 pytestmark = pytest.mark.filterwarnings("ignore::DeprecationWarning")
 
 
+def _wait_for_metrics(
+    client: LitRestClient,
+    *,
+    project_id: str,
+    stream_id: str,
+    expected_counts: dict[str, int],
+    attempts: int = 30,
+) -> object:
+    response = None
+    for _ in range(attempts):
+        response = client.lit_logger_service_get_logger_metrics(project_id=project_id, ids=[stream_id])
+        named_metrics = response.named_metrics or {}
+        if all(
+            len(named_metrics.get(name, {}).ids_metrics.get(stream_id, {}).metrics_values or []) == count
+            for name, count in expected_counts.items()
+        ):
+            return response
+        sleep(1)
+    return response
+
+
 @pytest.mark.cloud()
 def test_module_level_api_basic():
     """Test basic litlogger.init() and module-level logging."""
@@ -44,13 +65,12 @@ def test_module_level_api_basic():
     stream_id = exp._metrics_store.id
 
     client = LitRestClient()
-    for _ in range(30):
-        response = client.lit_logger_service_get_logger_metrics(project_id=project_id, ids=[stream_id])
-        if response.named_metrics != {}:
-            metrics = response.named_metrics
-            if len(metrics.get("loss", {}).ids_metrics.get(stream_id, {}).metrics_values or []) == 10:
-                break
-        sleep(1)
+    response = _wait_for_metrics(
+        client,
+        project_id=project_id,
+        stream_id=stream_id,
+        expected_counts={"loss": 10, "accuracy": 10, "train_loss": 5},
+    )
 
     # Cleanup
     client.lit_logger_service_delete_metrics_stream(
@@ -144,13 +164,12 @@ def test_new_dict_api_metrics():
     stream_id = exp._metrics_store.id
 
     client = LitRestClient()
-    for _ in range(30):
-        response = client.lit_logger_service_get_logger_metrics(project_id=project_id, ids=[stream_id])
-        if response.named_metrics != {}:
-            metrics = response.named_metrics
-            if len(metrics.get("loss", {}).ids_metrics.get(stream_id, {}).metrics_values or []) == 10:
-                break
-        sleep(1)
+    response = _wait_for_metrics(
+        client,
+        project_id=project_id,
+        stream_id=stream_id,
+        expected_counts={"loss": 10, "accuracy": 10, "val_loss": 3},
+    )
 
     # Cleanup
     client.lit_logger_service_delete_metrics_stream(

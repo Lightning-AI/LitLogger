@@ -34,7 +34,7 @@ from litlogger.api.metrics_api import MetricsApi
 from litlogger.api.utils import _resolve_teamspace, build_experiment_url, get_accessible_url, get_guest_url
 from litlogger.background import _BackgroundThread
 from litlogger.capture import rerun_and_record
-from litlogger.experiment_legacy import LegacyExperiment, _MetadataValue
+from litlogger.experiment_legacy import LegacyExperiment, MetadataValue
 from litlogger.experiment_support import ExperimentIOSupport, ExperimentSeriesSupport, ExperimentStateSupport
 from litlogger.media import File, Model
 from litlogger.printer import Printer, RunStats
@@ -218,7 +218,7 @@ class Experiment(LegacyExperiment):
         if key in self._key_types:
             kt = self._key_types[key]
             if kt == "metadata":
-                return _MetadataValue(key, self._metadata_values[key])  # type: ignore[return-value]
+                return MetadataValue(key, self._metadata_values[key])  # type: ignore[return-value]
             if kt == "static_file":
                 return self._static_files[key]  # type: ignore[return-value]
             # 'metric' or 'file_series'

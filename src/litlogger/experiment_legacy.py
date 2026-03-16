@@ -41,7 +41,7 @@ def _warn_deprecated(method: str, message: str) -> None:
         warnings.warn(message, DeprecationWarning, stacklevel=3)
 
 
-class _MetadataValue(str):
+class MetadataValue(str):
     """String-like metadata value that rejects time-series operations."""
 
     __slots__ = ("_key",)

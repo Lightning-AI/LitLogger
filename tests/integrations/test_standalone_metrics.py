@@ -18,6 +18,18 @@ from litlogger.experiment import Experiment
 pytestmark = pytest.mark.filterwarnings("ignore::DeprecationWarning")
 
 
+def _metric_values(named_metrics: dict, metric_name: str, stream_id: str) -> list:
+    metric = named_metrics.get(metric_name, {})
+    ids_metrics = metric.get("ids_metrics", {}) if isinstance(metric, dict) else getattr(metric, "ids_metrics", {})
+    stream_metrics = ids_metrics.get(stream_id, {})
+    values = (
+        stream_metrics.get("metrics_values", {})
+        if isinstance(stream_metrics, dict)
+        else getattr(stream_metrics, "metrics_values", {})
+    )
+    return values or []
+
+
 def _wait_for_metrics(
     client: LitRestClient,
     *,
@@ -30,10 +42,7 @@ def _wait_for_metrics(
     for _ in range(attempts):
         response = client.lit_logger_service_get_logger_metrics(project_id=project_id, ids=[stream_id])
         named_metrics = response.named_metrics or {}
-        if all(
-            len(named_metrics.get(name, {}).ids_metrics.get(stream_id, {}).metrics_values or []) == count
-            for name, count in expected_counts.items()
-        ):
+        if all(len(_metric_values(named_metrics, name, stream_id)) == count for name, count in expected_counts.items()):
             return response
         sleep(1)
     return response
@@ -82,7 +91,7 @@ def test_module_level_api_basic():
     assert "loss" in response.named_metrics
     assert "accuracy" in response.named_metrics
     assert "train_loss" in response.named_metrics
-    assert len(response.named_metrics["loss"].ids_metrics[stream_id].metrics_values) == 10
+    assert len(_metric_values(response.named_metrics, "loss", stream_id)) == 10
 
 
 @pytest.mark.cloud()
@@ -181,7 +190,7 @@ def test_new_dict_api_metrics():
     assert "loss" in response.named_metrics
     assert "accuracy" in response.named_metrics
     assert "val_loss" in response.named_metrics
-    assert len(response.named_metrics["loss"].ids_metrics[stream_id].metrics_values) == 10
+    assert len(_metric_values(response.named_metrics, "loss", stream_id)) == 10
 
 
 @pytest.mark.cloud()
@@ -229,5 +238,5 @@ def test_direct_experiment_usage():
 
         # Verify
         assert response.named_metrics != {}
-        metrics = response.named_metrics["direct_metric"].ids_metrics[stream_id].metrics_values
+        metrics = _metric_values(response.named_metrics, "direct_metric", stream_id)
         assert len(metrics) == 5

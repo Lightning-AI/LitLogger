@@ -123,7 +123,7 @@ class File:
             return rel_path.replace("\\", "/")
         return os.path.basename(self.path).replace("\\", "/")
 
-    def bind_remote_artifact(
+    def _bind_remote_artifact(
         self,
         *,
         teamspace: Teamspace,
@@ -143,7 +143,7 @@ class File:
             cloud_account=cloud_account,
         )
 
-    def log_artifact(
+    def _log_artifact(
         self,
         *,
         teamspace: Teamspace,
@@ -165,7 +165,7 @@ class File:
         )
         self._cleanup()
         cloud_account = getattr(metrics_store, "cluster_id", None)
-        self.bind_remote_artifact(
+        self._bind_remote_artifact(
             teamspace=teamspace,
             experiment_name=experiment_name,
             remote_path=display_path,
@@ -386,7 +386,7 @@ class Model(File):
             model_name += f":{_sanitize_version_for_model_name(self.version)}"
         return model_name
 
-    def bind_remote_model(self, *, key: str, model_name: str) -> None:
+    def _bind_remote_model(self, *, key: str, model_name: str) -> None:
         """Bind remote model download/load behavior to this wrapper."""
         self.name = key
         self._model_name = model_name
@@ -401,7 +401,7 @@ class Model(File):
         else:
             self._load_fn = None
 
-    def log_model(
+    def _log_model(
         self,
         *,
         experiment_name: str,

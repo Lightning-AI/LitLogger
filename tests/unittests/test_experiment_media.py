@@ -178,7 +178,7 @@ class TestAddStaticFileBindings:
         assert kwargs["media_type"] == V1MediaType.IMAGE
         assert exp._stats.media_logged == 1
 
-    @patch.object(Model, "log_model", return_value="owner/team/exp-model:latest")
+    @patch.object(Model, "_log_model", return_value="owner/team/exp-model:latest")
     def test_model_artifact_uses_litmodels(self, mock_log_model):
         exp = Experiment.__new__(Experiment)
         exp.name = "exp"
@@ -200,7 +200,7 @@ class TestAddStaticFileBindings:
         assert model._download_fn is not None
         assert exp._stats.models_logged == 1
 
-    @patch.object(Model, "log_model", return_value="owner/team/exp-model-object:latest")
+    @patch.object(Model, "_log_model", return_value="owner/team/exp-model-object:latest")
     def test_model_object_uses_litmodels(self, mock_log_model):
         exp = Experiment.__new__(Experiment)
         exp.name = "exp"
@@ -380,7 +380,7 @@ class TestFileSeriesBindings:
         assert kwargs["media_type"] == V1MediaType.TEXT
         assert exp._stats.media_logged == 1
 
-    @patch.object(Model, "log_model", return_value="owner/team/exp-model-series:latest")
+    @patch.object(Model, "_log_model", return_value="owner/team/exp-model-series:latest")
     def test_model_series_uses_indexed_model_key(self, mock_log_model):
         exp = Experiment.__new__(Experiment)
         exp.name = "exp"

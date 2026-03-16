@@ -193,7 +193,7 @@ class TestExperimentArtifactMethods:
         mock_file.save.assert_called_once_with("test.txt")
         assert result == "/path/to/file.txt"
 
-    @patch.object(legacy_experiment_module.MediaModel, "log_model", return_value="owner/team/test_exp:v2.0")
+    @patch.object(legacy_experiment_module.MediaModel, "_log_model", return_value="owner/team/test_exp:v2.0")
     def test_log_model_artifact(self, mock_log_model):
         """Test log_model_artifact method."""
         exp = MagicMock()
@@ -210,7 +210,7 @@ class TestExperimentArtifactMethods:
         mock_log_model.assert_called_once()
 
     @patch.object(legacy_experiment_module.MediaModel, "save", return_value="/path/to/model.pt")
-    @patch.object(legacy_experiment_module.MediaModel, "bind_remote_model")
+    @patch.object(legacy_experiment_module.MediaModel, "_bind_remote_model")
     def test_get_model_artifact(self, mock_bind_remote_model, mock_save):
         """Test get_model_artifact method."""
         exp = MagicMock()
@@ -226,7 +226,7 @@ class TestExperimentArtifactMethods:
         mock_save.assert_called_once_with("model.pt")
         assert result == "/path/to/model.pt"
 
-    @patch.object(legacy_experiment_module.MediaModel, "log_model", return_value="owner/team/test_exp:latest")
+    @patch.object(legacy_experiment_module.MediaModel, "_log_model", return_value="owner/team/test_exp:latest")
     def test_log_model(self, mock_log_model):
         """Test log_model method."""
         exp = MagicMock()
@@ -245,7 +245,7 @@ class TestExperimentArtifactMethods:
         mock_log_model.assert_called_once()
 
     @patch.object(legacy_experiment_module.MediaModel, "load")
-    @patch.object(legacy_experiment_module.MediaModel, "bind_remote_model")
+    @patch.object(legacy_experiment_module.MediaModel, "_bind_remote_model")
     def test_get_model(self, mock_bind_remote_model, mock_load):
         """Test get_model method."""
         mock_loaded_model = MagicMock()
@@ -943,7 +943,7 @@ class TestExperimentStatsTracking:
         assert key == "file.txt"
         assert isinstance(value, File)
 
-    @patch.object(legacy_experiment_module.MediaModel, "log_model", return_value="owner/team/test:latest")
+    @patch.object(legacy_experiment_module.MediaModel, "_log_model", return_value="owner/team/test:latest")
     def test_log_model_artifact_tracks_model_count(self, mock_log_model):
         """Test log_model_artifact increments models_logged."""
         exp = MagicMock()
@@ -960,7 +960,7 @@ class TestExperimentStatsTracking:
         mock_log_model.assert_called_once()
         assert exp._stats.models_logged == 1
 
-    @patch.object(legacy_experiment_module.MediaModel, "log_model", return_value="owner/team/test:latest")
+    @patch.object(legacy_experiment_module.MediaModel, "_log_model", return_value="owner/team/test:latest")
     def test_log_model_tracks_model_count(self, mock_log_model):
         """Test log_model increments models_logged."""
         exp = MagicMock()

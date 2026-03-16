@@ -146,7 +146,7 @@ class ExperimentStateSupport:
     def create_download_fn(exp: "Experiment", key: str) -> Callable[[str], str]:
         def _download(path: str) -> str:
             file = File(path)
-            file.bind_remote_artifact(
+            file._bind_remote_artifact(
                 teamspace=exp._teamspace,
                 experiment_name=exp.name,
                 remote_path=key,
@@ -159,7 +159,7 @@ class ExperimentStateSupport:
 
     @staticmethod
     def bind_remote_model(exp: "Experiment", key: str, value: Model, model_name: str) -> None:
-        value.bind_remote_model(key=key, model_name=model_name)
+        value._bind_remote_model(key=key, model_name=model_name)
 
     @staticmethod
     def model_experiment_name(exp: "Experiment", key: str) -> str:
@@ -261,7 +261,7 @@ class ExperimentIOSupport:
         """
         experiment_name = exp._model_experiment_name(key)
         cloud_account = exp._metrics_store.cluster_id
-        model_name = value.log_model(
+        model_name = value._log_model(
             experiment_name=experiment_name,
             teamspace=exp._teamspace,
             cloud_account=cloud_account if isinstance(cloud_account, str) else None,
@@ -280,7 +280,7 @@ class ExperimentIOSupport:
             return
 
         remote_path = f"{key}/{index}"
-        value.log_artifact(
+        value._log_artifact(
             teamspace=exp._teamspace,
             metrics_store=exp._metrics_store,
             remote_path=remote_path,
@@ -310,7 +310,7 @@ class ExperimentIOSupport:
             exp._upload_media_value(key, value)
             return
 
-        value.log_artifact(
+        value._log_artifact(
             teamspace=exp._teamspace,
             metrics_store=exp._metrics_store,
             remote_path=key,

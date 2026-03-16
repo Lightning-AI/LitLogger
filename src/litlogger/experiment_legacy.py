@@ -299,7 +299,7 @@ class LegacyExperiment:
             "log_model_artifact", 'log_model_artifact() is deprecated. Use experiment["key"] = File("path") instead.'
         )
         model_artifact = MediaModel(path, version=version or "latest")
-        model_artifact.log_model(
+        model_artifact._log_model(
             experiment_name=self.name,
             teamspace=self._teamspace,
             cloud_account=getattr(self._metrics_store, "cluster_id", None),
@@ -330,7 +330,7 @@ class LegacyExperiment:
             'get_model_artifact() is deprecated. Use experiment["key"] to access model artifacts instead.',
         )
         model_artifact = MediaModel(path, version=version or "latest")
-        model_artifact.bind_remote_model(
+        model_artifact._bind_remote_model(
             key=path,
             model_name=model_artifact._registry_name(self.name, self._teamspace),
         )
@@ -369,7 +369,7 @@ class LegacyExperiment:
         """
         _warn_deprecated("log_model", 'log_model() is deprecated. Use experiment["key"] = File("path") instead.')
         model_obj = MediaModel(model, version=version or self.name, metadata=metadata, staging_dir=staging_dir)
-        model_name = model_obj.log_model(
+        model_name = model_obj._log_model(
             experiment_name=self.name,
             teamspace=self._teamspace,
             cloud_account=getattr(self._metrics_store, "cluster_id", None),
@@ -395,7 +395,7 @@ class LegacyExperiment:
         """
         _warn_deprecated("get_model", 'get_model() is deprecated. Use experiment["key"] to access models instead.')
         model_obj = MediaModel(object(), version=version or "latest", staging_dir=staging_dir)
-        model_obj.bind_remote_model(
+        model_obj._bind_remote_model(
             key=self.name,
             model_name=model_obj._registry_name(self.name, self._teamspace),
         )

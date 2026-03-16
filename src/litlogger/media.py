@@ -328,6 +328,7 @@ class Model(File):
 
     Args:
         data: Python model object or path to a pre-saved model file/directory.
+        name: Optional registry name override for this model. Defaults to the experiment name.
         version: Optional model version. Defaults to ``"latest"``.
         metadata: Optional metadata to associate with the model upload.
         staging_dir: Optional local staging directory for object-based uploads.
@@ -337,6 +338,7 @@ class Model(File):
     def __init__(
         self,
         data: Any,
+        name: str | None = None,
         version: str | None = None,
         metadata: dict[str, str] | None = None,
         staging_dir: str | None = None,
@@ -344,7 +346,9 @@ class Model(File):
         _kind: str | None = None,
     ) -> None:
         self._data = data
+        self.registry_name = name
         self.version = version or "latest"
+        self._version_provided = version is not None
         self.metadata = metadata
         self.staging_dir = staging_dir
         self._kind = _kind or ("artifact" if isinstance(data, str) else "object")
@@ -413,7 +417,7 @@ class Model(File):
         verbose: bool = False,
     ) -> str:
         """Upload this model to litmodels and return its registry name."""
-        model_name = self._registry_name(experiment_name, teamspace)
+        model_name = self._registry_name(self.registry_name or experiment_name, teamspace)
 
         if self._model_kind == "artifact":
             upload_model(

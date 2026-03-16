@@ -18,16 +18,24 @@ from litlogger.series import Series
 def _make_exp(**overrides):
     """Create a MagicMock wired for the dict-like experiment API."""
     exp = MagicMock(spec=Experiment)
+    exp.name = "exp"
     exp._series = {}
     exp._key_types = {}
     exp._metadata_values = {}
     exp._static_files = {}
+    exp._model_lookup_cache = {}
+    exp._missing_model_keys = set()
     exp._manager = MagicMock()
     exp._manager.exception = None
     exp.store_step = True
     exp.store_created_at = False
     exp._metrics_queue = MagicMock()
     exp._media_api = MagicMock()
+    exp._teamspace = MagicMock()
+    exp._teamspace.name = "teamspace"
+    exp._teamspace.owner.name = "owner"
+    exp._teamspace.list_models.return_value = []
+    exp._teamspace.list_model_versions.return_value = []
     exp._stats = MagicMock()
     exp._stats.artifacts_logged = 0
     exp._stats.media_logged = 0
@@ -40,6 +48,7 @@ def _make_exp(**overrides):
     exp._ensure_series = lambda key: Experiment._ensure_series(exp, key)
     exp._register_key_type = lambda key, kt: Experiment._register_key_type(exp, key, kt)
     exp._log_metric_value = lambda key, value, step=None: Experiment._log_metric_value(exp, key, value, step=step)
+    exp._resolve_remote_model = lambda key: Experiment._resolve_remote_model(exp, key)
     exp._log_file_series_value = MagicMock()
     exp._set_static_file = MagicMock()
 
@@ -399,6 +408,7 @@ class TestFileSeriesBindings:
         Experiment._log_file_series_value(exp, "models", model, 2)
 
         mock_log_model.assert_called_once()
+        assert model.version == "v2"
         assert model.name == "models/2"
         assert exp._stats.models_logged == 1
 
@@ -472,6 +482,35 @@ class TestRetrieveFileSeries:
             exp["frames"].append(f)
 
         assert list(exp["frames"]) == files
+
+
+class TestRetrieveRemoteModels:
+    """Test lazy model lookup when a key is missing from rebuilt state."""
+
+    def test_getitem_resolves_remote_model_from_teamspace_listing(self):
+        exp = _make_exp()
+        exp.name = "exp1"
+        exp._teamspace = MagicMock()
+        exp._teamspace.name = "teamspace"
+        exp._teamspace.owner.name = "owner"
+
+        model_info = MagicMock()
+        model_info.name = "models-latest"
+        exp._teamspace.list_models.return_value = [model_info]
+
+        version_info = MagicMock()
+        version_info.version = "new-artifact-v1"
+        version_info.upload_complete = True
+        version_info.metadata = {"litModels": "1.0.0"}
+        exp._teamspace.list_model_versions.return_value = [version_info]
+
+        result = exp["models/latest"]
+
+        assert isinstance(result, Model)
+        assert result._model_kind == "artifact"
+        assert result._model_name == "owner/teamspace/models-latest:new-artifact-v1"
+        assert exp._key_types["models/latest"] == "static_file"
+        assert exp._static_files["models/latest"] is result
 
 
 class TestRetrieveArtifactsProperty:

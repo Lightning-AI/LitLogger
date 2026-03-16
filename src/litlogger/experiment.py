@@ -101,6 +101,8 @@ class Experiment(LegacyExperiment):
         self._series: dict[str, Series] = {}
         self._metadata_values: dict[str, str] = {}
         self._static_files: dict[str, File] = {}
+        self._model_lookup_cache: dict[str, Model | None] = {}
+        self._missing_model_keys: set[str] = set()
 
         # Initialize printer and stats tracking
         self._printer = Printer(verbose=verbose)
@@ -228,6 +230,11 @@ class Experiment(LegacyExperiment):
                     series._type = "file"
                 self._series[key] = series
             return self._series[key]
+        remote_model = self._resolve_remote_model(key)
+        if remote_model is not None:
+            self._key_types[key] = "static_file"
+            self._static_files[key] = remote_model
+            return remote_model  # type: ignore[return-value]
         # New key - return a series proxy for future appends
         if key not in self._series:
             self._series[key] = Series(self, key)
@@ -299,6 +306,9 @@ class Experiment(LegacyExperiment):
 
     def _create_download_fn(self, key: str) -> Callable[[str], str]:
         return ExperimentStateSupport.create_download_fn(self, key)
+
+    def _resolve_remote_model(self, key: str) -> Model | None:
+        return ExperimentStateSupport.resolve_remote_model(self, key)
 
     def _bind_remote_model(self, key: str, value: Model, model_name: str) -> None:
         ExperimentStateSupport.bind_remote_model(self, key, value, model_name)

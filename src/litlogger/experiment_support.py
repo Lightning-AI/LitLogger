@@ -62,6 +62,44 @@ class ExperimentStateSupport:
     """Helpers for remote-state reconstruction and metadata refresh."""
 
     @staticmethod
+    def resolve_remote_model(exp: "Experiment", key: str) -> Model | None:
+        cached = exp._model_lookup_cache.get(key)
+        if cached is not None or key in exp._missing_model_keys:
+            return cached
+
+        model_key = ExperimentStateSupport.model_experiment_name(exp, key)
+        try:
+            models = exp._teamspace.list_models()
+            model_info = next((model for model in models if getattr(model, "name", None) == model_key), None)
+            if model_info is None:
+                exp._missing_model_keys.add(key)
+                return None
+
+            versions = exp._teamspace.list_model_versions(model_key)
+            version_info = next(
+                (version for version in reversed(versions) if getattr(version, "upload_complete", True)),
+                None,
+            )
+            if version_info is None:
+                exp._missing_model_keys.add(key)
+                return None
+
+            metadata = getattr(version_info, "metadata", None) or {}
+            kind = "object" if metadata.get("litModels.integration") == "save_model" else "artifact"
+            version = getattr(version_info, "version", None)
+            registry_name = f"{exp._teamspace.owner.name}/{exp._teamspace.name}/{model_key}"
+            if version:
+                registry_name += f":{version}"
+
+            model = Model.from_remote(registry_name, kind, version=version)
+            model._bind_remote_model(key=key, model_name=registry_name)
+            exp._model_lookup_cache[key] = model
+            return model
+        except Exception:
+            exp._missing_model_keys.add(key)
+            return None
+
+    @staticmethod
     def rebuild_state(exp: "Experiment") -> None:
         """Rebuild state from remote metadata, trackers, artifacts, and media.
 
@@ -160,8 +198,7 @@ class ExperimentStateSupport:
 
     @staticmethod
     def model_experiment_name(exp: "Experiment", key: str) -> str:
-        safe_key = re.sub(r"[^A-Za-z0-9._-]+", "-", key).strip("-") or "model"
-        return f"{exp.name}-{safe_key}"
+        return re.sub(r"[^A-Za-z0-9._-]+", "-", key).strip("-") or "model"
 
     @staticmethod
     def code_tags(exp: "Experiment") -> dict[str, str]:
@@ -256,10 +293,9 @@ class ExperimentIOSupport:
         TODO: Persist model recovery data via backend-supported experiment
         bindings so resumed experiments can rebuild these wrappers.
         """
-        experiment_name = exp._model_experiment_name(key)
         cloud_account = exp._metrics_store.cluster_id
         model_name = value._log_model(
-            experiment_name=experiment_name,
+            experiment_name=exp.name,
             teamspace=exp._teamspace,
             cloud_account=cloud_account if isinstance(cloud_account, str) else None,
         )
@@ -271,6 +307,8 @@ class ExperimentIOSupport:
         if value._media_type == MediaType.MODEL:
             if not isinstance(value, Model):
                 raise TypeError("Model media values must use the Model wrapper.")
+            if not value._version_provided:
+                value.version = f"v{index}"
             exp._upload_model_value(f"{key}/{index}", value)
             return
 

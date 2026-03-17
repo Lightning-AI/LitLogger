@@ -14,6 +14,17 @@ metadata, and files.
    :start-after: limitations under the License.
 
 
+Files, Media, and Models
+========================
+
+A dict-style example showing static uploads, file and text series, image logging,
+and the new ``Model`` API for artifacts, objects, and checkpoint series.
+
+.. literalinclude:: ../../../examples/file_media_model_usage.py
+   :language: python
+   :start-after: limitations under the License.
+
+
 PyTorch Lightning
 =================
 

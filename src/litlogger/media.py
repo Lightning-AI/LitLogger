@@ -23,9 +23,18 @@ import tempfile
 from importlib import import_module
 from typing import Any, Callable
 
+from lightning_sdk import Teamspace
+from litmodels import download_model, load_model, save_model, upload_model
 from typing_extensions import override
 
+from litlogger.api.artifacts_api import ArtifactsApi
+from litlogger.api.client import LitRestClient
 from litlogger.types import MediaType
+
+
+def _sanitize_version_for_model_name(version: str) -> str:
+    """Sanitize version string for use in model names."""
+    return version.replace(":", "-")
 
 
 class File:
@@ -99,6 +108,71 @@ class File:
         if self._download_fn is None:
             raise RuntimeError("File has no remote context. It must be uploaded to an experiment first.")
         return self._download_fn(path)
+
+    def _artifact_display_path(self, remote_path: str | None = None) -> str:
+        """Resolve the display path used for artifact storage."""
+        if remote_path is not None:
+            return remote_path.replace("\\", "/")
+
+        try:
+            rel_path = os.path.relpath(self.path)
+        except ValueError:
+            rel_path = None
+
+        if rel_path is not None and not rel_path.startswith(".."):
+            return rel_path.replace("\\", "/")
+        return os.path.basename(self.path).replace("\\", "/")
+
+    def _bind_remote_artifact(
+        self,
+        *,
+        teamspace: Teamspace,
+        experiment_name: str,
+        remote_path: str,
+        client: LitRestClient | None = None,
+        cloud_account: str | None = None,
+    ) -> None:
+        """Bind remote artifact download behavior to this file wrapper."""
+        api = ArtifactsApi(client=client or LitRestClient(max_retries=5))
+        full_remote_path = f"experiments/{experiment_name}/{remote_path}"
+        self.name = remote_path
+        self._download_fn = lambda path: api.download_file(
+            teamspace=teamspace,
+            remote_path=full_remote_path,
+            local_path=path,
+            cloud_account=cloud_account,
+        )
+
+    def _log_artifact(
+        self,
+        *,
+        teamspace: Teamspace,
+        metrics_store: Any,
+        experiment_name: str,
+        client: LitRestClient | None = None,
+        remote_path: str | None = None,
+    ) -> str:
+        """Upload this file as an experiment artifact and bind remote access."""
+        upload_path = self._get_upload_path()
+        display_path = self._artifact_display_path(remote_path)
+        api = ArtifactsApi(client=client or LitRestClient(max_retries=5))
+        api.upload_experiment_file_artifact(
+            teamspace=teamspace,
+            metrics_store=metrics_store,
+            experiment_name=experiment_name,
+            file_path=upload_path,
+            remote_path=display_path,
+        )
+        self._cleanup()
+        cloud_account = getattr(metrics_store, "cluster_id", None)
+        self._bind_remote_artifact(
+            teamspace=teamspace,
+            experiment_name=experiment_name,
+            remote_path=display_path,
+            client=api.client,
+            cloud_account=cloud_account if isinstance(cloud_account, str) else None,
+        )
+        return display_path
 
     @property
     def _media_type(self) -> MediaType:
@@ -244,3 +318,134 @@ class Text(File):
     @override
     def _media_type(self) -> MediaType:
         return MediaType.TEXT
+
+
+class Model(File):
+    """Represents a model to be logged.
+
+    Can take either a Python model object or a local path to a pre-saved model
+    artifact. Uploads are handled through litmodels rather than the artifact API.
+
+    Args:
+        data: Python model object or path to a pre-saved model file/directory.
+        name: Optional registry name override for this model. Defaults to the experiment name.
+        version: Optional model version. Defaults to ``"latest"``.
+        metadata: Optional metadata to associate with the model upload.
+        staging_dir: Optional local staging directory for object-based uploads.
+        description: Optional human-readable description of the model.
+    """
+
+    def __init__(
+        self,
+        data: Any,
+        name: str | None = None,
+        version: str | None = None,
+        metadata: dict[str, str] | None = None,
+        staging_dir: str | None = None,
+        description: str = "",
+        _kind: str | None = None,
+    ) -> None:
+        self._data = data
+        self.registry_name = name
+        self.version = version or "latest"
+        self._version_provided = version is not None
+        self.metadata = metadata
+        self.staging_dir = staging_dir
+        self._kind = _kind or ("artifact" if isinstance(data, str) else "object")
+        self._model_name: str | None = None
+        self._load_fn: Callable[[str | None], Any] | None = None
+
+        if isinstance(data, str):
+            super().__init__(data, description=description)
+        else:
+            super().__init__("", description=description)
+
+    @classmethod
+    def from_remote(cls: type["Model"], model_name: str, kind: str, version: str | None = None) -> "Model":
+        """Create a remote-bound model wrapper for resumed experiments."""
+        data = model_name if kind == "artifact" else object()
+        model = cls(data, version=version, _kind=kind)
+        if kind == "artifact":
+            model.path = model_name
+        return model
+
+    @property
+    @override
+    def _media_type(self) -> MediaType:
+        return MediaType.MODEL
+
+    @property
+    def _model_kind(self) -> str:
+        return self._kind
+
+    def _get_upload_path(self) -> str:
+        if isinstance(self._data, str):
+            return self.path
+        return super()._get_upload_path()
+
+    def _registry_name(self, experiment_name: str, teamspace: Teamspace) -> str:
+        """Resolve the litmodels registry name for this model."""
+        model_name = f"{teamspace.owner.name}/{teamspace.name}/{experiment_name}"
+        if self.version:
+            model_name += f":{_sanitize_version_for_model_name(self.version)}"
+        return model_name
+
+    def _bind_remote_model(self, *, key: str, model_name: str) -> None:
+        """Bind remote model download/load behavior to this wrapper."""
+        self.name = key
+        self._model_name = model_name
+
+        def _download(path: str) -> str:
+            result = download_model(name=model_name, download_dir=path, progress_bar=False)
+            return result if isinstance(result, str) else result[0]
+
+        def _load(staging_dir: str | None = None) -> Any:
+            return load_model(name=model_name, download_dir=staging_dir or ".")
+
+        self._download_fn = _download
+        if self._model_kind == "object":
+            self._load_fn = _load
+        else:
+            self._load_fn = None
+
+    def _log_model(
+        self,
+        *,
+        experiment_name: str,
+        teamspace: Teamspace,
+        cloud_account: str | None = None,
+        verbose: bool = False,
+    ) -> str:
+        """Upload this model to litmodels and return its registry name."""
+        model_name = self._registry_name(self.registry_name or experiment_name, teamspace)
+
+        if self._model_kind == "artifact":
+            upload_model(
+                name=model_name,
+                model=self._get_upload_path(),
+                verbose=False,
+                progress_bar=verbose,
+                cloud_account=cloud_account,
+                metadata=self.metadata,
+            )
+        else:
+            if self.staging_dir is not None:
+                os.makedirs(self.staging_dir, exist_ok=True)
+            save_model(
+                name=model_name,
+                model=self._data,
+                staging_dir=self.staging_dir,
+                verbose=False,
+                progress_bar=verbose,
+                cloud_account=cloud_account,
+                metadata=self.metadata,
+            )
+
+        self._cleanup()
+        return model_name
+
+    def load(self, staging_dir: str | None = None) -> Any:
+        """Load a remote model object via litmodels."""
+        if self._load_fn is None:
+            raise RuntimeError("Model has no remote load context. It must be uploaded to an experiment first.")
+        return self._load_fn(staging_dir)

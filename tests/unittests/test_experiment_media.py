@@ -4,34 +4,42 @@
 #
 """Tests for adding and retrieving files/media via the experiment dict-like API."""
 
-import sys
+import os
+import tempfile
 from unittest.mock import MagicMock, patch
 
 import pytest
 from lightning_sdk.lightning_cloud.openapi import V1MediaType
 from litlogger.experiment import Experiment
-from litlogger.media import File, Image, Text
+from litlogger.media import File, Image, Model, Text
 from litlogger.series import Series
-
-experiment_module = sys.modules["litlogger.experiment"]
 
 
 def _make_exp(**overrides):
     """Create a MagicMock wired for the dict-like experiment API."""
     exp = MagicMock(spec=Experiment)
+    exp.name = "exp"
     exp._series = {}
     exp._key_types = {}
     exp._metadata_values = {}
     exp._static_files = {}
+    exp._model_lookup_cache = {}
+    exp._missing_model_keys = set()
     exp._manager = MagicMock()
     exp._manager.exception = None
     exp.store_step = True
     exp.store_created_at = False
     exp._metrics_queue = MagicMock()
     exp._media_api = MagicMock()
+    exp._teamspace = MagicMock()
+    exp._teamspace.name = "teamspace"
+    exp._teamspace.owner.name = "owner"
+    exp._teamspace.list_models.return_value = []
+    exp._teamspace.list_model_versions.return_value = []
     exp._stats = MagicMock()
     exp._stats.artifacts_logged = 0
     exp._stats.media_logged = 0
+    exp._stats.models_logged = 0
 
     type(exp).__getitem__ = lambda self, key: Experiment.__getitem__(self, key)
     type(exp).__setitem__ = lambda self, key, value: Experiment.__setitem__(self, key, value)
@@ -40,6 +48,7 @@ def _make_exp(**overrides):
     exp._ensure_series = lambda key: Experiment._ensure_series(exp, key)
     exp._register_key_type = lambda key, kt: Experiment._register_key_type(exp, key, kt)
     exp._log_metric_value = lambda key, value, step=None: Experiment._log_metric_value(exp, key, value, step=step)
+    exp._resolve_remote_model = lambda key: Experiment._resolve_remote_model(exp, key)
     exp._log_file_series_value = MagicMock()
     exp._set_static_file = MagicMock()
 
@@ -102,45 +111,42 @@ class TestAddStaticFile:
 class TestAddStaticFileBindings:
     """Test that _set_static_file binds name and _download_fn."""
 
-    @patch.object(experiment_module, "Artifact")
-    def test_binds_name(self, mock_artifact_cls):
-        mock_artifact_cls.return_value = MagicMock()
-
+    def test_binds_name(self):
         exp = MagicMock(spec=Experiment)
         exp.name = "exp1"
         exp._teamspace = MagicMock()
         exp._metrics_store = MagicMock()
+        exp._metrics_store.id = "store-1"
+        exp._metrics_store.cluster_id = "acc-1"
         exp._artifacts_api = MagicMock()
         exp._stats = MagicMock()
         exp._stats.artifacts_logged = 0
-        exp._create_download_fn = lambda key: Experiment._create_download_fn(exp, key)
 
-        f = File("local.txt")
-        Experiment._set_static_file(exp, "remote/key", f)
+        with tempfile.NamedTemporaryFile(suffix=".txt") as tmp:
+            f = File(tmp.name)
+            Experiment._set_static_file(exp, "remote/key", f)
 
-        assert f.name == "remote/key"
+            assert f.name == "remote/key"
 
-    @patch.object(experiment_module, "Artifact")
-    def test_binds_download_fn(self, mock_artifact_cls):
-        mock_artifact_cls.return_value = MagicMock()
-
+    def test_binds_download_fn(self):
         exp = MagicMock(spec=Experiment)
         exp.name = "exp1"
         exp._teamspace = MagicMock()
         exp._metrics_store = MagicMock()
+        exp._metrics_store.id = "store-1"
+        exp._metrics_store.cluster_id = "acc-1"
         exp._artifacts_api = MagicMock()
         exp._stats = MagicMock()
         exp._stats.artifacts_logged = 0
-        exp._create_download_fn = lambda key: Experiment._create_download_fn(exp, key)
 
-        f = File("local.txt")
-        Experiment._set_static_file(exp, "remote/key", f)
+        with tempfile.NamedTemporaryFile(suffix=".txt") as tmp:
+            f = File(tmp.name)
+            Experiment._set_static_file(exp, "remote/key", f)
 
-        assert f._download_fn is not None
-        assert callable(f._download_fn)
+            assert f._download_fn is not None
+            assert callable(f._download_fn)
 
-    @patch.object(experiment_module, "Artifact")
-    def test_non_file_media_uses_media_api(self, mock_artifact_cls):
+    def test_non_file_media_uses_media_api(self):
         exp = MagicMock(spec=Experiment)
         exp._media_api = MagicMock()
         exp._metrics_store = MagicMock()
@@ -175,13 +181,56 @@ class TestAddStaticFileBindings:
         image = Image("local.png")
         Experiment._set_static_file(exp, "photo", image)
 
-        mock_artifact_cls.assert_not_called()
         exp._media_api.upload_media.assert_called_once()
         _, kwargs = exp._media_api.upload_media.call_args
         assert kwargs["name"] == "photo"
         assert kwargs["file_path"] == "local.png"
         assert kwargs["media_type"] == V1MediaType.IMAGE
         assert exp._stats.media_logged == 1
+
+    @patch.object(Model, "_log_model", return_value="owner/team/exp-model:latest")
+    def test_model_artifact_uses_litmodels(self, mock_log_model):
+        exp = Experiment.__new__(Experiment)
+        exp.name = "exp"
+        exp._teamspace = MagicMock()
+        exp._metrics_store = MagicMock()
+        exp._metrics_store.id = "store-1"
+        exp._metrics_store.cluster_id = "acc-1"
+        exp._metrics_store.tags = []
+        exp._metrics_api = MagicMock()
+        exp._update_metrics_store = MagicMock()
+        exp._stats = MagicMock()
+        exp._stats.models_logged = 0
+
+        model = Model("model.ckpt")
+        Experiment._set_static_file(exp, "checkpoint", model)
+
+        mock_log_model.assert_called_once()
+        assert model._model_name == "owner/team/exp-model:latest"
+        assert model._download_fn is not None
+        assert exp._stats.models_logged == 1
+
+    @patch.object(Model, "_log_model", return_value="owner/team/exp-model-object:latest")
+    def test_model_object_uses_litmodels(self, mock_log_model):
+        exp = Experiment.__new__(Experiment)
+        exp.name = "exp"
+        exp._teamspace = MagicMock()
+        exp._metrics_store = MagicMock()
+        exp._metrics_store.id = "store-1"
+        exp._metrics_store.cluster_id = "acc-1"
+        exp._metrics_store.tags = []
+        exp._metrics_api = MagicMock()
+        exp._update_metrics_store = MagicMock()
+        exp._stats = MagicMock()
+        exp._stats.models_logged = 0
+
+        model = Model(object())
+        Experiment._set_static_file(exp, "model-object", model)
+
+        mock_log_model.assert_called_once()
+        assert model._model_name == "owner/team/exp-model-object:latest"
+        assert model._load_fn is not None
+        assert exp._stats.models_logged == 1
 
 
 # ---------------------------------------------------------------------------
@@ -245,66 +294,61 @@ class TestAddFileSeries:
 class TestFileSeriesBindings:
     """Test that _log_file_series_value binds name and _download_fn."""
 
-    @patch.object(experiment_module, "Artifact")
-    def test_binds_name_with_index(self, mock_artifact_cls):
-        mock_artifact_cls.return_value = MagicMock()
-
+    def test_binds_name_with_index(self):
         exp = MagicMock(spec=Experiment)
         exp.name = "exp1"
         exp._teamspace = MagicMock()
         exp._metrics_store = MagicMock()
+        exp._metrics_store.id = "store-1"
+        exp._metrics_store.cluster_id = "acc-1"
         exp._artifacts_api = MagicMock()
         exp._stats = MagicMock()
         exp._stats.artifacts_logged = 0
-        exp._create_download_fn = lambda key: Experiment._create_download_fn(exp, key)
 
-        f = File("frame.png")
-        Experiment._log_file_series_value(exp, "images", f, 5)
+        with tempfile.NamedTemporaryFile(suffix=".png") as tmp:
+            f = File(tmp.name)
+            Experiment._log_file_series_value(exp, "images", f, 5)
 
-        assert f.name == "images/5"
+            assert f.name == "images/5"
 
-    @patch.object(experiment_module, "Artifact")
-    def test_binds_download_fn(self, mock_artifact_cls):
-        mock_artifact_cls.return_value = MagicMock()
-
+    def test_binds_download_fn(self):
         exp = MagicMock(spec=Experiment)
         exp.name = "exp1"
         exp._teamspace = MagicMock()
         exp._metrics_store = MagicMock()
+        exp._metrics_store.id = "store-1"
+        exp._metrics_store.cluster_id = "acc-1"
         exp._artifacts_api = MagicMock()
         exp._stats = MagicMock()
         exp._stats.artifacts_logged = 0
-        exp._create_download_fn = lambda key: Experiment._create_download_fn(exp, key)
 
-        f = File("frame.png")
-        Experiment._log_file_series_value(exp, "images", f, 0)
+        with tempfile.NamedTemporaryFile(suffix=".png") as tmp:
+            f = File(tmp.name)
+            Experiment._log_file_series_value(exp, "images", f, 0)
 
-        assert f._download_fn is not None
+            assert f._download_fn is not None
 
-    @patch.object(experiment_module, "Artifact")
-    def test_file_series_entry_saveable(self, mock_artifact_cls):
+    def test_file_series_entry_saveable(self):
         """Individual files in a series can be downloaded via .save()."""
-        mock_artifact = MagicMock()
-        mock_artifact.get.return_value = "/downloaded"
-        mock_artifact_cls.return_value = mock_artifact
-
         exp = MagicMock(spec=Experiment)
         exp.name = "exp1"
         exp._teamspace = MagicMock()
         exp._metrics_store = MagicMock()
+        exp._metrics_store.id = "store-1"
+        exp._metrics_store.cluster_id = "acc-1"
         exp._artifacts_api = MagicMock()
         exp._stats = MagicMock()
         exp._stats.artifacts_logged = 0
-        exp._create_download_fn = lambda key: Experiment._create_download_fn(exp, key)
 
-        f = File("frame.png")
-        Experiment._log_file_series_value(exp, "frames", f, 0)
+        with tempfile.NamedTemporaryFile(suffix=".png") as tmp, tempfile.TemporaryDirectory() as tmpdir:
+            f = File(tmp.name)
+            Experiment._log_file_series_value(exp, "frames", f, 0)
 
-        result = f.save("/output/frame.png")
-        assert result == "/downloaded"
+            download_path = os.path.join(tmpdir, "frame.png")
+            result = f.save(download_path)
+            assert result == download_path
 
-    @patch.object(experiment_module, "Artifact")
-    def test_non_file_series_uses_media_api(self, mock_artifact_cls):
+    def test_non_file_series_uses_media_api(self):
         exp = MagicMock(spec=Experiment)
         exp._media_api = MagicMock()
         exp._metrics_store = MagicMock()
@@ -339,13 +383,34 @@ class TestFileSeriesBindings:
         text = Text("hello world")
         Experiment._log_file_series_value(exp, "logs", text, 2, step=7)
 
-        mock_artifact_cls.assert_not_called()
         exp._media_api.upload_media.assert_called_once()
         _, kwargs = exp._media_api.upload_media.call_args
-        assert kwargs["name"] == "logs/2"
+        assert kwargs["name"] == "logs"
         assert kwargs["step"] == 7
         assert kwargs["media_type"] == V1MediaType.TEXT
         assert exp._stats.media_logged == 1
+
+    @patch.object(Model, "_log_model", return_value="owner/team/exp-model-series:latest")
+    def test_model_series_uses_series_key_for_remote_binding(self, mock_log_model):
+        exp = Experiment.__new__(Experiment)
+        exp.name = "exp"
+        exp._teamspace = MagicMock()
+        exp._metrics_store = MagicMock()
+        exp._metrics_store.id = "store-1"
+        exp._metrics_store.cluster_id = "acc-1"
+        exp._metrics_store.tags = []
+        exp._metrics_api = MagicMock()
+        exp._update_metrics_store = MagicMock()
+        exp._stats = MagicMock()
+        exp._stats.models_logged = 0
+
+        model = Model("checkpoint.ckpt")
+        Experiment._log_file_series_value(exp, "models", model, 2)
+
+        mock_log_model.assert_called_once()
+        assert model.version == "v3"
+        assert model.name == "models"
+        assert exp._stats.models_logged == 1
 
 
 # ---------------------------------------------------------------------------
@@ -419,6 +484,70 @@ class TestRetrieveFileSeries:
         assert list(exp["frames"]) == files
 
 
+class TestRetrieveRemoteModels:
+    """Test lazy model lookup when a key is missing from rebuilt state."""
+
+    def test_getitem_resolves_remote_model_from_teamspace_listing(self):
+        exp = _make_exp()
+        exp.name = "exp1"
+        exp._teamspace = MagicMock()
+        exp._teamspace.name = "teamspace"
+        exp._teamspace.owner.name = "owner"
+
+        model_info = MagicMock()
+        model_info.name = "models-latest"
+        exp._teamspace.list_models.return_value = [model_info]
+
+        version_info = MagicMock()
+        version_info.version = "new-artifact-v1"
+        version_info.upload_complete = True
+        version_info.metadata = {"litModels": "1.0.0"}
+        exp._teamspace.list_model_versions.return_value = [version_info]
+
+        result = exp["models/latest"]
+
+        assert isinstance(result, Model)
+        assert result._model_kind == "artifact"
+        assert result._model_name == "owner/teamspace/models-latest:new-artifact-v1"
+        assert exp._key_types["models/latest"] == "static_file"
+        assert exp._static_files["models/latest"] is result
+
+    def test_getitem_resolves_remote_model_series_from_multiple_versions(self):
+        exp = _make_exp()
+        exp.name = "exp1"
+        exp._teamspace = MagicMock()
+        exp._teamspace.name = "teamspace"
+        exp._teamspace.owner.name = "owner"
+
+        model_info = MagicMock()
+        model_info.name = "checkpoints"
+        exp._teamspace.list_models.return_value = [model_info]
+
+        version0 = MagicMock()
+        version0.version = "new-step-0"
+        version0.upload_complete = True
+        version0.metadata = {"litModels": "1.0.0"}
+
+        version1 = MagicMock()
+        version1.version = "new-step-1"
+        version1.upload_complete = True
+        version1.metadata = {"litModels": "1.0.0"}
+
+        exp._teamspace.list_model_versions.return_value = [version1, version0]
+
+        result = exp["checkpoints"]
+
+        assert isinstance(result, Series)
+        assert result._type == "file"
+        assert len(result) == 2
+        assert isinstance(result[0], Model)
+        assert isinstance(result[1], Model)
+        assert result[0]._model_name == "owner/teamspace/checkpoints:new-step-0"
+        assert result[1]._model_name == "owner/teamspace/checkpoints:new-step-1"
+        assert exp._key_types["checkpoints"] == "file_series"
+        assert exp._series["checkpoints"] is result
+
+
 class TestRetrieveArtifactsProperty:
     """Test experiment.artifacts property."""
 
@@ -475,6 +604,7 @@ class TestRebuildStateFiles:
         exp._static_files = {}
         exp._series = {}
         exp._metrics_store = MagicMock()
+        exp._update_metrics_store = MagicMock()
         exp._metrics_store.tags = []
         exp._metrics_api = MagicMock()
         exp._metrics_api.get_trackers_from_metrics_store.return_value = []
@@ -492,6 +622,59 @@ class TestRebuildStateFiles:
         assert f._download_fn is not None
         assert f.save("/tmp/out.csv") == "dl:results.csv:/tmp/out.csv"
 
+    def test_rebuild_loads_artifacts_from_logger_artifacts_api(self):
+        exp = MagicMock(spec=Experiment)
+        exp._key_types = {}
+        exp._metadata_values = {}
+        exp._static_files = {}
+        exp._series = {}
+        exp._metrics_store = MagicMock()
+        exp._metrics_store.id = "store-1"
+        exp._metrics_store.tags = []
+        exp._metrics_store.artifacts = []
+        exp._teamspace = MagicMock()
+        exp._teamspace.id = "ts-1"
+        exp._metrics_api = MagicMock()
+        exp._metrics_api.get_trackers_from_metrics_store.return_value = []
+        art = MagicMock()
+        art.path = "results.csv"
+        exp._metrics_api.client.lit_logger_service_list_logger_artifacts.return_value.logger_artifacts = [art]
+        exp._update_metrics_store = MagicMock()
+        exp._create_download_fn = lambda key: lambda path: f"dl:{key}:{path}"
+
+        Experiment._rebuild_state(exp)
+
+        assert "results.csv" in exp._static_files
+        exp._update_metrics_store.assert_called_once()
+
+    def test_rebuilds_artifact_series_from_logger_artifacts_api(self):
+        exp = MagicMock(spec=Experiment)
+        exp._key_types = {}
+        exp._metadata_values = {}
+        exp._static_files = {}
+        exp._series = {}
+        exp._metrics_store = MagicMock()
+        exp._metrics_store.id = "store-1"
+        exp._metrics_store.tags = []
+        exp._metrics_store.artifacts = []
+        exp._teamspace = MagicMock()
+        exp._teamspace.id = "ts-1"
+        exp._metrics_api = MagicMock()
+        exp._metrics_api.get_trackers_from_metrics_store.return_value = []
+        art0 = MagicMock()
+        art0.path = "reports/0"
+        art1 = MagicMock()
+        art1.path = "reports/1"
+        exp._metrics_api.client.lit_logger_service_list_logger_artifacts.return_value.logger_artifacts = [art1, art0]
+        exp._update_metrics_store = MagicMock()
+        exp._create_download_fn = lambda key: lambda path: f"dl:{key}:{path}"
+
+        Experiment._rebuild_state(exp)
+
+        assert exp._key_types["reports"] == "file_series"
+        assert isinstance(exp._series["reports"], Series)
+        assert [item.name for item in exp._series["reports"]] == ["reports/0", "reports/1"]
+
     def test_rebuild_does_not_overwrite_existing_keys(self):
         exp = MagicMock(spec=Experiment)
         exp._key_types = {"existing": "metric"}
@@ -499,6 +682,7 @@ class TestRebuildStateFiles:
         exp._static_files = {}
         exp._series = {}
         exp._metrics_store = MagicMock()
+        exp._update_metrics_store = MagicMock()
         exp._metrics_store.tags = []
         exp._metrics_api = MagicMock()
         exp._metrics_api.get_trackers_from_metrics_store.return_value = []
@@ -529,6 +713,7 @@ class TestRebuildStateFiles:
         exp._series = {}
         exp._metrics_store = MagicMock()
         exp._metrics_store.id = "store-1"
+        exp._update_metrics_store = MagicMock()
         exp._metrics_store.tags = []
         exp._metrics_store.artifacts = []
         exp._metrics_api = MagicMock()
@@ -571,6 +756,7 @@ class TestRebuildStateFiles:
         exp._series = {}
         exp._metrics_store = MagicMock()
         exp._metrics_store.id = "store-1"
+        exp._update_metrics_store = MagicMock()
         exp._metrics_store.tags = []
         exp._metrics_store.artifacts = []
         exp._metrics_api = MagicMock()
@@ -590,6 +776,51 @@ class TestRebuildStateFiles:
         assert isinstance(exp._series["logs"], Series)
         assert len(exp._series["logs"]) == 2
         assert all(isinstance(item, Text) for item in exp._series["logs"])
+
+    def test_rebuilds_same_name_media_series_with_wrapper(self):
+        media0 = MagicMock()
+        media0.name = "logs"
+        media0.step = 0
+        media0.storage_path = "media/logs-0.txt"
+        media0.cluster_id = "cloud-1"
+        media0.media_type = V1MediaType.TEXT
+        media0.id = "media-0"
+
+        media1 = MagicMock()
+        media1.name = "logs"
+        media1.step = 1
+        media1.storage_path = "media/logs-1.txt"
+        media1.cluster_id = "cloud-1"
+        media1.media_type = V1MediaType.TEXT
+        media1.id = "media-1"
+
+        exp = MagicMock(spec=Experiment)
+        exp._key_types = {}
+        exp._metadata_values = {}
+        exp._static_files = {}
+        exp._series = {}
+        exp._metrics_store = MagicMock()
+        exp._metrics_store.id = "store-1"
+        exp._update_metrics_store = MagicMock()
+        exp._metrics_store.tags = []
+        exp._metrics_store.artifacts = []
+        exp._metrics_api = MagicMock()
+        exp._metrics_api.get_trackers_from_metrics_store.return_value = []
+        exp._teamspace = MagicMock()
+        exp._teamspace.id = "ts-1"
+        exp._media_api = MagicMock()
+        exp._media_api.client.lit_logger_service_list_lit_logger_media.return_value.media = [media1, media0]
+        exp._wrap_media_file = lambda media_name, media_type: Experiment._wrap_media_file(exp, media_name, media_type)
+        exp._create_media_download_fn = lambda storage_path, cloud_account=None: Experiment._create_media_download_fn(
+            exp, storage_path, cloud_account
+        )
+
+        Experiment._rebuild_state(exp)
+
+        assert exp._key_types["logs"] == "file_series"
+        assert isinstance(exp._series["logs"], Series)
+        assert len(exp._series["logs"]) == 2
+        assert [item.path for item in exp._series["logs"]] == ["logs", "logs"]
 
 
 # ---------------------------------------------------------------------------

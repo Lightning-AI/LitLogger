@@ -2,13 +2,14 @@
 # Licensed under the Apache License, Version 2.0 (the "License");
 #     http://www.apache.org/licenses/LICENSE-2.0
 #
-"""Tests for File, Image, and Text media types."""
+"""Tests for File, Image, Text, and Model media types."""
 
 import os
 import tempfile
+from unittest.mock import MagicMock, patch
 
 import pytest
-from litlogger.media import File, Image, Text
+from litlogger.media import File, Image, Model, Text, _sanitize_version_for_model_name
 from litlogger.types import MediaType
 
 
@@ -515,3 +516,68 @@ class TestTextRepr:
         assert "Text(" in repr(t)
         assert t.path in repr(t)
         t._cleanup()
+
+
+class TestModelInit:
+    def test_init_with_path(self):
+        model = Model("checkpoint.ckpt")
+        assert model.path == "checkpoint.ckpt"
+        assert model._media_type == MediaType.MODEL
+        assert model._model_kind == "artifact"
+
+    def test_init_with_object(self):
+        model = Model(object())
+        assert model.path == ""
+        assert model._media_type == MediaType.MODEL
+        assert model._model_kind == "object"
+
+    def test_from_remote_artifact(self):
+        model = Model.from_remote("owner/team/model:latest", "artifact")
+        assert model._model_kind == "artifact"
+        assert model.path == "owner/team/model:latest"
+
+    def test_load_without_remote_context_raises(self):
+        model = Model(object())
+        with pytest.raises(RuntimeError, match="no remote load context"):
+            model.load()
+
+    def test_version_sanitization_replaces_colons(self):
+        assert _sanitize_version_for_model_name("2024-01-15:12:30:45") == "2024-01-15-12-30-45"
+
+    @patch("litlogger.media.save_model")
+    def test_log_model_creates_missing_staging_dir(self, mock_save_model):
+        teamspace = MagicMock()
+        teamspace.name = "teamspace"
+        teamspace.owner.name = "owner"
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            staging_dir = os.path.join(tmpdir, "nested", "staging")
+            model = Model(object(), staging_dir=staging_dir)
+
+            model._log_model(experiment_name="exp-name", teamspace=teamspace)
+
+            assert os.path.isdir(staging_dir)
+            mock_save_model.assert_called_once()
+            assert mock_save_model.call_args.kwargs["staging_dir"] == staging_dir
+
+    @patch("litlogger.media.upload_model")
+    def test_log_model_uses_exp_name_by_default(self, mock_upload_model):
+        teamspace = MagicMock()
+        teamspace.name = "teamspace"
+        teamspace.owner.name = "owner"
+
+        model = Model("checkpoint.ckpt", version="v1")
+        model._log_model(experiment_name="exp-name", teamspace=teamspace)
+
+        assert mock_upload_model.call_args.kwargs["name"] == "owner/teamspace/exp-name:v1"
+
+    @patch("litlogger.media.upload_model")
+    def test_log_model_uses_custom_name_override(self, mock_upload_model):
+        teamspace = MagicMock()
+        teamspace.name = "teamspace"
+        teamspace.owner.name = "owner"
+
+        model = Model("checkpoint.ckpt", name="custom-model", version="v1")
+        model._log_model(experiment_name="exp-name", teamspace=teamspace)
+
+        assert mock_upload_model.call_args.kwargs["name"] == "owner/teamspace/custom-model:v1"

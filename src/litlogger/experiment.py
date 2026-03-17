@@ -16,10 +16,8 @@
 import atexit
 import contextlib
 import os
-import re
 import signal
 import sys
-from datetime import datetime
 from multiprocessing import JoinableQueue
 from threading import Event
 from time import sleep
@@ -34,14 +32,14 @@ from litlogger.api.auth_api import AuthApi
 from litlogger.api.media_api import MediaApi
 from litlogger.api.metrics_api import MetricsApi
 from litlogger.api.utils import _resolve_teamspace, build_experiment_url, get_accessible_url, get_guest_url
-from litlogger.artifacts import Artifact
 from litlogger.background import _BackgroundThread
 from litlogger.capture import rerun_and_record
-from litlogger.experiment_legacy import LegacyExperiment, _MetadataValue
-from litlogger.media import File, Image, Text
+from litlogger.experiment_legacy import LegacyExperiment, MetadataValue
+from litlogger.experiment_support import ExperimentIOSupport, ExperimentSeriesSupport, ExperimentStateSupport
+from litlogger.media import File, Model
 from litlogger.printer import Printer, RunStats
 from litlogger.series import Series
-from litlogger.types import MediaType, Metrics, MetricValue, PhaseType
+from litlogger.types import MediaType, Metrics
 
 
 class Experiment(LegacyExperiment):
@@ -103,6 +101,8 @@ class Experiment(LegacyExperiment):
         self._series: dict[str, Series] = {}
         self._metadata_values: dict[str, str] = {}
         self._static_files: dict[str, File] = {}
+        self._model_lookup_cache: dict[str, Model | Series | None] = {}
+        self._missing_model_keys: set[str] = set()
 
         # Initialize printer and stats tracking
         self._printer = Printer(verbose=verbose)
@@ -218,7 +218,7 @@ class Experiment(LegacyExperiment):
         if key in self._key_types:
             kt = self._key_types[key]
             if kt == "metadata":
-                return _MetadataValue(key, self._metadata_values[key])  # type: ignore[return-value]
+                return MetadataValue(key, self._metadata_values[key])  # type: ignore[return-value]
             if kt == "static_file":
                 return self._static_files[key]  # type: ignore[return-value]
             # 'metric' or 'file_series'
@@ -230,6 +230,16 @@ class Experiment(LegacyExperiment):
                     series._type = "file"
                 self._series[key] = series
             return self._series[key]
+        remote_model = self._resolve_remote_model(key)
+        if isinstance(remote_model, Series):
+            self._key_types[key] = "file_series"
+            remote_model._type = "file"
+            self._series[key] = remote_model
+            return remote_model
+        if isinstance(remote_model, Model):
+            self._key_types[key] = "static_file"
+            self._static_files[key] = remote_model
+            return remote_model  # type: ignore[return-value]
         # New key - return a series proxy for future appends
         if key not in self._series:
             self._series[key] = Series(self, key)
@@ -294,147 +304,37 @@ class Experiment(LegacyExperiment):
     # ---- Internal helpers ----
 
     def _register_key_type(self, key: str, key_type: str) -> None:
-        """Register a key's type, ensuring uniqueness across all key types.
-
-        Args:
-            key: The data key.
-            key_type: One of 'metric', 'file_series', 'metadata', 'static_file'.
-
-        Raises:
-            KeyError: If the key is already registered with a different type.
-        """
-        if key in self._key_types:
-            if self._key_types[key] != key_type:
-                raise KeyError(f"Key {key!r} is already used as {self._key_types[key]}, cannot use as {key_type}")
-            return  # Already registered with same type
-        self._key_types[key] = key_type
+        ExperimentSeriesSupport.register_key_type(self, key, key_type)
 
     def _rebuild_state(self) -> None:
-        """Rebuild local state from an existing experiment's remote data.
-
-        Called when connecting to an experiment that already exists. Populates
-        metadata and metric key types from the metrics store.
-        """
-        # Rebuild metadata from tags
-        tags = getattr(self._metrics_store, "tags", None) or []
-        for tag in tags:
-            if tag.from_code:
-                self._key_types[tag.name] = "metadata"
-                self._metadata_values[tag.name] = tag.value
-
-        # Rebuild metric key types from trackers
-        trackers = self._metrics_api.get_trackers_from_metrics_store(self._metrics_store)
-        if trackers:
-            for name in trackers:
-                self._key_types[name] = "metric"
-
-        # Rebuild artifact key types from registered artifacts
-        artifacts = getattr(self._metrics_store, "artifacts", None) or []
-        for artifact in artifacts:
-            key = artifact.path if hasattr(artifact, "path") else str(artifact)
-            if key not in self._key_types:
-                self._key_types[key] = "static_file"
-                file = File(key)
-                file.name = key
-                file._download_fn = self._create_download_fn(key)
-                self._static_files[key] = file
-
-        with contextlib.suppress(AttributeError):
-            media_response = self._media_api.client.lit_logger_service_list_lit_logger_media(
-                project_id=self._teamspace.id,
-                metrics_stream_id=self._metrics_store.id,
-            )
-            media_items = getattr(media_response, "media", None)
-            if not isinstance(media_items, list):
-                media_items = []
-            series_entries: dict[str, list[tuple[int, File]]] = {}
-            for media in media_items:
-                name = media.name or media.storage_path or media.id
-                storage_path = media.storage_path or name
-                wrapped = self._wrap_media_file(name, media.media_type)
-                wrapped.name = name
-                wrapped._download_fn = self._create_media_download_fn(storage_path, media.cluster_id)
-
-                match = re.match(r"^(?P<key>.+)/(?P<index>\d+)$", name)
-                if match:
-                    key = match.group("key")
-                    index = int(match.group("index"))
-                    if key in self._key_types and self._key_types[key] != "file_series":
-                        continue
-                    self._key_types[key] = "file_series"
-                    series_entries.setdefault(key, []).append((index, wrapped))
-                    continue
-
-                if name not in self._key_types:
-                    self._key_types[name] = "static_file"
-                    self._static_files[name] = wrapped
-
-            for key, entries in series_entries.items():
-                series = Series(self, key)
-                series._type = "file"
-                series._values = [value for _, value in sorted(entries, key=lambda item: item[0])]
-                self._series[key] = series
+        ExperimentStateSupport.rebuild_state(self)
 
     def _create_download_fn(self, key: str) -> Callable[[str], str]:
-        """Create a download function for a given artifact key."""
+        return ExperimentStateSupport.create_download_fn(self, key)
 
-        def _download(path: str) -> str:
-            artifact = Artifact(
-                path=path,
-                experiment_name=self.name,
-                teamspace=self._teamspace,
-                metrics_store=self._metrics_store,
-                client=self._artifacts_api.client,
-                remote_path=key,
-            )
-            return artifact.get()
+    def _resolve_remote_model(self, key: str) -> Model | Series | None:
+        return ExperimentStateSupport.resolve_remote_model(self, key)
 
-        return _download
+    def _bind_remote_model(self, key: str, value: Model, model_name: str) -> None:
+        ExperimentStateSupport.bind_remote_model(self, key, value, model_name)
+
+    def _model_experiment_name(self, key: str) -> str:
+        return ExperimentStateSupport.model_experiment_name(self, key)
+
+    def _code_tags(self) -> dict[str, str]:
+        return ExperimentStateSupport.code_tags(self)
 
     def _create_media_download_fn(self, storage_path: str, cloud_account: str | None = None) -> Callable[[str], str]:
-        """Create a download function for a media entry."""
-
-        def _download(path: str) -> str:
-            self._teamspace.download_file(storage_path, file_path=path, cloud_account=cloud_account)
-            return path
-
-        return _download
+        return ExperimentStateSupport.create_media_download_fn(self, storage_path, cloud_account)
 
     def _wrap_media_file(self, media_name: str, media_type: V1MediaType) -> File:
-        """Create the appropriate file wrapper for a media entry."""
-        if media_type == V1MediaType.IMAGE:
-            return Image(media_name)
-        if media_type == V1MediaType.TEXT:
-            text = Text("")
-            text.path = media_name
-            return text
-        return File(media_name)
+        return ExperimentStateSupport.wrap_media_file(self, media_name, media_type)
 
     def _log_metric_value(self, key: str, value: float, step: int | None = None) -> None:
-        """Internal: log a single metric value to the background queue.
-
-        Args:
-            key: Metric name.
-            value: Metric value.
-            step: Optional step number (used by legacy API).
-        """
-        if self._manager.exception is not None:
-            raise self._manager.exception
-
-        created_at = datetime.now() if self.store_created_at else None
-        actual_step = step if self.store_step else None
-        mv = MetricValue(value=value, created_at=created_at, step=actual_step)
-        batch: dict[str, Metrics] = {key: Metrics(name=key, values=[mv])}
-        self._metrics_queue.put(batch)
-        self._stats.record_metric(key, value)
+        ExperimentSeriesSupport.log_metric_value(self, key, value, step=step)
 
     def _media_type_to_v1(self, media_type: MediaType) -> V1MediaType:
-        """Map litlogger media types to Lightning SDK media types."""
-        if media_type == MediaType.IMAGE:
-            return V1MediaType.IMAGE
-        if media_type == MediaType.TEXT:
-            return V1MediaType.TEXT
-        raise ValueError(f"Unsupported media type for file upload: {media_type}")
+        return ExperimentIOSupport.media_type_to_v1(self, media_type)
 
     def _upload_media(
         self,
@@ -445,18 +345,7 @@ class Experiment(LegacyExperiment):
         epoch: int | None = None,
         caption: str | None = None,
     ) -> None:
-        """Upload media through the media API."""
-        self._media_api.upload_media(
-            experiment_id=self._metrics_store.id,
-            teamspace=self._teamspace,
-            file_path=file_path,
-            name=name,
-            media_type=self._media_type_to_v1(media_type),
-            step=step,
-            epoch=epoch,
-            caption=caption,
-        )
-        self._stats.media_logged += 1
+        ExperimentIOSupport.upload_media(self, name, file_path, media_type, step=step, epoch=epoch, caption=caption)
 
     def _upload_media_value(
         self,
@@ -467,100 +356,22 @@ class Experiment(LegacyExperiment):
         epoch: int | None = None,
         caption: str | None = None,
     ) -> None:
-        """Upload a non-file media value using the media API."""
-        upload_path = value._get_upload_path()
-        media_name = name or key
-        self._upload_media(media_name, upload_path, value._media_type, step=step, epoch=epoch, caption=caption)
-        value.name = media_name
-        value._cleanup()
+        ExperimentIOSupport.upload_media_value(self, key, value, name=name, step=step, epoch=epoch, caption=caption)
+
+    def _upload_model_value(self, key: str, value: Model) -> None:
+        ExperimentIOSupport.upload_model_value(self, key, value)
 
     def _log_file_series_value(self, key: str, value: File, index: int, step: int | None = None) -> None:
-        """Internal: upload a file as part of a time series.
-
-        Args:
-            key: Series key.
-            value: File to upload.
-            index: Index in the series (used for naming).
-            step: Optional step to associate with media uploads.
-        """
-        if value._media_type != MediaType.FILE:
-            self._upload_media_value(key, value, name=f"{key}/{index}", step=step)
-            return
-
-        upload_path = value._get_upload_path()
-        remote_path = f"{key}/{index}"
-        artifact = Artifact(
-            path=upload_path,
-            experiment_name=self.name,
-            teamspace=self._teamspace,
-            metrics_store=self._metrics_store,
-            client=self._artifacts_api.client,
-            remote_path=remote_path,
-        )
-        artifact.log()
-        self._stats.artifacts_logged += 1
-        value._cleanup()
-
-        # Bind remote name and download capability
-        value.name = remote_path
-        value._download_fn = self._create_download_fn(remote_path)
+        ExperimentIOSupport.log_file_series_value(self, key, value, index, step=step)
 
     def _set_metadata_value(self, key: str, value: str) -> None:
-        """Internal: set a metadata value and push to API.
-
-        Args:
-            key: Metadata key.
-            value: Metadata value.
-        """
-        current_tags = self.metadata
-        current_tags[key] = value
-        self._metrics_api.update_experiment_metrics(
-            teamspace_id=self._teamspace.id,
-            metrics_store_id=self._metrics_store.id,
-            phase=PhaseType.RUNNING,
-            metadata=current_tags,
-        )
+        ExperimentIOSupport.set_metadata_value(self, key, value)
 
     def _set_static_file(self, key: str, value: File) -> None:
-        """Internal: upload a static file artifact.
-
-        Args:
-            key: Artifact key (used as remote path).
-            value: File to upload.
-        """
-        if value._media_type != MediaType.FILE:
-            self._upload_media_value(key, value)
-            return
-
-        upload_path = value._get_upload_path()
-        artifact = Artifact(
-            path=upload_path,
-            experiment_name=self.name,
-            teamspace=self._teamspace,
-            metrics_store=self._metrics_store,
-            client=self._artifacts_api.client,
-            remote_path=key,
-        )
-        artifact.log()
-        self._stats.artifacts_logged += 1
-        value._cleanup()
-
-        # Bind remote name and download capability so self[key].save(path) works
-        value.name = key
-        value._download_fn = self._create_download_fn(key)
+        ExperimentIOSupport.set_static_file(self, key, value)
 
     def _ensure_series(self, key: str) -> Series:
-        """Get or create a series proxy for a key.
-
-        Args:
-            key: The series key.
-
-        Returns:
-            The Series object for this key.
-        """
-        if key not in self._series:
-            self._series[key] = Series(self, key)
-        return self._series[key]
+        return ExperimentSeriesSupport.ensure_series(self, key)
 
     # ---- Properties ----
 
@@ -589,9 +400,7 @@ class Experiment(LegacyExperiment):
         Returns:
             dict[str, str]: The metadata dictionary with key-value pairs from code-defined tags.
         """
-        self._update_metrics_store()
-        tags = getattr(self._metrics_store, "tags", None) or []
-        return {tag.name: tag.value for tag in tags if tag.from_code}
+        return Experiment._code_tags(self)
 
     @property
     def metrics(self) -> dict[str, Series]:
@@ -653,15 +462,13 @@ class Experiment(LegacyExperiment):
             sleep(0.1)
 
         if self.save_logs and os.path.exists(self.terminal_logs_path):
-            artifact = Artifact(
-                path=self.terminal_logs_path,
-                experiment_name=self.name,
+            File(self.terminal_logs_path)._log_artifact(
                 teamspace=self._teamspace,
                 metrics_store=self._metrics_store,
-                client=self._artifacts_api.client,
                 remote_path="console_output.txt",
+                client=self._artifacts_api.client,
+                experiment_name=self.name,
             )
-            artifact.log()
 
         # Print completion summary with stats
         if print_summary:
@@ -681,14 +488,7 @@ class Experiment(LegacyExperiment):
         )
 
     def _update_metrics_store(self) -> None:
-        """Re-fetch the metrics store from the API to refresh local state (tags, trackers, etc.)."""
-        resp = self._metrics_api.get_experiment_metrics_by_name(
-            self._teamspace.id,
-            name=self._metrics_store.name,
-        )
-
-        if resp is not None:
-            self._metrics_store = resp
+        ExperimentStateSupport.update_metrics_store(self)
 
     def _signal_handler(self, signum: int, frame: FrameType | None) -> None:
         """Handle termination signals by calling finalize().

@@ -23,8 +23,8 @@ from lightning_sdk import Teamspace
 from typing_extensions import Self
 
 from litlogger.api.media_api import MediaApi
-from litlogger.artifacts import Model, ModelArtifact
 from litlogger.media import File
+from litlogger.media import Model as MediaModel
 from litlogger.series import Series
 from litlogger.types import MediaType
 
@@ -41,7 +41,7 @@ def _warn_deprecated(method: str, message: str) -> None:
         warnings.warn(message, DeprecationWarning, stacklevel=3)
 
 
-class _MetadataValue(str):
+class MetadataValue(str):
     """String-like metadata value that rejects time-series operations."""
 
     __slots__ = ("_key",)
@@ -298,14 +298,12 @@ class LegacyExperiment:
         _warn_deprecated(
             "log_model_artifact", 'log_model_artifact() is deprecated. Use experiment["key"] = File("path") instead.'
         )
-        model_artifact = ModelArtifact(
-            path=path,
+        model_artifact = MediaModel(path, version=version or "latest")
+        model_artifact._log_model(
             experiment_name=self.name,
             teamspace=self._teamspace,
-            version=version or "latest",
-            verbose=verbose,
+            cloud_account=getattr(self._metrics_store, "cluster_id", None),
         )
-        model_artifact.log()
         self._stats.models_logged += 1
         if verbose:
             self._printer.artifact_logged(path, f"model artifact: {path}")
@@ -331,14 +329,12 @@ class LegacyExperiment:
             "get_model_artifact",
             'get_model_artifact() is deprecated. Use experiment["key"] to access model artifacts instead.',
         )
-        model_artifact = ModelArtifact(
-            path=path,
-            experiment_name=self.name,
-            teamspace=self._teamspace,
-            version=version or "latest",
-            verbose=verbose,
+        model_artifact = MediaModel(path, version=version or "latest")
+        model_artifact._bind_remote_model(
+            key=path,
+            model_name=model_artifact._registry_name(self.name, self._teamspace),
         )
-        result = model_artifact.get()
+        result = model_artifact.save(path)
         if verbose:
             self._printer.artifact_retrieved(path)
         return result
@@ -372,20 +368,16 @@ class LegacyExperiment:
             str: Information about the uploaded model (details from litmodels).
         """
         _warn_deprecated("log_model", 'log_model() is deprecated. Use experiment["key"] = File("path") instead.')
-        model_obj = Model(
-            model=model,
+        model_obj = MediaModel(model, version=version or self.name, metadata=metadata, staging_dir=staging_dir)
+        model_name = model_obj._log_model(
             experiment_name=self.name,
             teamspace=self._teamspace,
-            version=version or "latest",
-            verbose=verbose,
-            metadata=metadata,
-            staging_dir=staging_dir,
+            cloud_account=getattr(self._metrics_store, "cluster_id", None),
         )
-        model_obj.log()
         self._stats.models_logged += 1
         if verbose:
             self._printer.print_success("Logged model object")
-        return model_obj.name
+        return model_name
 
     def get_model(self, staging_dir: str | None = None, verbose: bool = False, version: str | None = None) -> Any:
         """Get a model object using litmodels load_model.
@@ -402,15 +394,12 @@ class LegacyExperiment:
             The loaded model object.
         """
         _warn_deprecated("get_model", 'get_model() is deprecated. Use experiment["key"] to access models instead.')
-        model_obj = Model(
-            model=None,
-            experiment_name=self.name,
-            teamspace=self._teamspace,
-            version=version or "latest",
-            verbose=verbose,
-            staging_dir=staging_dir,
+        model_obj = MediaModel(object(), version=version or "latest", staging_dir=staging_dir)
+        model_obj._bind_remote_model(
+            key=self.name,
+            model_name=model_obj._registry_name(self.name, self._teamspace),
         )
-        result = model_obj.get()
+        result = model_obj.load(staging_dir)
         if verbose:
             self._printer.print_success("Retrieved model object")
         return result

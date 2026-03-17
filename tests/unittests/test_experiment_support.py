@@ -69,6 +69,17 @@ class TestExperimentIOSupport:
         exp._upload_media_value.assert_called_once_with("logs", text, name="logs", step=7)
         exp._upload_model_value.assert_not_called()
 
+    def test_log_file_series_value_auto_versions_models_from_v1(self):
+        exp = MagicMock(spec=Experiment)
+        exp._upload_model_value = MagicMock()
+
+        model = Model("checkpoint.ckpt")
+
+        ExperimentIOSupport.log_file_series_value(exp, "checkpoints", model, 0, step=0)
+
+        assert model.version == "v1"
+        exp._upload_model_value.assert_called_once_with("checkpoints", model)
+
 
 class TestExperimentStateSupport:
     """Focused reconstruction tests for ExperimentStateSupport."""

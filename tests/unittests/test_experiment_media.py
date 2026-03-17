@@ -391,7 +391,7 @@ class TestFileSeriesBindings:
         assert exp._stats.media_logged == 1
 
     @patch.object(Model, "_log_model", return_value="owner/team/exp-model-series:latest")
-    def test_model_series_uses_indexed_model_key(self, mock_log_model):
+    def test_model_series_uses_series_key_for_remote_binding(self, mock_log_model):
         exp = Experiment.__new__(Experiment)
         exp.name = "exp"
         exp._teamspace = MagicMock()
@@ -408,8 +408,8 @@ class TestFileSeriesBindings:
         Experiment._log_file_series_value(exp, "models", model, 2)
 
         mock_log_model.assert_called_once()
-        assert model.version == "v2"
-        assert model.name == "models/2"
+        assert model.version == "v3"
+        assert model.name == "models"
         assert exp._stats.models_logged == 1
 
 

@@ -350,8 +350,8 @@ class ExperimentIOSupport:
             if not isinstance(value, Model):
                 raise TypeError("Model media values must use the Model wrapper.")
             if not value._version_provided:
-                value.version = f"v{index}"
-            exp._upload_model_value(f"{key}/{index}", value)
+                value.version = f"v{index + 1}"
+            exp._upload_model_value(key, value)
             return
 
         if value._media_type != MediaType.FILE:

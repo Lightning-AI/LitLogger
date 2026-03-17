@@ -25,8 +25,8 @@ New Dict-Style API
 Legacy Helper API
 =================
 
-The legacy helper method remains available and is still what
-:class:`~litlogger.logger.LightningLogger` exposes directly.
+The legacy helper method remains available for existing code, but new
+standalone code should prefer the dict-style wrappers.
 
 Logging Images
 ==============
@@ -75,18 +75,19 @@ Supported Types
 When ``kind`` is not provided, LitLogger guesses the type from the file's MIME
 type. If the type cannot be determined, a ``ValueError`` is raised.
 
-Using with LightningLogger
-==========================
+Deprecated Compatibility Logger
+===============================
 
-The :class:`~litlogger.logger.LightningLogger` exposes the same
-:meth:`litlogger.log_media() <litlogger.experiment.Experiment.log_media>`
-method, which you can call from callbacks or your LightningModule:
+:class:`~litlogger.logger.LightningLogger` is deprecated. For Lightning or
+Fabric integrations, prefer
+:class:`lightning:lightning.pytorch.loggers.LitLogger` and use its media
+helpers from callbacks or your LightningModule.
 
 .. code-block:: python
 
-   from litlogger import LightningLogger
+   from lightning.pytorch.loggers import LitLogger
 
-   logger = LightningLogger(name="vision-run")
+   logger = LitLogger(name="vision-run")
 
    logger.log_media(
        "val_sample",

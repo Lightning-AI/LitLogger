@@ -9,7 +9,7 @@ This reference documents the public LitLogger surface:
 - the :class:`~litlogger.experiment.Experiment` class
 - file, media, and model wrappers
 - series and public enums
-- :class:`~litlogger.logger.LightningLogger`
+- :class:`~litlogger.logger.LightningLogger` (deprecated compatibility alias)
 
 Initialization
 ==============
@@ -107,6 +107,11 @@ LightningLogger
 ===============
 
 .. currentmodule:: litlogger.logger
+
+Deprecated compatibility alias for Lightning/Fabric integration. Prefer
+:class:`lightning:lightning.pytorch.loggers.LitLogger`, or use
+:func:`litlogger.init.init` and the dict-style
+:class:`~litlogger.experiment.Experiment` API for standalone usage.
 
 .. autoclass:: LightningLogger
    :members:

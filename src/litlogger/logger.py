@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Fabric/PyTorch Lightning logger that sends metrics and artifacts to Lightning.ai."""
+"""Deprecated compatibility logger for Lightning/Fabric integrations."""
 
 import logging
 import os
@@ -37,6 +37,17 @@ _ScanCheckpointsFn = Callable[[Any, dict[Any, Any]], list[tuple[float, str, floa
 
 log = logging.getLogger(__name__)
 
+
+def _warn_lightning_logger_deprecated() -> None:
+    warnings.warn(
+        "litlogger.LightningLogger is deprecated. Use lightning.pytorch.loggers.LitLogger "
+        "(or pytorch_lightning.loggers.LitLogger) for Lightning/Fabric integration, "
+        "or use litlogger.init() and the dict-style Experiment API for standalone usage.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+
+
 # Backwards compatibility -- use LitLogger lightning class if available
 # TODO: remove once pytorch lightning is released and we updated the code in frontend
 try:
@@ -56,7 +67,18 @@ except ImportError:
 if _base_classes:
 
     class LightningLogger(*_base_classes):  # type: ignore[misc]
-        pass
+        """Deprecated compatibility alias for the upstream Lightning LitLogger.
+
+        .. deprecated:: 2026.03.17
+
+           Use :class:`lightning:lightning.pytorch.loggers.LitLogger` for
+           Lightning/Fabric integration, or use :func:`litlogger.init.init` and the
+           dict-style ``Experiment`` API for standalone scripts.
+        """
+
+        def __init__(self, *args: Any, **kwargs: Any) -> None:
+            _warn_lightning_logger_deprecated()
+            super().__init__(*args, **kwargs)
 
 else:
     _scan_checkpoints: _ScanCheckpointsFn
@@ -93,7 +115,14 @@ else:
         return cast(_F, rank_zero_experiment(fn))
 
     class LightningLogger(*_base_classes):  # type: ignore[misc, no-redef]
-        """Logger that streams metrics and artifacts to the Lightning.ai platform."""
+        """Deprecated compatibility logger for Lightning/Fabric integrations.
+
+        .. deprecated:: 2026.03.17
+
+           Use :class:`lightning:lightning.pytorch.loggers.LitLogger` for
+           Lightning/Fabric integration, or use :func:`litlogger.init.init` and the
+           dict-style ``Experiment`` API for standalone scripts.
+        """
 
         LOGGER_JOIN_CHAR = "-"
 
@@ -108,6 +137,12 @@ else:
             checkpoint_name: str | None = None,
         ) -> None:
             """Initialize the LightningLogger.
+
+            .. deprecated:: 2026.03.17
+
+               Use :class:`lightning:lightning.pytorch.loggers.LitLogger` for
+               Lightning/Fabric integration, or use :func:`litlogger.init` and
+               the dict-style ``Experiment`` API for standalone scripts.
 
             Args:
                 root_dir: Folder where logs and metadata are stored (default: ./lightning_logs).
@@ -144,6 +179,7 @@ else:
                 trainer.test(model, data_module)
 
             """
+            _warn_lightning_logger_deprecated()
             self._root_dir = os.fspath(root_dir or "./lightning_logs")
             self._name = name or _create_name()
             self._teamspace = teamspace

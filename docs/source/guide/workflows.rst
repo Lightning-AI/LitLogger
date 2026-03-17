@@ -31,7 +31,9 @@ user-facing API going forward.
 Lightning and Fabric
 ====================
 
-Use :class:`~litlogger.logger.LightningLogger` with a Trainer or Fabric loop.
+Use :class:`lightning:lightning.pytorch.loggers.LitLogger` with a Trainer or
+Fabric loop. The local :class:`~litlogger.logger.LightningLogger` alias is
+deprecated.
 
 Files, Media, and Models
 ========================

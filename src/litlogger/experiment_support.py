@@ -149,6 +149,7 @@ class ExperimentStateSupport:
         experiments can reconstruct ``Model`` values without storing them in
         frontend-visible metadata tags.
         """
+        exp._update_metrics_store()
         tags = getattr(exp._metrics_store, "tags", None) or []
         for tag in tags:
             if tag.from_code:

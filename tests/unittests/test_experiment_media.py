@@ -604,6 +604,7 @@ class TestRebuildStateFiles:
         exp._static_files = {}
         exp._series = {}
         exp._metrics_store = MagicMock()
+        exp._update_metrics_store = MagicMock()
         exp._metrics_store.tags = []
         exp._metrics_api = MagicMock()
         exp._metrics_api.get_trackers_from_metrics_store.return_value = []
@@ -621,6 +622,31 @@ class TestRebuildStateFiles:
         assert f._download_fn is not None
         assert f.save("/tmp/out.csv") == "dl:results.csv:/tmp/out.csv"
 
+    def test_rebuild_refreshes_metrics_store_before_loading_artifacts(self):
+        exp = MagicMock(spec=Experiment)
+        exp._key_types = {}
+        exp._metadata_values = {}
+        exp._static_files = {}
+        exp._series = {}
+        exp._metrics_store = MagicMock()
+        exp._metrics_store.tags = []
+        exp._metrics_store.artifacts = []
+        exp._metrics_api = MagicMock()
+        exp._metrics_api.get_trackers_from_metrics_store.return_value = []
+
+        def _refresh() -> None:
+            art = MagicMock()
+            art.path = "results.csv"
+            exp._metrics_store.artifacts = [art]
+
+        exp._update_metrics_store = MagicMock(side_effect=_refresh)
+        exp._create_download_fn = lambda key: lambda path: f"dl:{key}:{path}"
+
+        Experiment._rebuild_state(exp)
+
+        assert "results.csv" in exp._static_files
+        exp._update_metrics_store.assert_called_once()
+
     def test_rebuild_does_not_overwrite_existing_keys(self):
         exp = MagicMock(spec=Experiment)
         exp._key_types = {"existing": "metric"}
@@ -628,6 +654,7 @@ class TestRebuildStateFiles:
         exp._static_files = {}
         exp._series = {}
         exp._metrics_store = MagicMock()
+        exp._update_metrics_store = MagicMock()
         exp._metrics_store.tags = []
         exp._metrics_api = MagicMock()
         exp._metrics_api.get_trackers_from_metrics_store.return_value = []
@@ -658,6 +685,7 @@ class TestRebuildStateFiles:
         exp._series = {}
         exp._metrics_store = MagicMock()
         exp._metrics_store.id = "store-1"
+        exp._update_metrics_store = MagicMock()
         exp._metrics_store.tags = []
         exp._metrics_store.artifacts = []
         exp._metrics_api = MagicMock()
@@ -700,6 +728,7 @@ class TestRebuildStateFiles:
         exp._series = {}
         exp._metrics_store = MagicMock()
         exp._metrics_store.id = "store-1"
+        exp._update_metrics_store = MagicMock()
         exp._metrics_store.tags = []
         exp._metrics_store.artifacts = []
         exp._metrics_api = MagicMock()
@@ -744,6 +773,7 @@ class TestRebuildStateFiles:
         exp._series = {}
         exp._metrics_store = MagicMock()
         exp._metrics_store.id = "store-1"
+        exp._update_metrics_store = MagicMock()
         exp._metrics_store.tags = []
         exp._metrics_store.artifacts = []
         exp._metrics_api = MagicMock()

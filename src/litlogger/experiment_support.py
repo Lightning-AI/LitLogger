@@ -162,14 +162,42 @@ class ExperimentStateSupport:
                 exp._key_types[name] = "metric"
 
         artifacts = getattr(exp._metrics_store, "artifacts", None) or []
+        with contextlib.suppress(AttributeError):
+            artifact_response = exp._metrics_api.client.lit_logger_service_list_logger_artifacts(
+                project_id=exp._teamspace.id,
+                metrics_stream_id=exp._metrics_store.id,
+            )
+            listed_artifacts = getattr(artifact_response, "logger_artifacts", None)
+            if isinstance(listed_artifacts, list):
+                artifacts = listed_artifacts
+        artifact_series_entries: dict[str, list[tuple[int, File]]] = {}
         for artifact in artifacts:
-            key = artifact.path if hasattr(artifact, "path") else str(artifact)
-            if key not in exp._key_types:
-                exp._key_types[key] = "static_file"
-                file = File(key)
-                file.name = key
-                file._download_fn = exp._create_download_fn(key)
-                exp._static_files[key] = file
+            name = artifact.path if hasattr(artifact, "path") else str(artifact)
+            wrapped = File(name)
+            wrapped.name = name
+            wrapped._download_fn = exp._create_download_fn(name)
+
+            # Treat names like "reports/3" as the 4th entry of a file series keyed by "reports".
+            match = re.match(r"^(?P<key>.+)/(?P<index>\d+)$", name)
+            if match:
+                key = match.group("key")
+                index = int(match.group("index"))
+                if key in exp._key_types and exp._key_types[key] != "file_series":
+                    continue
+                exp._key_types[key] = "file_series"
+                artifact_series_entries.setdefault(key, []).append((index, wrapped))
+                continue
+
+            if name in exp._key_types:
+                continue
+            exp._key_types[name] = "static_file"
+            exp._static_files[name] = wrapped
+
+        for key, file_entries in artifact_series_entries.items():
+            series = Series(exp, key)
+            series._type = "file"
+            series._values = [value for _, value in sorted(file_entries)]
+            exp._series[key] = series
 
         with contextlib.suppress(AttributeError):
             media_response = exp._media_api.client.lit_logger_service_list_lit_logger_media(
@@ -188,6 +216,7 @@ class ExperimentStateSupport:
                 wrapped.name = name
                 wrapped._download_fn = exp._create_media_download_fn(storage_path, media.cluster_id)
 
+                # Treat names like "logs/3" as the 4th entry of a media series keyed by "logs".
                 match = re.match(r"^(?P<key>.+)/(?P<index>\d+)$", name)
                 if match:
                     key = match.group("key")

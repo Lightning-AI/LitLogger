@@ -2,13 +2,17 @@
 API Reference
 #############
 
-Module-Level API
-================
+This reference documents the public LitLogger surface:
 
-Top-level functions available directly on the ``litlogger`` module.
+- initialization functions
+- module-level compatibility helpers
+- the :class:`~litlogger.experiment.Experiment` class
+- file, media, and model wrappers
+- series and public enums
+- :class:`~litlogger.logger.LightningLogger`
 
 Initialization
---------------
+==============
 
 .. currentmodule:: litlogger.init
 
@@ -18,12 +22,11 @@ Initialization
 
 .. autofunction:: get_metadata
 
-Logging Functions
------------------
+Module-Level Helpers
+====================
 
-These functions are available as module-level callables after
-``litlogger.init()`` is called. They delegate to the underlying
-:class:`~litlogger.experiment.Experiment` instance.
+These helpers are available on the top-level ``litlogger`` module after
+initialization. They exist primarily for standalone compatibility workflows.
 
 .. currentmodule:: litlogger
 
@@ -47,34 +50,31 @@ These functions are available as module-level callables after
 
 .. autofunction:: finalize
 
-----
-
 Experiment
 ==========
 
 .. currentmodule:: litlogger.experiment
 
 .. autoclass:: Experiment
-    :members:
-    :inherited-members:
+   :members:
+   :inherited-members:
 
-----
-
-Media
-=====
+Media Wrappers
+==============
 
 .. currentmodule:: litlogger.media
 
 .. autoclass:: File
-    :members:
+   :members:
 
 .. autoclass:: Image
-    :members:
+   :members:
 
 .. autoclass:: Text
-    :members:
+   :members:
 
-----
+.. autoclass:: Model
+   :members:
 
 Series
 ======
@@ -82,9 +82,7 @@ Series
 .. currentmodule:: litlogger.series
 
 .. autoclass:: Series
-    :members:
-
-----
+   :members:
 
 Types
 =====
@@ -92,16 +90,24 @@ Types
 .. currentmodule:: litlogger.types
 
 .. autoclass:: MediaType
-    :members:
-    :undoc-members:
+   :members:
+   :undoc-members:
 
-----
+.. autoclass:: PhaseType
+   :members:
+   :undoc-members:
+
+.. autoclass:: MetricValue
+   :members:
+
+.. autoclass:: Metrics
+   :members:
 
 LightningLogger
-================
+===============
 
 .. currentmodule:: litlogger.logger
 
 .. autoclass:: LightningLogger
-    :members:
-    :show-inheritance:
+   :members:
+   :show-inheritance:

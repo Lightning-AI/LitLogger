@@ -1,0 +1,72 @@
+##################
+Lightning Tutorial
+##################
+
+Use :class:`~litlogger.logger.LightningLogger` when you want Lightning or
+Fabric to drive experiment logging for you.
+
+Trainer Integration
+===================
+
+.. code-block:: python
+
+   from lightning import Trainer
+   from litlogger import LightningLogger
+
+   logger = LightningLogger(
+       name="mnist-autoencoder",
+       metadata={"dataset": "mnist"},
+   )
+
+   trainer = Trainer(max_epochs=3, logger=logger)
+   trainer.fit(model, datamodule)
+
+Metrics
+=======
+
+Every ``self.log(...)`` call in your module flows through the logger into
+LitLogger.
+
+.. code-block:: python
+
+   def training_step(self, batch, batch_idx):
+       loss = ...
+       self.log("train_loss", loss)
+       return loss
+
+Hyperparameters
+===============
+
+Lightning hyperparameters are captured through ``save_hyperparameters()`` or
+via ``metadata=...`` on the logger itself.
+
+Checkpoint Logging
+==================
+
+Enable automatic checkpoint uploads with ``log_model=True``.
+
+.. code-block:: python
+
+   logger = LightningLogger(name="my-model", log_model=True)
+
+   trainer = Trainer(
+       logger=logger,
+       callbacks=[checkpoint_callback],
+   )
+
+Files and Media
+===============
+
+The logger also exposes helper methods for artifact and media logging:
+
+.. code-block:: python
+
+   trainer.logger.log_file("config.yaml")
+   trainer.logger.log_media("sample", "output.png", step=10)
+
+Runnable Example
+================
+
+See the complete runnable example in
+``examples/lightning_autoencoder.py`` and the deeper guide at
+:doc:`../guide/lightning`.

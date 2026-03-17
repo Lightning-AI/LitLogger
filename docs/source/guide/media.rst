@@ -2,9 +2,31 @@
 Logging Media
 #############
 
-litlogger supports uploading images and text files that are displayed alongside
-your metrics in the `lightning.ai <https://lightning.ai>`_ experiment view.
+LitLogger supports uploading images and text files that are displayed alongside
+your metrics in the experiment view. For new code, prefer the dict-style
+wrappers :class:`~litlogger.media.Image` and :class:`~litlogger.media.Text`.
 
+New Dict-Style API
+==================
+
+.. code-block:: python
+
+   import litlogger
+   from litlogger import Image, Text
+
+   experiment = litlogger.init(name="media-demo")
+
+   experiment["preview"] = Image("generated.png")
+   experiment["notes"] = Text("epoch 0 summary")
+
+   experiment["samples"].append(Image("sample-0.png"), step=0)
+   experiment["captions"].append(Text("reconstruction"), step=0)
+
+Legacy Helper API
+=================
+
+The legacy helper method remains available and is still what
+:class:`~litlogger.logger.LightningLogger` exposes directly.
 
 Logging Images
 ==============
@@ -16,10 +38,8 @@ Logging Images
 
    exp = litlogger.init(name="my-experiment")
 
-   # Auto-detected from file extension
    exp.log_media("sample_output", "generated.png", step=0)
 
-   # Explicit type
    exp.log_media(
        name="reconstruction",
        path="recon.jpg",
@@ -28,14 +48,12 @@ Logging Images
        caption="Epoch 10 reconstruction",
    )
 
-
 Logging Text
 ============
 
 .. code-block:: python
 
    exp.log_media("predictions", "predictions.txt", kind=MediaType.TEXT, step=5)
-
 
 Supported Types
 ===============
@@ -54,29 +72,15 @@ Supported Types
      - ``.txt``, ``.csv``, ``.json``, ``.log``
      - Displayed as text in the experiment view
 
-When ``kind`` is not provided, litlogger guesses the type from the file's MIME
+When ``kind`` is not provided, LitLogger guesses the type from the file's MIME
 type. If the type cannot be determined, a ``ValueError`` is raised.
 
-
-Parameters
-==========
-
-:meth:`litlogger.log_media() <litlogger.experiment.Experiment.log_media>` accepts
-the following parameters:
-
-- **name** -- Name of the media entry.
-- **path** -- Local path to the file.
-- **kind** -- ``MediaType.IMAGE`` or ``MediaType.TEXT`` (optional, auto-detected).
-- **step** -- Training step number (optional).
-- **epoch** -- Training epoch number (optional).
-- **caption** -- Descriptive caption (optional).
-
-
 Using with LightningLogger
-===========================
+==========================
 
 The :class:`~litlogger.logger.LightningLogger` exposes the same
-:meth:`litlogger.log_media() <litlogger.experiment.Experiment.log_media>` method, which you can call from callbacks or your LightningModule:
+:meth:`litlogger.log_media() <litlogger.experiment.Experiment.log_media>`
+method, which you can call from callbacks or your LightningModule:
 
 .. code-block:: python
 
@@ -84,7 +88,6 @@ The :class:`~litlogger.logger.LightningLogger` exposes the same
 
    logger = LightningLogger(name="vision-run")
 
-   # Inside a callback
    logger.log_media(
        "val_sample",
        "val_output.png",

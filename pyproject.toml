@@ -12,7 +12,7 @@ authors = [
 ]
 description = "The Lightning Logger of the Lightning.AI Platform"
 license = {file = "LICENSE"}
-readme = "README.md"
+readme = {file = "README.md", content-type = "text/markdown"}
 requires-python = ">=3.10"
 dynamic = ["version"]
 keywords = ["deep learning", "machine learning", "pytorch", "AI"]

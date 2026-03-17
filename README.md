@@ -40,18 +40,20 @@ pip install litlogger
 Use LitLogger with any Python code (PyTorch, vLLM, LangChain, etc).
 
 ```python
-from litlogger import LightningLogger
+import litlogger
 
-logger = LightningLogger(metadata={"my_metadata": "anything"})
+exp = litlogger.init(name="hello-world")
 
 for i in range(10):
-    logger.log_metrics({"my_metric": i}, step=i)
+    exp["my_metric"].append(i, step=i)
 
-# log more than just metrics (files, text, artifacts, model weights)
-# logger.log_file("/path/to/config.txt")
-# logger.log_model(torch.nnModule)
-# logger.log_model_artifact('/path/to/artifact')
-logger.finalize()
+# log more than just metrics (files, text, artifacts, model weights or series thereof)
+# exp["config"] = File("/path/to/config.txt")
+# exp["summary"] = Text("first run")
+# exp["model"] = Model(torch.nn.Module)
+# exp["config-series"].append(File("/path/to/config1.txt"))
+# exp["config-series"].append(File("path/to/config2.txt"))
+exp.finalize()
 ```
 
 # Examples
@@ -73,7 +75,7 @@ Add LitLogger to any training framework, PyTorch, Jax, TensorFlow, Numpy, SKLear
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from litlogger import LightningLogger
+from lightning.pytorch.loggers import LitLogger
 import os
 
 # define a simple neural network
@@ -86,8 +88,8 @@ class SimpleModel(nn.Module):
         return self.linear(x)
 
 def train():
-    # initialize LightningLogger
-    logger = LightningLogger(metadata={"task": "model_training", "model_name": "SimpleModel"})
+    # initialize LitLogger
+    logger = LitLogger(metadata={"task": "model_training", "model_name": "SimpleModel"})
 
     # hyperparameters
     num_epochs = 10
@@ -152,15 +154,14 @@ Add LitLogger to any inference engine, LitServe, vLLM, FastAPI, etc...
 ```python
 import time
 import litserve as ls
-from litlogger import LightningLogger
+import litlogger
 
 class InferenceEngine(ls.LitAPI):
     def setup(self, device):
         # initialize your models here
         self.text_model = lambda x: x**2
         self.vision_model = lambda x: x**3
-        # initialize LightningLogger
-        self.logger = LightningLogger(metadata={"service_name": "InferenceEngine", "device": device})
+        self.exp = litlogger.init(name="inference-engine", metadata={"service_name": "InferenceEngine", "device": device})
 
     def predict(self, request):
         start_time = time.time()
@@ -175,18 +176,14 @@ class InferenceEngine(ls.LitAPI):
         end_time = time.time()
         latency = end_time - start_time
 
-        # log inference metrics
-        self.logger.log_metrics({
-            "input_value": x,
-            "output_value": c,
-            "prediction_latency_ms": latency * 1000,
-        })
+        self.exp["input_value"].append(x)
+        self.exp["output_value"].append(c)
+        self.exp["prediction_latency_ms"].append(latency * 1000)
         
         return output
 
     def teardown(self):
-        # ensure the logger is finalized when the service shuts down
-        self.logger.finalize()
+        self.exp.finalize()
 
 if __name__ == "__main__":
     server = ls.LitServer(InferenceEngine(max_batch_size=1), accelerator="auto")
@@ -217,7 +214,7 @@ PyTorch Lightning now comes with LitLogger natively built in. It's also built by
 ```python
 from lightning import Trainer
 from lightning.pytorch.demos.boring_classes import BoringDataModule, BoringModel
-from litlogger import LightningLogger
+from lightning.pytorch.loggers import LitLogger
 
 
 class LoggingBoringModel(BoringModel):
@@ -233,7 +230,7 @@ class LoggingBoringModel(BoringModel):
         return out
 
 
-trainer = Trainer(max_epochs=10, logger=LightningLogger(), log_every_n_steps=10)
+trainer = Trainer(max_epochs=10, logger=LitLogger(), log_every_n_steps=10)
 trainer.fit(LoggingBoringModel(), BoringDataModule())
 ```
 
@@ -256,7 +253,7 @@ from time import sleep
 
 import litlogger
 
-litlogger.init(name="loss-simulator")
+exp = litlogger.init(name="loss-simulator")
 
 # Initial loss value
 current_loss = 0.09
@@ -293,16 +290,17 @@ for i in range(total_steps):
 
     # Log metrics less frequently to save resources
     if i % 1000 == 0:
-        litlogger.log({"step": i, "loss": current_loss}, step=i)
+        exp["loss"].append(current_loss, step=i)
 
-litlogger.finalize()
+exp.finalize()
 ```
 
 </details>
+
+Check the [examples folder](./examples) for more.
 
 # Community
 LitLogger accepts community contributions - Let's make the world's most advanced AI experiment manager.
 
 💬 [Get help on Discord](https://discord.com/invite/XncpTy7DSt)    
 📋 [License: Apache 2.0](https://github.com/Lightning-AI/litlogger/blob/main/LICENSE)    
-

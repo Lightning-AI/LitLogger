@@ -72,14 +72,14 @@ experiment[f"{experiment_name}/models/object"] = Model(
 checkpoint0 = workdir / "checkpoint-0.ckpt"
 checkpoint0.write_text("checkpoint step 0\n", encoding="utf-8")
 experiment[f"{experiment_name}/checkpoints"].append(
-    Model(str(checkpoint0), name=f"{experiment_name}-checkpoints", version="v0"),
+    Model(str(checkpoint0), name=f"{experiment_name}-checkpoints", version="v1"),
     step=0,
 )
 
 checkpoint1 = workdir / "checkpoint-1.ckpt"
 checkpoint1.write_text("checkpoint step 1\n", encoding="utf-8")
 experiment[f"{experiment_name}/checkpoints"].append(
-    Model(str(checkpoint1), name=f"{experiment_name}-checkpoints", version="v1"),
+    Model(str(checkpoint1), name=f"{experiment_name}-checkpoints", version="v2"),
     step=1,
 )
 

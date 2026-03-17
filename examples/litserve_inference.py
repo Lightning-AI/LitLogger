@@ -14,14 +14,14 @@
 import time
 
 import litgpt
+import litlogger
 import litserve as ls
-from litlogger import LightningLogger
 
 
 class SimpleLitAPI(ls.LitAPI):
     def setup(self, device):
         self.llm = litgpt.LLM.load("EleutherAI/pythia-14m")
-        self.logger = LightningLogger(
+        self.experiment = litlogger.init(
             name="litserve-inference",
             metadata={"model": "pythia-14m"},
         )
@@ -32,17 +32,16 @@ class SimpleLitAPI(ls.LitAPI):
     def predict(self, prompt):
         start = time.perf_counter()
         output = self.llm.generate(prompt, max_new_tokens=200)
-        self.logger.log_metrics(
-            {
-                "generation_time": time.perf_counter() - start,
-                "input_tokens": self.llm.preprocessor.encode(prompt).numel(),
-                "output_tokens": self.llm.preprocessor.encode(output).numel(),
-            }
-        )
+        self.experiment["generation_time"].append(time.perf_counter() - start)
+        self.experiment["input_tokens"].append(self.llm.preprocessor.encode(prompt).numel())
+        self.experiment["output_tokens"].append(self.llm.preprocessor.encode(output).numel())
         return {"output": output}
 
     def encode_response(self, output):
         return {"output": output}
+
+    def teardown(self, devices):
+        self.experiment.finalize()
 
 
 if __name__ == "__main__":

@@ -2,8 +2,10 @@
 Lightning Tutorial
 ##################
 
-Use :class:`~litlogger.logger.LightningLogger` when you want Lightning or
-Fabric to drive experiment logging for you.
+Use :class:`lightning:lightning.pytorch.loggers.LitLogger` when you want
+Lightning or Fabric to drive experiment logging for you.
+:class:`~litlogger.logger.LightningLogger` is deprecated and remains only as a
+compatibility alias.
 
 Trainer Integration
 ===================
@@ -11,9 +13,9 @@ Trainer Integration
 .. code-block:: python
 
    from lightning import Trainer
-   from litlogger import LightningLogger
+   from lightning.pytorch.loggers import LitLogger
 
-   logger = LightningLogger(
+   logger = LitLogger(
        name="mnist-autoencoder",
        metadata={"dataset": "mnist"},
    )
@@ -47,7 +49,7 @@ Enable automatic checkpoint uploads with ``log_model=True``.
 
 .. code-block:: python
 
-   logger = LightningLogger(name="my-model", log_model=True)
+   logger = LitLogger(name="my-model", log_model=True)
 
    trainer = Trainer(
        logger=logger,

@@ -14,7 +14,7 @@
 import os
 
 import lightning as L
-from litlogger import LightningLogger
+from lightning.pytorch.loggers import LitLogger
 from torch import nn, optim
 from torch.utils.data import DataLoader
 from torchvision.datasets import MNIST
@@ -58,7 +58,7 @@ if __name__ == "__main__":
     )
 
     # configure the logger
-    lit_logger = LightningLogger()
+    lit_logger = LitLogger()
 
     # pass logger to the Trainer
     trainer = L.Trainer(

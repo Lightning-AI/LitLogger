@@ -2,23 +2,23 @@
 Lightning Integration
 #######################
 
-:class:`~litlogger.logger.LightningLogger` plugs directly into the PyTorch
-Lightning ``Trainer`` and Lightning Fabric, streaming metrics, metadata,
-artifacts, media, and models to `lightning.ai <https://lightning.ai>`_.
+Use :class:`lightning:lightning.pytorch.loggers.LitLogger` for Trainer and
+Fabric integration. :class:`~litlogger.logger.LightningLogger` remains
+available only as a deprecated compatibility alias.
 
 Using with Trainer
 ==================
 
-Pass a :class:`~litlogger.logger.LightningLogger` as the ``logger`` argument to
-the Trainer. Every ``self.log()`` call inside your LightningModule is
-forwarded automatically.
+Pass :class:`lightning:lightning.pytorch.loggers.LitLogger` as the ``logger``
+argument to the Trainer. Every ``self.log()`` call inside your LightningModule
+is forwarded automatically.
 
 .. code-block:: python
 
    from lightning import Trainer
-   from litlogger import LightningLogger
+   from lightning.pytorch.loggers import LitLogger
 
-   logger = LightningLogger(name="cifar10-resnet")
+   logger = LitLogger(name="cifar10-resnet")
    trainer = Trainer(max_epochs=10, logger=logger)
    trainer.fit(model, datamodule)
 
@@ -42,7 +42,7 @@ You can also pass metadata directly:
 
 .. code-block:: python
 
-   logger = LightningLogger(
+   logger = LitLogger(
        name="cifar10-resnet",
        metadata={"optimizer": "AdamW", "scheduler": "cosine"},
    )
@@ -58,7 +58,7 @@ registry whenever Lightning saves a checkpoint.
    from lightning.pytorch.callbacks import ModelCheckpoint
 
    checkpoint_cb = ModelCheckpoint(save_top_k=2, monitor="val_loss")
-   logger = LightningLogger(name="my-model", log_model=True)
+   logger = LitLogger(name="my-model", log_model=True)
 
    trainer = Trainer(
        max_epochs=20,
@@ -70,14 +70,15 @@ registry whenever Lightning saves a checkpoint.
 Using with Fabric
 =================
 
-:class:`~litlogger.logger.LightningLogger` also works as a Fabric logger:
+:class:`lightning:lightning.pytorch.loggers.LitLogger` also works as a Fabric
+logger:
 
 .. code-block:: python
 
    import lightning as L
-   from litlogger import LightningLogger
+   from lightning.pytorch.loggers import LitLogger
 
-   logger = LightningLogger(name="fabric-run")
+   logger = LitLogger(name="fabric-run")
    fabric = L.Fabric(loggers=[logger])
    fabric.launch()
 
@@ -101,7 +102,7 @@ Accessing the Experiment URL
 
 .. code-block:: python
 
-   logger = LightningLogger(name="my-run")
+   logger = LitLogger(name="my-run")
    trainer = Trainer(logger=logger)
    trainer.fit(model, datamodule)
 

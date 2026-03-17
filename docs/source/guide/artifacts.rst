@@ -107,6 +107,7 @@ Download model artifacts back:
 Automatic Checkpoint Logging
 ============================
 
-When using :class:`~litlogger.logger.LightningLogger` with ``log_model=True``,
+When using :class:`lightning:lightning.pytorch.loggers.LitLogger` with
+``log_model=True``,
 checkpoints saved by Lightning's ``ModelCheckpoint`` callback are
 automatically uploaded as model artifacts.

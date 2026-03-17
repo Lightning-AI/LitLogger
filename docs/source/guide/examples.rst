@@ -28,7 +28,7 @@ and the new ``Model`` API for artifacts, objects, and checkpoint series.
 PyTorch Lightning
 =================
 
-An MNIST autoencoder trained with PyTorch Lightning and ``LightningLogger``.
+An MNIST autoencoder trained with PyTorch Lightning and upstream ``LitLogger``.
 
 .. literalinclude:: ../../../examples/lightning_autoencoder.py
    :language: python

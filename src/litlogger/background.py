@@ -61,7 +61,7 @@ class _BackgroundThread(Thread):
         store_created_at: bool,
         rate_limiting_interval: int = 1,
         max_batch_size: int = 1000,
-        last_steps: dict[str, int] = {},
+        last_steps: dict[str, int] | None = None,
     ) -> None:
         super().__init__(daemon=True)
         self.teamspace_id = teamspace_id
@@ -76,7 +76,7 @@ class _BackgroundThread(Thread):
         self.done_event = done_event
         self.metrics: dict[str, Metrics] = {}
         self.exception: Exception | None = None
-        self.last_steps = last_steps
+        self.last_steps = last_steps or {}
 
         self.store_step = store_step
         self.store_created_at = store_created_at

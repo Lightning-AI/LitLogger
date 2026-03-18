@@ -337,17 +337,18 @@ class MetricsApi:
             ),
         )
 
-    def get_last_steps(self, metrics_store_id: Any) -> dict[str, int] | None:
+    def get_last_steps(self, teamspace_id: str, metrics_store_id: str) -> dict[str, int] | None:
         """Get the last logged step for each metric in the metrics store.
 
         Args:
+            teamspace_id: The teamspace ID.
             metrics_store_id: The metrics store ID.
 
         Returns:
             A dictionary mapping metric names to their last logged step, or None if no metrics are found
         """
         response = self.client.lit_logger_service_get_logger_metrics_summary(
-            project_id=self.teamspace_id,
+            project_id=teamspace_id,
             ids=[metrics_store_id],
         )
 

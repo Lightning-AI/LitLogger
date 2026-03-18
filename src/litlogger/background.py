@@ -61,6 +61,7 @@ class _BackgroundThread(Thread):
         store_created_at: bool,
         rate_limiting_interval: int = 1,
         max_batch_size: int = 1000,
+        last_steps: dict[str, int] = {},
     ) -> None:
         super().__init__(daemon=True)
         self.teamspace_id = teamspace_id
@@ -75,6 +76,7 @@ class _BackgroundThread(Thread):
         self.done_event = done_event
         self.metrics: dict[str, Metrics] = {}
         self.exception: Exception | None = None
+        self.last_steps = last_steps
 
         self.store_step = store_step
         self.store_created_at = store_created_at
@@ -124,6 +126,10 @@ class _BackgroundThread(Thread):
                 read_any = True
                 try:
                     for name, values in metrics.items():
+                        for value_obj in values.values:
+                            if value_obj.step is None:
+                                value_obj.step = self.last_steps.get(name, -1) + 1
+                                self.last_steps[name] = value_obj.step
                         # Merge with existing metrics for this name
                         if name in self.metrics:
                             self.metrics[name].values.extend(values.values)

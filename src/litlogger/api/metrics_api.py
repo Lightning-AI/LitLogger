@@ -337,6 +337,28 @@ class MetricsApi:
             ),
         )
 
+    def get_last_steps(self, metrics_store_id: Any) -> dict[str, int] | None:
+        """Get the last logged step for each metric in the metrics store.
+
+        Args:
+            metrics_store_id: The metrics store ID.
+
+        Returns:
+            A dictionary mapping metric names to their last logged step, or None if no metrics are found
+        """
+        response = self.client.lit_logger_service_get_logger_metrics_summary(
+            project_id=self.teamspace_id,
+            ids=[metrics_store_id],
+        )
+
+        if not response.summaries_per_name:
+            return {}
+
+        return {
+            name: summaries_per_id[self.metrics_store_id].last_step
+            for name, summaries_per_id in response.summaries_per_name.items()
+        }
+
     def get_trackers_from_metrics_store(self, metrics_store: Any) -> dict[str, MetricsTracker] | None:
         """Extract and convert trackers from a metrics store object.
 

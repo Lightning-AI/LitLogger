@@ -487,9 +487,7 @@ class TestBackgroundThreadUpdateTracker:
         for _ in range(2):
             for metric_name in metric_names:
                 for _ in range(2):
-                    batch = Metrics(
-                        name=metric_name, values=[MetricValue(value=float(i), step=i) for i in range(3)]
-                    )
+                    batch = Metrics(name=metric_name, values=[MetricValue(value=float(i), step=i) for i in range(3)])
                     values[metric_name].append(batch)
 
         # Update trackers sequentially

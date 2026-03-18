@@ -55,7 +55,7 @@ class TestBackgroundThread(_BackgroundThread):
         self.done_event.set()
 
 
-def test_experiment_sender_queue(tmpdir):
+def test_experiment_sender_queue():
     """Test that the background thread processes metrics from the queue correctly."""
     metrics_queue = Queue()
     is_ready_event = Event()
@@ -68,13 +68,11 @@ def test_experiment_sender_queue(tmpdir):
     sender = TestBackgroundThread(
         teamspace_id="project_id",
         metrics_store_id="id",
-        cloud_account="cloud_account",
         metrics_api=mock_metrics_api,
         metrics_queue=metrics_queue,
         is_ready_event=is_ready_event,
         stop_event=stop_event,
         done_event=done_event,
-        log_dir=str(tmpdir),
         store_step=False,
         store_created_at=False,
     )

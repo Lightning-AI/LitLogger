@@ -25,7 +25,6 @@ from time import sleep, time
 from lightning_sdk.lightning_cloud.openapi.rest import ApiException
 
 from litlogger.api.metrics_api import MetricsApi
-from litlogger.file_writer import BinaryFileWriter
 from litlogger.types import Metrics, MetricsTracker, PhaseType
 
 
@@ -38,13 +37,11 @@ class _BackgroundThread(Thread):
     Args:
         teamspace_id: Project/teamspace identifier in Lightning Cloud.
         metrics_store_id: The metrics store id to append to.
-        cloud_account: Cloud account/cluster identifier used for artifact uploads.
         metrics_api: MetricsApi instance used to communicate with the Lightning Cloud backend.
         metrics_queue: Source of metrics produced by the Experiment/Logger process.
         is_ready_event: Event set when the thread finished initialization.
         stop_event: Event that, when set, requests a graceful shutdown.
         done_event: Event set once all pending metrics have been flushed and the upload completed.
-        log_dir: Local directory where temporary metric files are written.
         store_step: Whether to persist the step field with each value.
         store_created_at: Whether to persist the timestamp for each value.
         rate_limiting_interval: Minimum seconds between consecutive network sends.
@@ -55,13 +52,11 @@ class _BackgroundThread(Thread):
         self,
         teamspace_id: str,
         metrics_store_id: str,
-        cloud_account: str,
         metrics_api: MetricsApi,
         metrics_queue: "Queue[dict[str, Metrics]]",
         is_ready_event: Event,
         stop_event: Event,
         done_event: Event,
-        log_dir: str,
         store_step: bool,
         store_created_at: bool,
         rate_limiting_interval: int = 1,
@@ -85,16 +80,6 @@ class _BackgroundThread(Thread):
         self.store_step = store_step
         self.store_created_at = store_created_at
 
-        self.file_store = BinaryFileWriter(
-            log_dir=log_dir,
-            store_step=store_step,
-            store_created_at=store_created_at,
-            teamspace_id=teamspace_id,
-            metrics_store_id=metrics_store_id,
-            cloud_account=cloud_account,
-            client=metrics_api.client,
-        )
-
         self.trackers: dict[str, MetricsTracker] = trackers_init if trackers_init is not None else {}
 
     def run(self) -> None:
@@ -116,8 +101,6 @@ class _BackgroundThread(Thread):
 
             # Force send any remaining buffered metrics (regardless of rate limiting)
             self._send()
-
-            self.file_store.upload()
 
             self.inform_done()
 
@@ -176,11 +159,6 @@ class _BackgroundThread(Thread):
 
         if not metrics:
             return
-
-        try:
-            self.file_store.store(self.metrics, self.trackers)
-        except ApiException as ex:
-            raise ex
 
         try:
             self._send_metrics(metrics)

@@ -161,13 +161,11 @@ class Experiment(LegacyExperiment):
         self._manager = _BackgroundThread(
             teamspace_id=self._teamspace.id,
             metrics_store_id=self._metrics_store.id,
-            cloud_account=self._metrics_store.cluster_id,
             metrics_api=self._metrics_api,
             metrics_queue=self._metrics_queue,
             is_ready_event=self._is_ready_event,
             stop_event=self._stop_event,
             done_event=self._done_event,
-            log_dir=log_dir,
             store_step=bool(store_step),
             store_created_at=bool(store_created_at),
             rate_limiting_interval=rate_limiting_interval,

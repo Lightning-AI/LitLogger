@@ -25,7 +25,7 @@ from time import sleep, time
 from lightning_sdk.lightning_cloud.openapi.rest import ApiException
 
 from litlogger.api.metrics_api import MetricsApi
-from litlogger.types import Metrics, MetricsTracker, PhaseType
+from litlogger.types import Metrics, PhaseType
 
 
 class _BackgroundThread(Thread):
@@ -61,7 +61,7 @@ class _BackgroundThread(Thread):
         store_created_at: bool,
         rate_limiting_interval: int = 1,
         max_batch_size: int = 1000,
-        trackers_init: dict[str, MetricsTracker] | None = None,
+        last_steps: dict[str, int] | None = None,
     ) -> None:
         super().__init__(daemon=True)
         self.teamspace_id = teamspace_id
@@ -76,11 +76,10 @@ class _BackgroundThread(Thread):
         self.done_event = done_event
         self.metrics: dict[str, Metrics] = {}
         self.exception: Exception | None = None
+        self.last_steps = last_steps or {}
 
         self.store_step = store_step
         self.store_created_at = store_created_at
-
-        self.trackers: dict[str, MetricsTracker] = trackers_init if trackers_init is not None else {}
 
     def run(self) -> None:
         self._run()
@@ -127,7 +126,11 @@ class _BackgroundThread(Thread):
                 read_any = True
                 try:
                     for name, values in metrics.items():
-                        self._update_tracker(name, values)
+                        for value_obj in values.values:
+                            if value_obj.step is None:
+                                value_obj.step = self.last_steps.get(name, -1) + 1
+                                self.last_steps[name] = value_obj.step
+
                         # Merge with existing metrics for this name
                         if name in self.metrics:
                             self.metrics[name].values.extend(values.values)
@@ -170,45 +173,6 @@ class _BackgroundThread(Thread):
         self.last_time = time()
 
         self.metrics = {}
-
-    def _update_tracker(self, name: str, values: Metrics) -> None:
-        """Create or update the series tracker and refresh stats/counters from incoming values."""
-        # Create the tracker if it doesn't exist
-        if name not in self.trackers:
-            self.trackers[name] = MetricsTracker(name=name, num_rows=0)
-
-        tracker = self.trackers[name]
-
-        # Store the internal start step for this batch (used by BinaryFileWriter)
-        if not hasattr(values, "internal_start_step"):
-            values.internal_start_step = tracker.num_rows  # type: ignore[attr-defined]
-
-        # Increment the number of rows
-        for value_obj in values.values:
-            # Augment with step from tracker if not provided
-            if value_obj.step is None:
-                value_obj.step = tracker.num_rows
-
-            value = float(value_obj.value)
-
-            if tracker.started_at is None and self.store_created_at and value_obj.created_at:
-                tracker.started_at = value_obj.created_at
-
-            if tracker.min_value is None or (tracker.min_value is not None and value < tracker.min_value):
-                tracker.min_value = value
-                tracker.min_index = tracker.num_rows
-
-            if tracker.max_value is None or (tracker.max_value is not None and value > tracker.max_value):
-                tracker.max_value = value
-                tracker.max_index = tracker.num_rows
-
-            tracker.last_index = tracker.num_rows
-            tracker.last_value = value
-
-            if self.store_created_at and value_obj.created_at:
-                tracker.updated_at = value_obj.created_at
-
-            tracker.num_rows += 1
 
     def _send_metrics(self, metrics: list[Metrics]) -> None:
         """Send metrics to the API, chunking into batches of max_batch_size values per request.
@@ -275,5 +239,4 @@ class _BackgroundThread(Thread):
             metrics_store_id=self.metrics_store_id,
             persisted=True,
             phase=PhaseType.COMPLETED,
-            trackers=self.trackers,
         )

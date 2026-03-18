@@ -13,6 +13,7 @@
 # limitations under the License.
 """API layer for metrics and experiment operations."""
 
+import contextlib
 import os
 from typing import Any
 
@@ -336,6 +337,31 @@ class MetricsApi:
                 tags=self._metadata_to_tags(metadata=metadata) if metadata is not None else None,
             ),
         )
+
+    def get_last_steps(self, teamspace_id: str, metrics_stream_id: str) -> dict[str, int] | None:
+        """Get the last logged step for each metric in the metrics store.
+
+        Args:
+            teamspace_id: The teamspace ID.
+            metrics_stream_id: The metrics stream ID.
+
+        Returns:
+            A dictionary mapping metric names to their last logged step, or None if no metrics are found
+        """
+        response = self.client.lit_logger_service_get_logger_metrics_summary(
+            project_id=teamspace_id,
+            ids=[metrics_stream_id],
+        )
+
+        if not response.summaries_per_name:
+            return {}
+
+        result = {}
+        for name, s in response.summaries_per_name.items():
+            last_step = s.summaries_per_id[metrics_stream_id].last_step
+            with contextlib.suppress(TypeError, ValueError):
+                result[name] = int(last_step)
+        return result
 
     def get_trackers_from_metrics_store(self, metrics_store: Any) -> dict[str, MetricsTracker] | None:
         """Extract and convert trackers from a metrics store object.

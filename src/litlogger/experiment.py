@@ -170,7 +170,7 @@ class Experiment(LegacyExperiment):
             store_created_at=bool(store_created_at),
             rate_limiting_interval=rate_limiting_interval,
             max_batch_size=max_batch_size,
-            trackers_init=self._metrics_api.get_trackers_from_metrics_store(self._metrics_store),
+            last_steps=self._metrics_api.get_last_steps(self._teamspace.id, self._metrics_store.id),
         )
 
         self._manager.start()

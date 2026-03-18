@@ -356,8 +356,8 @@ class MetricsApi:
             return {}
 
         return {
-            name: summaries_per_id[metrics_stream_id].last_step
-            for name, summaries_per_id in response.summaries_per_name.items()
+            name: s.summaries_per_id[metrics_stream_id].last_step
+            for name, s in response.summaries_per_name.items()
         }
 
     def get_trackers_from_metrics_store(self, metrics_store: Any) -> dict[str, MetricsTracker] | None:

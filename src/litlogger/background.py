@@ -130,6 +130,7 @@ class _BackgroundThread(Thread):
                             if value_obj.step is None:
                                 value_obj.step = self.last_steps.get(name, -1) + 1
                                 self.last_steps[name] = value_obj.step
+
                         # Merge with existing metrics for this name
                         if name in self.metrics:
                             self.metrics[name].values.extend(values.values)

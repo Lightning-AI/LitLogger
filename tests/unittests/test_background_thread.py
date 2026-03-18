@@ -66,6 +66,50 @@ class TestBackgroundThreadInit:
         assert manager.max_batch_size == 1000
 
 
+class TestBackgroundThreadLastSteps:
+    """Test _BackgroundThread step resumption from last_steps."""
+
+    def _make_manager(self, last_steps=None):
+        mock_queue = Mock()
+        mock_queue.get.side_effect = [
+            {"loss": Metrics(name="loss", values=[MetricValue(value=0.5)])},
+            {"loss": Metrics(name="loss", values=[MetricValue(value=0.4)])},
+            {"loss": Metrics(name="loss", values=[MetricValue(value=0.3)])},
+            queue.Empty(),
+        ]
+        return _BackgroundThread(
+            teamspace_id="test",
+            metrics_store_id="test",
+            metrics_api=Mock(),
+            metrics_queue=mock_queue,
+            is_ready_event=Event(),
+            stop_event=Event(),
+            done_event=Event(),
+            store_step=True,
+            store_created_at=False,
+            rate_limiting_interval=100,
+            last_steps=last_steps,
+        )
+
+    def test_steps_start_at_zero_when_last_steps_is_none(self):
+        manager = self._make_manager(last_steps=None)
+        manager.step()
+        steps = [v.step for v in manager.metrics["loss"].values]
+        assert steps == [0, 1, 2]
+
+    def test_steps_start_at_zero_when_last_steps_is_empty(self):
+        manager = self._make_manager(last_steps={})
+        manager.step()
+        steps = [v.step for v in manager.metrics["loss"].values]
+        assert steps == [0, 1, 2]
+
+    def test_steps_resume_from_last_steps_when_provided(self):
+        manager = self._make_manager(last_steps={"loss": 5})
+        manager.step()
+        steps = [v.step for v in manager.metrics["loss"].values]
+        assert steps == [6, 7, 8]
+
+
 class TestBackgroundThreadStepBatching:
     """Test _BackgroundThread.step batching behavior."""
 

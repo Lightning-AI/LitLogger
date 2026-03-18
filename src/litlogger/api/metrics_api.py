@@ -13,6 +13,7 @@
 # limitations under the License.
 """API layer for metrics and experiment operations."""
 
+import contextlib
 import os
 from typing import Any
 
@@ -358,10 +359,8 @@ class MetricsApi:
         result = {}
         for name, s in response.summaries_per_name.items():
             last_step = s.summaries_per_id[metrics_stream_id].last_step
-            try:
+            with contextlib.suppress(TypeError, ValueError):
                 result[name] = int(last_step)
-            except (TypeError, ValueError):
-                pass
         return result
 
     def get_trackers_from_metrics_store(self, metrics_store: Any) -> dict[str, MetricsTracker] | None:

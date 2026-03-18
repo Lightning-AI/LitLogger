@@ -1,66 +1,15 @@
 import queue
-from collections import defaultdict
-from datetime import datetime
 from multiprocessing import Event, Queue
 from unittest.mock import Mock, patch
 
 import pytest
 from lightning_sdk.lightning_cloud.openapi.rest import ApiException
 from litlogger.background import _BackgroundThread
-from litlogger.types import Metrics, MetricsTracker, MetricValue, PhaseType
+from litlogger.types import Metrics, MetricValue, PhaseType
 
 
 class TestBackgroundThreadInit:
     """Test _BackgroundThread initialization."""
-
-    def test_init_with_trackers_init(self):
-        """Test initialization with existing trackers."""
-        mock_metrics_api = Mock()
-        mock_queue = Queue()
-        is_ready_event = Event()
-        stop_event = Event()
-        done_event = Event()
-
-        initial_trackers = {
-            "loss": MetricsTracker(name="loss", num_rows=100, min_value=0.1, max_value=1.0),
-            "accuracy": MetricsTracker(name="accuracy", num_rows=50, min_value=0.8, max_value=0.99),
-        }
-
-        manager = _BackgroundThread(
-            teamspace_id="test_teamspace",
-            metrics_store_id="test_stream",
-            metrics_api=mock_metrics_api,
-            metrics_queue=mock_queue,
-            is_ready_event=is_ready_event,
-            stop_event=stop_event,
-            done_event=done_event,
-            store_step=True,
-            store_created_at=False,
-            trackers_init=initial_trackers,
-        )
-
-        # Verify trackers were initialized from trackers_init
-        assert "loss" in manager.trackers
-        assert "accuracy" in manager.trackers
-        assert manager.trackers["loss"].num_rows == 100
-        assert manager.trackers["accuracy"].num_rows == 50
-
-    def test_init_with_trackers_init_none(self):
-        """Test initialization with trackers_init=None creates empty trackers."""
-        manager = _BackgroundThread(
-            teamspace_id="test",
-            metrics_store_id="test",
-            metrics_api=Mock(),
-            metrics_queue=Queue(),
-            is_ready_event=Event(),
-            stop_event=Event(),
-            done_event=Event(),
-            store_step=True,
-            store_created_at=False,
-            trackers_init=None,
-        )
-
-        assert manager.trackers == {}
 
     def test_init_with_all_parameters(self):
         """Test initialization with all required parameters."""
@@ -96,7 +45,6 @@ class TestBackgroundThreadInit:
         assert manager.store_step is True
         assert manager.store_created_at is False
         assert manager.metrics == {}
-        assert manager.trackers == {}
         assert manager.exception is None
         assert manager.daemon is True
 
@@ -168,35 +116,6 @@ class TestBackgroundThreadStepBatching:
         assert result is False
         assert len(manager.metrics) == 0
 
-    def test_step_updates_tracker(self):
-        """Test that step calls _update_tracker for each metric."""
-        mock_queue = Mock()
-        metrics_data = {
-            "loss": Metrics(name="loss", values=[MetricValue(value=0.5)]),
-            "acc": Metrics(name="acc", values=[MetricValue(value=0.9)]),
-        }
-        mock_queue.get.side_effect = [metrics_data, queue.Empty()]
-
-        manager = _BackgroundThread(
-            teamspace_id="test",
-            metrics_store_id="test",
-            metrics_api=Mock(),
-            metrics_queue=mock_queue,
-            is_ready_event=Event(),
-            stop_event=Event(),
-            done_event=Event(),
-            store_step=True,
-            store_created_at=False,
-            rate_limiting_interval=100,  # High value to prevent time-based send
-        )
-
-        with patch.object(manager, "_update_tracker") as mock_update:
-            manager.step()
-
-            assert mock_update.call_count == 2
-            mock_update.assert_any_call("loss", metrics_data["loss"])
-            mock_update.assert_any_call("acc", metrics_data["acc"])
-
     def test_step_sends_when_max_batch_reached(self):
         """Test that step sends when max_batch_size is reached."""
         mock_queue = Mock()
@@ -251,288 +170,6 @@ class TestBackgroundThreadStepBatching:
         assert manager.metrics["loss"].values[1].value == 0.3
 
 
-class TestBackgroundThreadStepAugmentation:
-    """Test step augmentation from trackers when metrics don't have steps."""
-
-    def test_augments_step_when_none(self):
-        """Test that metrics without steps get augmented with tracker num_rows."""
-        manager = _BackgroundThread(
-            teamspace_id="test",
-            metrics_store_id="test",
-            metrics_api=Mock(),
-            metrics_queue=Mock(),
-            is_ready_event=Event(),
-            stop_event=Event(),
-            done_event=Event(),
-            store_step=True,
-            store_created_at=False,
-        )
-
-        # Create values without steps
-        values = Metrics(
-            name="loss",
-            values=[
-                MetricValue(value=0.5, step=None),
-                MetricValue(value=0.4, step=None),
-                MetricValue(value=0.3, step=None),
-            ],
-        )
-
-        manager._update_tracker("loss", values)
-
-        # Verify steps were augmented sequentially
-        assert values.values[0].step == 0
-        assert values.values[1].step == 1
-        assert values.values[2].step == 2
-
-    def test_preserves_explicit_steps(self):
-        """Test that metrics with explicit steps are not modified."""
-        manager = _BackgroundThread(
-            teamspace_id="test",
-            metrics_store_id="test",
-            metrics_api=Mock(),
-            metrics_queue=Mock(),
-            is_ready_event=Event(),
-            stop_event=Event(),
-            done_event=Event(),
-            store_step=True,
-            store_created_at=False,
-        )
-
-        # Create values with explicit steps
-        values = Metrics(
-            name="loss",
-            values=[
-                MetricValue(value=0.5, step=10),
-                MetricValue(value=0.4, step=20),
-                MetricValue(value=0.3, step=30),
-            ],
-        )
-
-        manager._update_tracker("loss", values)
-
-        # Verify explicit steps were preserved
-        assert values.values[0].step == 10
-        assert values.values[1].step == 20
-        assert values.values[2].step == 30
-
-    def test_augments_step_from_initialized_tracker(self):
-        """Test that step augmentation continues from initialized tracker num_rows."""
-        initial_trackers = {
-            "loss": MetricsTracker(name="loss", num_rows=100),
-        }
-
-        manager = _BackgroundThread(
-            teamspace_id="test",
-            metrics_store_id="test",
-            metrics_api=Mock(),
-            metrics_queue=Mock(),
-            is_ready_event=Event(),
-            stop_event=Event(),
-            done_event=Event(),
-            store_step=True,
-            store_created_at=False,
-            trackers_init=initial_trackers,
-        )
-
-        # Create values without steps
-        values = Metrics(
-            name="loss",
-            values=[
-                MetricValue(value=0.5, step=None),
-                MetricValue(value=0.4, step=None),
-            ],
-        )
-
-        manager._update_tracker("loss", values)
-
-        # Verify steps continue from tracker's num_rows (100)
-        assert values.values[0].step == 100
-        assert values.values[1].step == 101
-
-    def test_mixed_explicit_and_none_steps(self):
-        """Test handling of mixed explicit and None steps."""
-        manager = _BackgroundThread(
-            teamspace_id="test",
-            metrics_store_id="test",
-            metrics_api=Mock(),
-            metrics_queue=Mock(),
-            is_ready_event=Event(),
-            stop_event=Event(),
-            done_event=Event(),
-            store_step=True,
-            store_created_at=False,
-        )
-
-        # Create values with mixed steps
-        values = Metrics(
-            name="loss",
-            values=[
-                MetricValue(value=0.5, step=None),  # Should get 0
-                MetricValue(value=0.4, step=50),  # Should stay 50
-                MetricValue(value=0.3, step=None),  # Should get 2
-            ],
-        )
-
-        manager._update_tracker("loss", values)
-
-        # Verify correct step handling
-        assert values.values[0].step == 0
-        assert values.values[1].step == 50
-        assert values.values[2].step == 2
-
-
-class TestBackgroundThreadUpdateTracker:
-    """Test _BackgroundThread._update_tracker method."""
-
-    def test_create_new_tracker(self):
-        """Test creating a new tracker for a metric."""
-        manager = _BackgroundThread(
-            teamspace_id="test",
-            metrics_store_id="test",
-            metrics_api=Mock(),
-            metrics_queue=Mock(),
-            is_ready_event=Event(),
-            stop_event=Event(),
-            done_event=Event(),
-            store_step=True,
-            store_created_at=False,
-        )
-
-        values = Mock()
-        values.values = [MetricValue(value=1.0, step=0)]
-
-        manager._update_tracker("new_metric", values)
-
-        assert "new_metric" in manager.trackers
-        assert manager.trackers["new_metric"].name == "new_metric"
-        assert manager.trackers["new_metric"].num_rows == 1
-
-    def test_update_existing_tracker(self):
-        """Test updating an existing tracker."""
-        manager = _BackgroundThread(
-            teamspace_id="test",
-            metrics_store_id="test",
-            metrics_api=Mock(),
-            metrics_queue=Mock(),
-            is_ready_event=Event(),
-            stop_event=Event(),
-            done_event=Event(),
-            store_step=True,
-            store_created_at=False,
-        )
-
-        # Create initial tracker
-        values1 = Mock()
-        values1.values = [MetricValue(value=1.0, step=0)]
-        manager._update_tracker("metric", values1)
-
-        # Update with new values
-        values2 = Mock()
-        values2.values = [MetricValue(value=2.0, step=1)]
-        manager._update_tracker("metric", values2)
-
-        assert manager.trackers["metric"].num_rows == 2
-
-    def test_tracker_min_max_values(self):
-        """Test that tracker correctly tracks min and max values."""
-        manager = _BackgroundThread(
-            teamspace_id="test",
-            metrics_store_id="test",
-            metrics_api=Mock(),
-            metrics_queue=Mock(),
-            is_ready_event=Event(),
-            stop_event=Event(),
-            done_event=Event(),
-            store_step=True,
-            store_created_at=False,
-        )
-
-        values = Mock()
-        values.values = [
-            MetricValue(value=5.0, step=0),
-            MetricValue(value=2.0, step=1),
-            MetricValue(value=8.0, step=2),
-            MetricValue(value=3.0, step=3),
-        ]
-
-        manager._update_tracker("metric", values)
-
-        tracker = manager.trackers["metric"]
-        assert tracker.min_value == 2.0
-        assert tracker.min_index == 1
-        assert tracker.max_value == 8.0
-        assert tracker.max_index == 2
-        assert tracker.last_value == 3.0
-        assert tracker.last_index == 3
-
-    def test_tracker_internal_start_step_assignment(self):
-        """Test internal_start_step is correctly assigned across batches."""
-        manager = _BackgroundThread(
-            teamspace_id="test",
-            metrics_store_id="test",
-            metrics_api=Mock(),
-            metrics_queue=Mock(),
-            is_ready_event=Event(),
-            stop_event=Event(),
-            done_event=Event(),
-            store_step=True,
-            store_created_at=False,
-        )
-
-        # Create test values for two metrics with multiple batches
-        metric_names = ("metric1", "metric2")
-        values = defaultdict(list)
-
-        for _ in range(2):
-            for metric_name in metric_names:
-                for _ in range(2):
-                    batch = Metrics(name=metric_name, values=[MetricValue(value=float(i), step=i) for i in range(3)])
-                    values[metric_name].append(batch)
-
-        # Update trackers sequentially
-        for metric_name in metric_names:
-            for batch in values[metric_name]:
-                manager._update_tracker(metric_name, batch)
-
-        # Verify internal steps are correctly assigned
-        for metric_name in metric_names:
-            assert values[metric_name][0].internal_start_step == 0
-            assert values[metric_name][1].internal_start_step == 3
-            assert values[metric_name][2].internal_start_step == 6
-            assert values[metric_name][3].internal_start_step == 9
-            assert manager.trackers[metric_name].num_rows == 12
-
-    def test_tracker_with_created_at_timestamps(self):
-        """Test tracker handles created_at timestamps when store_created_at is True."""
-        manager = _BackgroundThread(
-            teamspace_id="test",
-            metrics_store_id="test",
-            metrics_api=Mock(),
-            metrics_queue=Mock(),
-            is_ready_event=Event(),
-            stop_event=Event(),
-            done_event=Event(),
-            store_step=True,
-            store_created_at=True,
-        )
-
-        timestamp1 = "2024-03-14T12:00:00.000000+00:00"
-        timestamp2 = "2024-03-14T12:01:00.000000+00:00"
-
-        values = Mock()
-        values.values = [
-            MetricValue(value=1.0, step=0, created_at=timestamp1),
-            MetricValue(value=2.0, step=1, created_at=timestamp2),
-        ]
-
-        manager._update_tracker("metric", values)
-
-        tracker = manager.trackers["metric"]
-        assert tracker.started_at is not None
-        assert tracker.updated_at is not None
-
-
 class TestBackgroundThreadSend:
     """Test _BackgroundThread._send method."""
 
@@ -573,13 +210,10 @@ class TestBackgroundThreadSend:
             store_created_at=False,
         )
 
-        metrics_data = {"loss": Metrics(name="loss", values=[MetricValue(value=0.5)])}
-        manager.metrics = metrics_data
-        manager.trackers = {"loss": MetricsTracker(name="loss", num_rows=1)}
+        manager.metrics = {"loss": Metrics(name="loss", values=[MetricValue(value=0.5)])}
 
         manager._send()
 
-        # Verify API was called
         assert mock_metrics_api.append_experiment_metrics.called
         assert manager.metrics == {}
 
@@ -601,7 +235,6 @@ class TestBackgroundThreadSend:
         )
 
         manager.metrics = {"loss": Metrics(name="loss", values=[MetricValue(value=0.5)])}
-        manager.trackers = {"loss": MetricsTracker(name="loss", num_rows=1)}
 
         with pytest.raises(Exception, match="The metrics stream has been deleted"):
             manager._send()
@@ -626,7 +259,6 @@ class TestBackgroundThreadSend:
         )
 
         manager.metrics = {"loss": Metrics(name="loss", values=[MetricValue(value=0.5)])}
-        manager.trackers = {"loss": MetricsTracker(name="loss", num_rows=1)}
 
         with pytest.raises(ApiException):
             manager._send()
@@ -807,8 +439,8 @@ class TestBackgroundThreadStep:
 class TestBackgroundThreadInformDone:
     """Test _BackgroundThread.inform_done method."""
 
-    def test_inform_done_without_timestamps(self):
-        """Test inform_done updates stream without timestamp conversion."""
+    def test_inform_done(self):
+        """Test inform_done updates stream with COMPLETED phase."""
         mock_metrics_api = Mock()
 
         manager = _BackgroundThread(
@@ -823,15 +455,6 @@ class TestBackgroundThreadInformDone:
             store_created_at=False,
         )
 
-        manager.trackers = {
-            "loss": MetricsTracker(
-                name="loss",
-                num_rows=10,
-                min_value=0.1,
-                max_value=1.0,
-            )
-        }
-
         manager.inform_done()
 
         mock_metrics_api.update_experiment_metrics.assert_called_once()
@@ -840,46 +463,6 @@ class TestBackgroundThreadInformDone:
         assert call_args.kwargs["metrics_store_id"] == "test_stream"
         assert call_args.kwargs["persisted"] is True
         assert call_args.kwargs["phase"] == PhaseType.COMPLETED
-
-    def test_inform_done_with_timestamps(self):
-        """Test inform_done converts timestamps when store_created_at is True."""
-        mock_metrics_api = Mock()
-
-        manager = _BackgroundThread(
-            teamspace_id="test_teamspace",
-            metrics_store_id="test_stream",
-            metrics_api=mock_metrics_api,
-            metrics_queue=Mock(),
-            is_ready_event=Event(),
-            stop_event=Event(),
-            done_event=Event(),
-            store_step=True,
-            store_created_at=True,
-        )
-
-        # Use actual datetime objects (not timestamps)
-        started_datetime = datetime(2024, 3, 14, 12, 0, 0)
-        updated_datetime = datetime(2024, 3, 14, 12, 5, 0)
-
-        manager.trackers = {
-            "loss": MetricsTracker(
-                name="loss",
-                num_rows=10,
-                started_at=started_datetime,
-                updated_at=updated_datetime,
-            )
-        }
-
-        manager.inform_done()
-
-        # Verify datetime objects are preserved (not converted to timestamps or strings in user-facing code)
-        tracker = manager.trackers["loss"]
-        assert isinstance(tracker.started_at, datetime)
-        assert isinstance(tracker.updated_at, datetime)
-        assert tracker.started_at == started_datetime
-        assert tracker.updated_at == updated_datetime
-
-        mock_metrics_api.update_experiment_metrics.assert_called_once()
 
 
 class TestBackgroundThreadRun:
@@ -966,7 +549,7 @@ class TestBackgroundThreadIntegration:
     """Integration tests for _BackgroundThread."""
 
     def test_full_workflow_with_metrics(self):
-        """Test complete workflow from queue to upload."""
+        """Test complete workflow from queue to send."""
         mock_metrics_api = Mock()
         metrics_queue = Queue()
         stop_event = Event()

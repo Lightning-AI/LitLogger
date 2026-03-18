@@ -355,9 +355,14 @@ class MetricsApi:
         if not response.summaries_per_name:
             return {}
 
-        return {
-            name: s.summaries_per_id[metrics_stream_id].last_step for name, s in response.summaries_per_name.items()
-        }
+        result = {}
+        for name, s in response.summaries_per_name.items():
+            last_step = s.summaries_per_id[metrics_stream_id].last_step
+            try:
+                result[name] = int(last_step)
+            except (TypeError, ValueError):
+                pass
+        return result
 
     def get_trackers_from_metrics_store(self, metrics_store: Any) -> dict[str, MetricsTracker] | None:
         """Extract and convert trackers from a metrics store object.

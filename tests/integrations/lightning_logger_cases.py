@@ -148,7 +148,10 @@ def run_end_to_end_smoke(logger_cls: type, *, name_prefix: str, tmpdir: Any) -> 
         save_logs=False,
         checkpoint_name=checkpoint_name,
     )
-    logger._version = _patched_version()
+    if hasattr(logger, "_version"):
+        logger._version = _patched_version()
+    if logger.__class__.__module__ == "lightning.pytorch.loggers.litlogger":
+        logger._name = f"{run_id}-{_patched_version()}"
 
     class LitAutoEncoder(LightningModule):
         def __init__(self) -> None:

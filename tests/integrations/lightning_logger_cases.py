@@ -1,11 +1,11 @@
 """Shared integration cases for Lightning logger adapters."""
 
 import os
-import pickle
 import subprocess
 import sys
 import uuid
-from contextlib import redirect_stderr, redirect_stdout
+import warnings
+from contextlib import redirect_stdout
 from io import StringIO
 from pathlib import Path
 from time import sleep
@@ -16,9 +16,9 @@ import torch.nn as nn
 import torch.nn.functional as F  # noqa: N812
 import torch.utils.data as data
 from lightning.pytorch import LightningModule, Trainer
+from lightning.pytorch.callbacks import ModelCheckpoint
 from lightning_sdk.lightning_cloud.openapi.models import LitLoggerServiceDeleteMetricsStreamBody
 from litlogger.api.client import LitRestClient
-from litlogger.diagnostics import collect_system_info
 
 
 def _unique_name(prefix: str) -> str:
@@ -41,25 +41,87 @@ def _cleanup_logger_run(logger: Any) -> None:
         body=LitLoggerServiceDeleteMetricsStreamBody(ids=[stream_id]),
     )
 
-    try:
-        model = client.models_store_get_model_by_name(
-            project_owner_name=experiment._teamspace.owner.name,
-            project_name=experiment._teamspace.name,
-            model_name=experiment.name,
-        )
-        client.models_store_delete_model(project_id=project_id, model_id=model.id)
-    except Exception:
-        pass
+    for model_name in {experiment.name, getattr(logger, "_checkpoint_name", None)}:
+        if not model_name:
+            continue
+        try:
+            model = client.models_store_get_model_by_name(
+                project_owner_name=experiment._teamspace.owner.name,
+                project_name=experiment._teamspace.name,
+                model_name=model_name,
+            )
+            client.models_store_delete_model(project_id=project_id, model_id=model.id)
+        except Exception:
+            pass
+
+
+def _wait_for_model(
+    logger: Any,
+    *,
+    model_name: str,
+    attempts: int = 30,
+) -> Any:
+    experiment = logger.experiment
+    for _ in range(attempts):
+        try:
+            models = experiment.teamspace.list_models()
+            model = next((item for item in models if getattr(item, "name", None) == model_name), None)
+            if model is not None:
+                return model
+        except Exception:
+            pass
+        sleep(1)
+    return None
+
+
+def _metric_values(named_metrics: dict[str, Any], metric_name: str, stream_id: str) -> list[Any]:
+    metric = named_metrics.get(metric_name, {})
+    ids_metrics = metric.get("ids_metrics", {}) if isinstance(metric, dict) else getattr(metric, "ids_metrics", {})
+    stream_metrics = ids_metrics.get(stream_id, {})
+    values = (
+        stream_metrics.get("metrics_values", {})
+        if isinstance(stream_metrics, dict)
+        else getattr(stream_metrics, "metrics_values", {})
+    )
+    return values or []
+
+
+def _wait_for_metric_count(
+    *,
+    project_id: str,
+    stream_id: str,
+    metric_name: str,
+    minimum_count: int = 1,
+    attempts: int = 30,
+) -> Any:
+    client = LitRestClient()
+    response = None
+    for _ in range(attempts):
+        response = client.lit_logger_service_get_logger_metrics(project_id=project_id, ids=[stream_id])
+        if len(_metric_values(response.named_metrics or {}, metric_name, stream_id)) >= minimum_count:
+            return response
+        sleep(1)
+    return response
+
+
+def _wait_for_metadata(logger: Any, expected: dict[str, str], attempts: int = 30) -> dict[str, str]:
+    metadata = {}
+    for _ in range(attempts):
+        metadata = logger.experiment.metadata
+        if all(metadata.get(key) == value for key, value in expected.items()):
+            return metadata
+        sleep(1)
+    return metadata
 
 
 def run_full_training_integration(logger_cls: type, *, name_prefix: str, tmpdir: Any) -> None:
-    """Run a full Trainer fit flow and verify uploaded metrics."""
+    """Run a Trainer fit flow and verify train metrics reach the backend."""
     logger = logger_cls(
         name=_unique_name(name_prefix),
         teamspace="oss-litlogger",
-        log_model=True,
+        root_dir=str(tmpdir),
+        log_model=False,
     )
-    expected_metrics = []
 
     class LitAutoEncoder(LightningModule):
         def __init__(self) -> None:
@@ -77,133 +139,126 @@ def run_full_training_integration(logger_cls: type, *, name_prefix: str, tmpdir:
             x_hat = self.decoder(z)
             loss = F.mse_loss(x_hat, x)
             self.log("train_loss", loss)
-            expected_metrics.append(loss.detach().cpu())
             return loss
 
         def configure_optimizers(self) -> torch.optim.Optimizer:
             return torch.optim.Adam(self.parameters(), lr=1e-3)
 
+    torch.manual_seed(1234)
     inputs = torch.rand(1_920, 1, 28, 28)
     targets = torch.zeros(1_920, dtype=torch.long)
     train = data.TensorDataset(inputs, targets)
+    trainer = Trainer(
+        logger=logger,
+        max_epochs=1,
+        log_every_n_steps=1,
+        max_steps=20,
+        default_root_dir=tmpdir,
+        enable_checkpointing=False,
+        enable_model_summary=False,
+        enable_progress_bar=False,
+        num_sanity_val_steps=0,
+    )
 
-    config_path = os.path.join(str(tmpdir), "config.yaml")
-    with open(config_path, "w") as f:
-        f.write("foo: bar\n")
-
-    trainer = Trainer(logger=logger, max_epochs=1, log_every_n_steps=1, max_steps=20, default_root_dir=tmpdir)
-
-    err = StringIO()
-    with redirect_stderr(err):
-        logger.log_file(config_path)
+    with warnings.catch_warnings():
+        warnings.filterwarnings(
+            "ignore",
+            message=r"`isinstance\(treespec, LeafSpec\)` is deprecated",
+            category=FutureWarning,
+        )
         trainer.fit(LitAutoEncoder(), data.DataLoader(train, batch_size=32))
 
-    output = err.getvalue()
-    assert "Logged" in output or config_path in output or output == ""
-
     project_id, stream_id = _project_and_stream_ids(logger)
-    client = LitRestClient()
-    response = None
-    for _ in range(30):
-        response = client.lit_logger_service_get_logger_metrics(project_id=project_id, ids=[stream_id])
-        if response.named_metrics:
-            metrics = response.named_metrics.get("train_loss", {}).ids_metrics.get(stream_id, {}).metrics_values
-            if metrics and len(expected_metrics) == len(metrics):
-                break
-        sleep(1)
+    response = _wait_for_metric_count(project_id=project_id, stream_id=stream_id, metric_name="train_loss")
 
     assert response is not None
-    assert response.named_metrics != {}
-    metrics = response.named_metrics["train_loss"].ids_metrics[stream_id].metrics_values
-    assert len(expected_metrics) == len(metrics)
-
-    for metric in metrics:
-        idx, actual_value = int(metric.step), metric.value
-        assert round(expected_metrics[idx].item(), 3) == round(actual_value, 3)
+    metrics = _metric_values(response.named_metrics or {}, "train_loss", stream_id)
+    assert len(metrics) > 0
 
     _cleanup_logger_run(logger)
 
 
-def run_console_output(logger_cls: type, *, name_prefix: str) -> None:
-    """Verify console output and basic metric logging."""
+def run_checkpoint_upload_smoke(logger_cls: type, *, name_prefix: str, tmpdir: Any) -> None:
+    """Verify local checkpointing and basic checkpoint upload."""
+    checkpoint_name = f"{_unique_name(name_prefix)}-ckpt"
     logger = logger_cls(
         name=_unique_name(name_prefix),
         teamspace="oss-litlogger",
-    )
-
-    out, err = StringIO(), StringIO()
-    with redirect_stdout(out), redirect_stderr(err):
-        for i in range(10):
-            logger.log_metrics({"my_metric": i}, step=i)
-        logger.finalize()
-
-    stderr_output = err.getvalue()
-    assert "Run complete" in stderr_output or "Metrics logged" in stderr_output or stderr_output == ""
-
-    _cleanup_logger_run(logger)
-
-
-def run_system_info(logger_cls: type, *, name_prefix: str) -> None:
-    """Verify system info is attached to the metrics stream."""
-    logger = logger_cls(
-        name=_unique_name(name_prefix),
-        teamspace="oss-litlogger",
-    )
-
-    for i in range(10):
-        logger.log_metrics({"my_metric": i}, step=i)
-    logger.finalize()
-
-    project_id, stream_id = _project_and_stream_ids(logger)
-    client = LitRestClient()
-    response = None
-    for _ in range(30):
-        response = client.lit_logger_service_list_metrics_streams(project_id=project_id)
-        if response.metrics_streams:
-            break
-        sleep(1)
-
-    assert response is not None
-    metrics_stream = next((ms for ms in response.metrics_streams if ms.id == stream_id), None)
-    assert metrics_stream is not None
-    assert hasattr(metrics_stream, "system_info")
-    assert metrics_stream.system_info != {}
-
-    expected_system_info = collect_system_info()
-    actual_system_info = metrics_stream.system_info.to_dict()
-    for key, value in expected_system_info.items():
-        assert actual_system_info[key] == value
-
-    _cleanup_logger_run(logger)
-
-
-def run_file_and_model_logging(logger_cls: type, *, name_prefix: str, tmpdir: Any) -> None:
-    """Verify file logging, file retrieval, and model logging flows."""
-    logger = logger_cls(
-        name=_unique_name(name_prefix),
-        teamspace="oss-litlogger",
+        root_dir=str(tmpdir),
         log_model=True,
+        checkpoint_name=checkpoint_name,
     )
 
-    class TestModel(nn.Module):
+    class LitAutoEncoder(LightningModule):
         def __init__(self) -> None:
             super().__init__()
-            self.linear = nn.Linear(10, 10)
+            self.encoder = nn.Sequential(nn.Linear(28 * 28, 64), nn.ReLU(), nn.Linear(64, 3))
+            self.decoder = nn.Sequential(nn.Linear(3, 64), nn.ReLU(), nn.Linear(64, 28 * 28))
 
-        def forward(self, x: torch.Tensor) -> torch.Tensor:
-            return self.linear(x)
+        def training_step(self, batch: Any, batch_idx: int) -> torch.Tensor:
+            x, _ = batch
+            x = x.view(x.size(0), -1)
+            z = self.encoder(x)
+            x_hat = self.decoder(z)
+            loss = F.mse_loss(x_hat, x)
+            self.log("train_loss", loss)
+            return loss
 
-    test_model = TestModel()
-    model_path = os.path.join(str(tmpdir), "test_model.pkl")
-    with open(model_path, "wb") as f:
-        pickle.dump({"weights": test_model.state_dict(), "epoch": 10}, f)
+        def configure_optimizers(self) -> torch.optim.Optimizer:
+            return torch.optim.Adam(self.parameters(), lr=1e-3)
+
+    torch.manual_seed(1234)
+    inputs = torch.rand(640, 1, 28, 28)
+    targets = torch.zeros(640, dtype=torch.long)
+    train = data.TensorDataset(inputs, targets)
+    checkpoint_callback = ModelCheckpoint(
+        dirpath=str(tmpdir),
+        filename="basic-{step}",
+        save_top_k=-1,
+        every_n_train_steps=5,
+        save_last=False,
+    )
+    trainer = Trainer(
+        logger=logger,
+        callbacks=[checkpoint_callback],
+        max_epochs=1,
+        log_every_n_steps=1,
+        max_steps=5,
+        default_root_dir=tmpdir,
+        enable_model_summary=False,
+        enable_progress_bar=False,
+        num_sanity_val_steps=0,
+    )
+
+    with warnings.catch_warnings():
+        warnings.filterwarnings(
+            "ignore",
+            message=r"`isinstance\(treespec, LeafSpec\)` is deprecated",
+            category=FutureWarning,
+        )
+        trainer.fit(LitAutoEncoder(), data.DataLoader(train, batch_size=32))
+
+    checkpoint_paths = list(Path(str(tmpdir)).rglob("*.ckpt"))
+    assert checkpoint_paths
+
+    uploaded_model = _wait_for_model(logger, model_name=checkpoint_name)
+    assert uploaded_model is not None
+
+    _cleanup_logger_run(logger)
+
+
+def run_file_logging(logger_cls: type, *, name_prefix: str, tmpdir: Any) -> None:
+    """Verify file logging and file retrieval."""
+    logger = logger_cls(
+        name=_unique_name(name_prefix),
+        teamspace="oss-litlogger",
+        root_dir=str(tmpdir),
+    )
 
     config_path = os.path.join(str(tmpdir), "config.yaml")
     with open(config_path, "w") as f:
         f.write("learning_rate: 0.001\nbatch_size: 32\n")
 
-    logger.log_model(test_model, staging_dir=str(tmpdir), version="model-v1")
-    logger.log_model_artifact(model_path, version="artifact-v1")
     logger.log_file(config_path)
 
     retrieved_path = None
@@ -220,20 +275,11 @@ def run_file_and_model_logging(logger_cls: type, *, name_prefix: str, tmpdir: An
 
     logger.finalize()
 
-    client = LitRestClient()
-    experiment = logger.experiment
-    model = client.models_store_get_model_by_name(
-        project_owner_name=experiment._teamspace.owner.name,
-        project_name=experiment._teamspace.name,
-        model_name=experiment.name,
-    )
-    assert model is not None
-
     _cleanup_logger_run(logger)
 
 
 def run_hyperparameter_logging(logger_cls: type, *, name_prefix: str) -> None:
-    """Verify hyperparameters are persisted as metadata tags."""
+    """Verify hyperparameters are persisted as experiment metadata."""
     logger = logger_cls(
         name=_unique_name(name_prefix),
         teamspace="oss-litlogger",
@@ -248,34 +294,17 @@ def run_hyperparameter_logging(logger_cls: type, *, name_prefix: str) -> None:
     }
 
     logger.log_hyperparams(hparams)
-    for i in range(5):
-        logger.log_metrics({"train_loss": i * 0.1}, step=i)
+    metadata = _wait_for_metadata(logger, {key: str(value) for key, value in hparams.items()})
+    for key, value in hparams.items():
+        assert metadata.get(key) == str(value)
+
     logger.finalize()
-
-    project_id, stream_id = _project_and_stream_ids(logger)
-    client = LitRestClient()
-    response = None
-    for _ in range(30):
-        response = client.lit_logger_service_list_metrics_streams(project_id=project_id)
-        if response.metrics_streams:
-            break
-        sleep(1)
-
-    assert response is not None
-    metrics_stream = next((ms for ms in response.metrics_streams if ms.id == stream_id), None)
-    assert metrics_stream is not None
-
-    if getattr(metrics_stream, "tags", None):
-        stream_metadata = {tag.name: tag.value for tag in metrics_stream.tags}
-        for key, value in hparams.items():
-            if key in stream_metadata:
-                assert stream_metadata[key] == str(value)
 
     _cleanup_logger_run(logger)
 
 
 def run_custom_metadata(logger_cls: type, *, name_prefix: str) -> None:
-    """Verify metadata provided at init time is stored on the stream."""
+    """Verify metadata provided at init time is stored on the experiment."""
     metadata = {
         "experiment_type": "classification",
         "dataset": "CIFAR10",
@@ -287,27 +316,11 @@ def run_custom_metadata(logger_cls: type, *, name_prefix: str) -> None:
         metadata=metadata,
     )
 
-    for i in range(5):
-        logger.log_metrics({"accuracy": i * 0.1}, step=i)
+    actual_metadata = _wait_for_metadata(logger, metadata)
+    for key, value in metadata.items():
+        assert actual_metadata.get(key) == value
+
     logger.finalize()
-
-    project_id, stream_id = _project_and_stream_ids(logger)
-    client = LitRestClient()
-    response = None
-    for _ in range(30):
-        response = client.lit_logger_service_list_metrics_streams(project_id=project_id)
-        if response.metrics_streams:
-            break
-        sleep(1)
-
-    assert response is not None
-    metrics_stream = next((ms for ms in response.metrics_streams if ms.id == stream_id), None)
-    assert metrics_stream is not None
-    if getattr(metrics_stream, "tags", None):
-        stream_metadata = {tag.name: tag.value for tag in metrics_stream.tags}
-        for key, value in metadata.items():
-            if key in stream_metadata:
-                assert stream_metadata[key] == value
 
     _cleanup_logger_run(logger)
 

@@ -55,7 +55,9 @@ tests = [
     "mock",
     "pytest-mock",
     "pytest-sugar",
-    "lightning>=2.0.0"
+    "lightning>=2.0.0",
+    "torch",
+    "torchvision"
 ]
 
 [tool.setuptools.dynamic]

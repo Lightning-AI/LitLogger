@@ -78,7 +78,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        lightning-source: ["pypi", "github"]
+        lightning-source: ["github"] # ["pypi", "github"] # Add once new lightning release was done
 
     timeout-minutes: 30
     env:

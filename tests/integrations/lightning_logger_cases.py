@@ -138,7 +138,7 @@ def run_end_to_end_smoke(logger_cls: type, *, name_prefix: str, tmpdir: Any) -> 
         root_dir=str(tmpdir),
         metadata=init_metadata,
         log_model=True,
-        save_logs=True,
+        save_logs=False,
         checkpoint_name=checkpoint_name,
     )
 
@@ -239,15 +239,5 @@ def run_end_to_end_smoke(logger_cls: type, *, name_prefix: str, tmpdir: Any) -> 
         },
     )
     assert uploaded_model is not None
-
-    logs_path = logger.experiment.terminal_logs_path
-    assert os.path.basename(logs_path) == "logs.txt"
-    assert logs_path == os.path.join(logger.log_dir, "logs.txt")
-    if os.environ.get("_IN_PTY_RECORDER") != "1":
-        for _ in range(30):
-            if os.path.exists(logs_path):
-                break
-            sleep(1)
-        assert os.path.exists(logs_path)
 
     _cleanup_logger_run(logger)

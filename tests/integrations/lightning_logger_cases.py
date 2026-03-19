@@ -4,6 +4,7 @@ import os
 import uuid
 import warnings
 from contextlib import redirect_stdout
+from datetime import datetime, timezone
 from io import StringIO
 from pathlib import Path
 from time import sleep
@@ -21,6 +22,12 @@ from litlogger.api.client import LitRestClient
 
 def _unique_name(prefix: str) -> str:
     return f"{prefix}-{uuid.uuid4().hex}"
+
+
+# TODO: Remove after next lightning release
+def _patched_version() -> str:
+    timestamp = datetime.now(timezone.utc).isoformat(timespec="milliseconds")
+    return timestamp.replace(":", "-").replace("+00:00", "Z")
 
 
 def _project_and_stream_ids(logger: Any) -> tuple[str, str]:
@@ -141,6 +148,7 @@ def run_end_to_end_smoke(logger_cls: type, *, name_prefix: str, tmpdir: Any) -> 
         save_logs=False,
         checkpoint_name=checkpoint_name,
     )
+    logger._version = _patched_version()
 
     class LitAutoEncoder(LightningModule):
         def __init__(self) -> None:

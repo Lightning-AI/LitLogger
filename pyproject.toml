@@ -56,7 +56,9 @@ tests = [
     "pytest-mock",
     "pytest-sugar",
     "lightning>=2.0.0",
+    "pillow",
     "torch",
+    "torchvision",
 ]
 
 [tool.uv.sources]

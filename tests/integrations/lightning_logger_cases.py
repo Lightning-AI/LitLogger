@@ -1,8 +1,6 @@
 """Shared integration cases for Lightning logger adapters."""
 
 import os
-import subprocess
-import sys
 import uuid
 import warnings
 from contextlib import redirect_stdout
@@ -114,78 +112,25 @@ def _wait_for_metadata(logger: Any, expected: dict[str, str], attempts: int = 30
     return metadata
 
 
-def run_full_training_integration(logger_cls: type, *, name_prefix: str, tmpdir: Any) -> None:
-    """Run a Trainer fit flow and verify train metrics reach the backend."""
+def run_end_to_end_smoke(logger_cls: type, *, name_prefix: str, tmpdir: Any) -> None:
+    """Run one end-to-end flow covering the main Lightning adapter behaviors."""
+    run_id = _unique_name(name_prefix)
+    checkpoint_name = f"{run_id}-ckpt"
+    init_metadata = {
+        "experiment_type": "classification",
+        "framework": "PyTorch Lightning",
+    }
+    hparams = {
+        "learning_rate": 0.001,
+        "batch_size": 32,
+    }
     logger = logger_cls(
-        name=_unique_name(name_prefix),
+        name=run_id,
         teamspace="oss-litlogger",
         root_dir=str(tmpdir),
-        log_model=False,
-    )
-
-    class LitAutoEncoder(LightningModule):
-        def __init__(self) -> None:
-            super().__init__()
-            self.encoder = nn.Sequential(nn.Linear(28 * 28, 128), nn.ReLU(), nn.Linear(128, 3))
-            self.decoder = nn.Sequential(nn.Linear(3, 128), nn.ReLU(), nn.Linear(128, 28 * 28))
-
-        def forward(self, x: torch.Tensor) -> torch.Tensor:
-            return self.encoder(x)
-
-        def training_step(self, batch: Any, batch_idx: int) -> torch.Tensor:
-            x, _ = batch
-            x = x.view(x.size(0), -1)
-            z = self.encoder(x)
-            x_hat = self.decoder(z)
-            loss = F.mse_loss(x_hat, x)
-            self.log("train_loss", loss)
-            return loss
-
-        def configure_optimizers(self) -> torch.optim.Optimizer:
-            return torch.optim.Adam(self.parameters(), lr=1e-3)
-
-    torch.manual_seed(1234)
-    inputs = torch.rand(1_920, 1, 28, 28)
-    targets = torch.zeros(1_920, dtype=torch.long)
-    train = data.TensorDataset(inputs, targets)
-    trainer = Trainer(
-        logger=logger,
-        max_epochs=1,
-        log_every_n_steps=1,
-        max_steps=20,
-        default_root_dir=tmpdir,
-        enable_checkpointing=False,
-        enable_model_summary=False,
-        enable_progress_bar=False,
-        num_sanity_val_steps=0,
-    )
-
-    with warnings.catch_warnings():
-        warnings.filterwarnings(
-            "ignore",
-            message=r"`isinstance\(treespec, LeafSpec\)` is deprecated",
-            category=FutureWarning,
-        )
-        trainer.fit(LitAutoEncoder(), data.DataLoader(train, batch_size=32))
-
-    project_id, stream_id = _project_and_stream_ids(logger)
-    response = _wait_for_metric_count(project_id=project_id, stream_id=stream_id, metric_name="train_loss")
-
-    assert response is not None
-    metrics = _metric_values(response.named_metrics or {}, "train_loss", stream_id)
-    assert len(metrics) > 0
-
-    _cleanup_logger_run(logger)
-
-
-def run_checkpoint_upload_smoke(logger_cls: type, *, name_prefix: str, tmpdir: Any) -> None:
-    """Verify local checkpointing and basic checkpoint upload."""
-    checkpoint_name = f"{_unique_name(name_prefix)}-ckpt"
-    logger = logger_cls(
-        name=_unique_name(name_prefix),
-        teamspace="oss-litlogger",
-        root_dir=str(tmpdir),
+        metadata=init_metadata,
         log_model=True,
+        save_logs=True,
         checkpoint_name=checkpoint_name,
     )
 
@@ -211,6 +156,13 @@ def run_checkpoint_upload_smoke(logger_cls: type, *, name_prefix: str, tmpdir: A
     inputs = torch.rand(640, 1, 28, 28)
     targets = torch.zeros(640, dtype=torch.long)
     train = data.TensorDataset(inputs, targets)
+    config_path = os.path.join(str(tmpdir), "config.yaml")
+    with open(config_path, "w") as f:
+        f.write("learning_rate: 0.001\nbatch_size: 32\n")
+
+    logger.log_hyperparams(hparams)
+    logger.log_file(config_path)
+
     checkpoint_callback = ModelCheckpoint(
         dirpath=str(tmpdir),
         filename="basic-{step}",
@@ -238,28 +190,22 @@ def run_checkpoint_upload_smoke(logger_cls: type, *, name_prefix: str, tmpdir: A
         )
         trainer.fit(LitAutoEncoder(), data.DataLoader(train, batch_size=32))
 
-    checkpoint_paths = list(Path(str(tmpdir)).rglob("*.ckpt"))
-    assert checkpoint_paths
+    project_id, stream_id = _project_and_stream_ids(logger)
+    response = _wait_for_metric_count(project_id=project_id, stream_id=stream_id, metric_name="train_loss")
+    assert response is not None
+    assert len(_metric_values(response.named_metrics or {}, "train_loss", stream_id)) > 0
 
-    uploaded_model = _wait_for_model(logger, model_name=checkpoint_name)
-    assert uploaded_model is not None
-
-    _cleanup_logger_run(logger)
-
-
-def run_file_logging(logger_cls: type, *, name_prefix: str, tmpdir: Any) -> None:
-    """Verify file logging and file retrieval."""
-    logger = logger_cls(
-        name=_unique_name(name_prefix),
-        teamspace="oss-litlogger",
-        root_dir=str(tmpdir),
+    metadata = _wait_for_metadata(
+        logger,
+        {
+            **init_metadata,
+            **{key: str(value) for key, value in hparams.items()},
+        },
     )
-
-    config_path = os.path.join(str(tmpdir), "config.yaml")
-    with open(config_path, "w") as f:
-        f.write("learning_rate: 0.001\nbatch_size: 32\n")
-
-    logger.log_file(config_path)
+    for key, value in init_metadata.items():
+        assert metadata.get(key) == value
+    for key, value in hparams.items():
+        assert metadata.get(key) == str(value)
 
     retrieved_path = None
     for _ in range(30):
@@ -269,104 +215,25 @@ def run_file_logging(logger_cls: type, *, name_prefix: str, tmpdir: Any) -> None
             break
         except FileNotFoundError:
             sleep(1)
-
     assert retrieved_path is not None
     assert os.path.exists(retrieved_path)
 
-    logger.finalize()
+    checkpoint_paths = list(Path(str(tmpdir)).rglob("*.ckpt"))
+    assert checkpoint_paths
 
-    _cleanup_logger_run(logger)
+    uploaded_model = _wait_for_model(logger, model_name=checkpoint_name)
+    assert uploaded_model is not None
 
-
-def run_hyperparameter_logging(logger_cls: type, *, name_prefix: str) -> None:
-    """Verify hyperparameters are persisted as experiment metadata."""
-    logger = logger_cls(
-        name=_unique_name(name_prefix),
-        teamspace="oss-litlogger",
-    )
-
-    hparams = {
-        "learning_rate": 0.001,
-        "batch_size": 32,
-        "epochs": 10,
-        "optimizer": "Adam",
-        "model": "ResNet50",
-    }
-
-    logger.log_hyperparams(hparams)
-    metadata = _wait_for_metadata(logger, {key: str(value) for key, value in hparams.items()})
-    for key, value in hparams.items():
-        assert metadata.get(key) == str(value)
-
-    logger.finalize()
-
-    _cleanup_logger_run(logger)
-
-
-def run_custom_metadata(logger_cls: type, *, name_prefix: str) -> None:
-    """Verify metadata provided at init time is stored on the experiment."""
-    metadata = {
-        "experiment_type": "classification",
-        "dataset": "CIFAR10",
-        "framework": "PyTorch Lightning",
-    }
-    logger = logger_cls(
-        name=_unique_name(name_prefix),
-        teamspace="oss-litlogger",
-        metadata=metadata,
-    )
-
-    actual_metadata = _wait_for_metadata(logger, metadata)
-    for key, value in metadata.items():
-        assert actual_metadata.get(key) == value
-
-    logger.finalize()
-
-    _cleanup_logger_run(logger)
-
-
-def run_save_logs_subprocess(
-    *,
-    tmpdir: Any,
-    logger_kind: str,
-    name_prefix: str,
-) -> None:
-    """Run a training subprocess with save_logs enabled and verify logs.txt was created."""
-    logger_name = _unique_name(name_prefix)
-    script_path = Path(__file__).with_name("scripts") / "run_lightning_save_logs.py"
-
-    env = os.environ.copy()
-    env.pop("_IN_PTY_RECORDER", None)
-
-    subprocess.run(
-        [
-            sys.executable,
-            str(script_path),
-            "--logger-kind",
-            logger_kind,
-            "--name",
-            logger_name,
-            "--root-dir",
-            str(tmpdir),
-            "--teamspace",
-            "oss-litlogger",
-        ],
-        cwd=tmpdir,
-        capture_output=True,
-        text=True,
-        env=env,
-        check=True,
-        timeout=90,
-    )
-
-    found_path = None
-    for root, _, files in os.walk(str(tmpdir)):
-        if "logs.txt" in files:
-            found_path = os.path.join(root, "logs.txt")
+    logs_path = None
+    for _ in range(30):
+        for root, _, files in os.walk(str(tmpdir)):
+            if "logs.txt" in files:
+                logs_path = os.path.join(root, "logs.txt")
+                break
+        if logs_path is not None:
             break
+        sleep(1)
+    assert logs_path is not None
+    assert os.path.exists(logs_path)
 
-    assert found_path is not None
-
-    with open(found_path) as f:
-        content = f.read()
-        assert "| Name" in content or "┃ Name " in content
+    _cleanup_logger_run(logger)

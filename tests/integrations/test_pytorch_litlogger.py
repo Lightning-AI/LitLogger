@@ -4,11 +4,7 @@ import pytest
 from lightning.pytorch.loggers import LitLogger
 
 from tests.integrations.lightning_logger_cases import (
-    run_custom_metadata,
-    run_file_logging,
-    run_full_training_integration,
-    run_hyperparameter_logging,
-    run_save_logs_subprocess,
+    run_end_to_end_smoke,
 )
 
 pytestmark = [
@@ -17,25 +13,5 @@ pytestmark = [
 ]
 
 
-def test_full_training_integration(tmpdir):
-    run_full_training_integration(LitLogger, name_prefix="pytorch-litlogger-training", tmpdir=tmpdir)
-
-
-def test_file_logging(tmpdir):
-    run_file_logging(LitLogger, name_prefix="pytorch-litlogger-files", tmpdir=tmpdir)
-
-
-def test_hyperparameter_logging():
-    run_hyperparameter_logging(LitLogger, name_prefix="pytorch-litlogger-hparams")
-
-
-def test_custom_metadata():
-    run_custom_metadata(LitLogger, name_prefix="pytorch-litlogger-metadata")
-
-
-def test_log_file_creation_with_save_logs(tmpdir):
-    run_save_logs_subprocess(
-        tmpdir=tmpdir,
-        logger_kind="pytorch-litlogger",
-        name_prefix="pytorch-litlogger-save-logs",
-    )
+def test_end_to_end_smoke(tmpdir):
+    run_end_to_end_smoke(LitLogger, name_prefix="pytorch-litlogger", tmpdir=tmpdir)

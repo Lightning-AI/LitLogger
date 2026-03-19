@@ -56,14 +56,22 @@ def _cleanup_logger_run(logger: Any) -> None:
 def _wait_for_model(
     logger: Any,
     *,
-    model_name: str,
+    model_names: set[str],
     attempts: int = 30,
 ) -> Any:
     experiment = logger.experiment
+
+    def _matches(candidate: str | None) -> bool:
+        if not candidate:
+            return False
+        base = candidate.split(":")[0]
+        tail = base.rsplit("/", 1)[-1]
+        return candidate in model_names or base in model_names or tail in model_names
+
     for _ in range(attempts):
         try:
             models = experiment.teamspace.list_models()
-            model = next((item for item in models if getattr(item, "name", None) == model_name), None)
+            model = next((item for item in models if _matches(getattr(item, "name", None))), None)
             if model is not None:
                 return model
         except Exception:
@@ -189,6 +197,7 @@ def run_end_to_end_smoke(logger_cls: type, *, name_prefix: str, tmpdir: Any) -> 
             category=FutureWarning,
         )
         trainer.fit(LitAutoEncoder(), data.DataLoader(train, batch_size=32))
+    logger.finalize("success")
 
     project_id, stream_id = _project_and_stream_ids(logger)
     response = _wait_for_metric_count(project_id=project_id, stream_id=stream_id, metric_name="train_loss")
@@ -221,7 +230,14 @@ def run_end_to_end_smoke(logger_cls: type, *, name_prefix: str, tmpdir: Any) -> 
     checkpoint_paths = list(Path(str(tmpdir)).rglob("*.ckpt"))
     assert checkpoint_paths
 
-    uploaded_model = _wait_for_model(logger, model_name=checkpoint_name)
+    uploaded_model = _wait_for_model(
+        logger,
+        model_names={
+            checkpoint_name,
+            logger.experiment.name,
+            logger.name,
+        },
+    )
     assert uploaded_model is not None
 
     logs_path = None

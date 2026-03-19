@@ -56,7 +56,17 @@ tests = [
     "pytest-mock",
     "pytest-sugar",
     "lightning>=2.0.0",
+    "torch",
 ]
+
+[tool.uv.sources]
+torch = { index = "pytorch-cpu" }
+torchvision = { index = "pytorch-cpu" }
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
 
 [tool.setuptools.dynamic]
 version = {attr = "litlogger.__version__"}

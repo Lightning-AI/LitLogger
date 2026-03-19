@@ -240,16 +240,14 @@ def run_end_to_end_smoke(logger_cls: type, *, name_prefix: str, tmpdir: Any) -> 
     )
     assert uploaded_model is not None
 
-    logs_path = None
-    for _ in range(30):
-        for root, _, files in os.walk(str(tmpdir)):
-            if "logs.txt" in files:
-                logs_path = os.path.join(root, "logs.txt")
+    logs_path = logger.experiment.terminal_logs_path
+    assert os.path.basename(logs_path) == "logs.txt"
+    assert logs_path == os.path.join(logger.log_dir, "logs.txt")
+    if os.environ.get("_IN_PTY_RECORDER") != "1":
+        for _ in range(30):
+            if os.path.exists(logs_path):
                 break
-        if logs_path is not None:
-            break
-        sleep(1)
-    assert logs_path is not None
-    assert os.path.exists(logs_path)
+            sleep(1)
+        assert os.path.exists(logs_path)
 
     _cleanup_logger_run(logger)

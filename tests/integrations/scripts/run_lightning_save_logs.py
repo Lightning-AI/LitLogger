@@ -1,16 +1,12 @@
 """Launch a small lightning.pytorch training run with save_logs enabled."""
 
-from __future__ import annotations
-
 import argparse
-import os
 
+import torch
 from lightning.pytorch import LightningModule, Trainer
 from psutil import cpu_count
 from torch import nn, optim
-from torch.utils.data import DataLoader
-from torchvision.datasets import MNIST
-from torchvision.transforms import ToTensor
+from torch.utils.data import DataLoader, TensorDataset
 
 
 def _build_logger(logger_kind: str, *, name: str, root_dir: str, teamspace: str):
@@ -68,8 +64,11 @@ def main() -> None:
         root_dir=args.root_dir,
         teamspace=args.teamspace,
     )
+    torch.manual_seed(1234)
+    inputs = torch.rand(640, 1, 28, 28)
+    targets = torch.zeros(640, dtype=torch.long)
     train_loader = DataLoader(
-        dataset=MNIST(os.getcwd(), download=True, transform=ToTensor()),
+        dataset=TensorDataset(inputs, targets),
         batch_size=32,
         shuffle=True,
         num_workers=cpu_count(),

@@ -99,6 +99,9 @@ jobs:
         uv sync --group tests
         uv pip list
 
+    - name: Remove torchvision from lightning logger env
+      run: uv pip uninstall -y torchvision
+
     - name: Install lightning from PyPI
       if: matrix.lightning-source == 'pypi'
       run: uv pip install --upgrade lightning

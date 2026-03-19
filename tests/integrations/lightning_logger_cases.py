@@ -1,7 +1,5 @@
 """Shared integration cases for Lightning logger adapters."""
 
-from __future__ import annotations
-
 import os
 import pickle
 import subprocess
@@ -17,7 +15,6 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F  # noqa: N812
 import torch.utils.data as data
-import torchvision as tv
 from lightning.pytorch import LightningModule, Trainer
 from lightning_sdk.lightning_cloud.openapi.models import LitLoggerServiceDeleteMetricsStreamBody
 from litlogger.api.client import LitRestClient
@@ -86,8 +83,9 @@ def run_full_training_integration(logger_cls: type, *, name_prefix: str, tmpdir:
         def configure_optimizers(self) -> torch.optim.Optimizer:
             return torch.optim.Adam(self.parameters(), lr=1e-3)
 
-    dataset = tv.datasets.MNIST("..", download=True, transform=tv.transforms.ToTensor())
-    train, _ = data.random_split(dataset, [55_000, 5_000])
+    inputs = torch.rand(1_920, 1, 28, 28)
+    targets = torch.zeros(1_920, dtype=torch.long)
+    train = data.TensorDataset(inputs, targets)
 
     config_path = os.path.join(str(tmpdir), "config.yaml")
     with open(config_path, "w") as f:

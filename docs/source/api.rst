@@ -116,3 +116,11 @@ Deprecated compatibility alias for Lightning/Fabric integration. Prefer
 .. autoclass:: LightningLogger
    :members:
    :show-inheritance:
+
+.. autoattribute:: LightningLogger.url
+
+.. automethod:: LightningLogger.log_file
+
+.. automethod:: LightningLogger.log_media
+
+.. automethod:: LightningLogger.log_model_artifact

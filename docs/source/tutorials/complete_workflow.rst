@@ -10,6 +10,11 @@ This tutorial covers a full experiment lifecycle:
 4. reconnect later
 5. retrieve metadata and files
 
+.. image:: https://pl-bolts-doc-images.s3.us-east-2.amazonaws.com/litlogger/experiment_comparison_charts.png
+   :alt: Comparing experiment metrics with charts
+   :width: 800px
+   :align: center
+
 Train Script
 ============
 

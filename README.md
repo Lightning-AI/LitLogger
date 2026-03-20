@@ -26,7 +26,9 @@ When building AI, you change many things at once: code, data, prompts, models. A
 
 LitLogger runs locally (coming soon), in the cloud, or on-prem. It is free for developers and integrates with [Lightning AI](https://lightning.ai/), but works without logging in.
 
-<img width="3024" height="1716" alt="image" src="https://github.com/user-attachments/assets/27f9d8f1-2a13-4080-a64f-374d957712fa" />
+<div align='center'>
+<img width="800px" style="max-width: 100%;" alt="image" src="https://pl-bolts-doc-images.s3.us-east-2.amazonaws.com/litlogger/experiment_comparison_charts.png" />
+</div>
 
 #  Quick start
 
@@ -66,7 +68,7 @@ Add LitLogger to any training framework, PyTorch, Jax, TensorFlow, Numpy, SKLear
 
 <div align='center'>
 
-<img alt="LitServe" src="https://github.com/user-attachments/assets/50d9a2f7-17d0-4448-ad21-6be600ab53fc" width="800px" style="max-width: 100%;">
+<img alt="Comparing Experiment Metrics" src="https://pl-bolts-doc-images.s3.us-east-2.amazonaws.com/litlogger/experiment_comparison_table.png" width="800px" style="max-width: 100%;">
 
 &nbsp; 
 </div>
@@ -75,7 +77,8 @@ Add LitLogger to any training framework, PyTorch, Jax, TensorFlow, Numpy, SKLear
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from lightning.pytorch.loggers import LitLogger
+import litlogger
+from litlogger import Model, File
 import os
 
 # define a simple neural network
@@ -89,7 +92,9 @@ class SimpleModel(nn.Module):
 
 def train():
     # initialize LitLogger
-    logger = LitLogger(metadata={"task": "model_training", "model_name": "SimpleModel"})
+    experiment = litlogger.init()
+    experiment["task"] = "model_training"
+    experiment["model_name"] = "SimpleModel"
 
     # hyperparameters
     num_epochs = 10
@@ -113,25 +118,25 @@ def train():
         optimizer.step()
 
         # log training loss
-        logger.log_metrics({"train_loss": loss.item()}, step=epoch)
+        experiment["train/loss"].append(loss.item(), step=epoch)
         print(f"Epoch [{epoch+1}/{num_epochs}], Loss: {loss.item():.4f}")
 
     # log the trained model
-    logger.log_model(model)
+    experiment["model"] = Model(model)
     print("model logged.")
 
     # create a dummy artifact file and log it
     with open("model_config.txt", "w") as f:
         f.write(f"learning_rate: {learning_rate}\n")
         f.write(f"num_epochs: {num_epochs}\n")
-    logger.log_model_artifact("model_config.txt")
+    experiment["model_config"] = File("model_config.txt")
     print("model config artifact logged.")
     
     # Clean up the dummy artifact file after logging
     os.remove("model_config.txt")
 
     # finalize the logger when training is done
-    logger.finalize()
+    experiment.finalize()
     print("training complete and logger finalized.")
 
 if __name__ == "__main__":
@@ -146,7 +151,7 @@ Add LitLogger to any inference engine, LitServe, vLLM, FastAPI, etc...
 
 <div align='center'>
 
-<img alt="LitServe" src="https://github.com/user-attachments/assets/ac454da2-0825-4fcf-b422-c6d3a1526cf0" width="800px" style="max-width: 100%;">
+<img alt="Comparing Experiments Side By Side" src="https://pl-bolts-doc-images.s3.us-east-2.amazonaws.com/litlogger/experiment_comparison_side_by_side.png" width="800px" style="max-width: 100%;">
 
 &nbsp; 
 </div>
@@ -206,7 +211,7 @@ PyTorch Lightning now comes with LitLogger natively built in. It's also built by
 
 <div align='center'>
 
-<img alt="LitServe" src="https://github.com/user-attachments/assets/43071433-c319-4fc1-ac5a-03a5c5598a88" width="800px" style="max-width: 100%;">
+<img alt="Comparing Experiment Media" src="https://pl-bolts-doc-images.s3.us-east-2.amazonaws.com/litlogger/experiment_comparison_media.png" width="800px" style="max-width: 100%;">
 
 &nbsp; 
 </div>
@@ -242,7 +247,7 @@ This is a fun example that simulates a long model training run.
 
 <div align='center'>
 
-<img alt="LitServe" src="https://github.com/user-attachments/assets/fd15aa32-2b56-4324-81b6-c87c86db8a3b" width="800px" style="max-width: 100%;">
+<img alt="Comparing Experiment Metrics" src="https://pl-bolts-doc-images.s3.us-east-2.amazonaws.com/litlogger/experiment_comparison_charts.png" width="800px" style="max-width: 100%;">
 
 &nbsp; 
 </div>

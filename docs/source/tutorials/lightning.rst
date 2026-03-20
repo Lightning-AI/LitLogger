@@ -64,10 +64,7 @@ Enable automatic checkpoint uploads with ``log_model=True``.
 Files and Models
 ================
 
-The logger also exposes
-:meth:`~litlogger.logger.LightningLogger.log_file` and
-:meth:`~litlogger.logger.LightningLogger.log_model_artifact` for file and model
-logging:
+The logger also exposes file and model logging helpers:
 
 .. code-block:: python
 

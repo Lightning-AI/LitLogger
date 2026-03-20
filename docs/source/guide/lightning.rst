@@ -89,11 +89,8 @@ logger:
 Logging Files and Models
 ========================
 
-The logger also exposes
-:meth:`~litlogger.logger.LightningLogger.log_file`,
-:meth:`~litlogger.logger.LightningLogger.log_model_artifact`, and matching
-helpers on :class:`lightning:lightning.pytorch.loggers.LitLogger` for file and
-model logging:
+The logger also exposes matching file and model logging helpers on
+:class:`lightning:lightning.pytorch.loggers.LitLogger`:
 
 .. code-block:: python
 
@@ -106,8 +103,8 @@ For media uploads in Lightning workflows, use the standalone
 Accessing the Experiment URL
 ============================
 
-Use :attr:`~litlogger.logger.LightningLogger.url` to retrieve the run URL from
-the logger instance.
+Use the logger's ``url`` property to retrieve the run URL from the logger
+instance.
 
 .. code-block:: python
 

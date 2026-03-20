@@ -7,6 +7,11 @@ recommended standalone workflow is the dict-style
 :class:`~litlogger.experiment.Experiment` API returned by
 :func:`litlogger.init() <litlogger.init.init>`.
 
+.. image:: https://pl-bolts-doc-images.s3.us-east-2.amazonaws.com/litlogger/experiment_comparison_table.png
+   :alt: Comparing experiment metrics in a table
+   :width: 800px
+   :align: center
+
 Recommended New API
 ===================
 

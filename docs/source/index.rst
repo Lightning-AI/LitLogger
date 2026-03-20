@@ -7,8 +7,10 @@ standalone scripts, the new dict-style
 :class:`~litlogger.experiment.Experiment` API, Lightning/Fabric integration,
 files, media, models, and retrieval workflows.
 
-.. image:: https://storage.googleapis.com/lightning-avatars/litpages/01jrbsmwcrgj50pbybv827wc5d/9ee96e2e-58bd-4031-991f-1cff59009d19.png
-   :alt: LitLogger experiment dashboard
+.. image:: https://pl-bolts-doc-images.s3.us-east-2.amazonaws.com/litlogger/experiment_comparison_charts.png
+   :alt: Comparing experiment metrics with charts
+   :width: 800px
+   :align: center
 
 These docs are organized as a narrative:
 

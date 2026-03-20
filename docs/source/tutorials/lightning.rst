@@ -7,6 +7,11 @@ Lightning or Fabric to drive experiment logging for you.
 :class:`~litlogger.logger.LightningLogger` is deprecated and remains only as a
 compatibility alias.
 
+.. image:: https://pl-bolts-doc-images.s3.us-east-2.amazonaws.com/litlogger/experiment_comparison_media.png
+   :alt: Comparing experiment media across runs
+   :width: 800px
+   :align: center
+
 Trainer Integration
 ===================
 

@@ -31,7 +31,7 @@ Log and Retrieve Files
 ======================
 
 The legacy helper API is still supported for explicit file upload/download
-workflows:
+workflows through :func:`~litlogger.log_file` and :func:`~litlogger.get_file`:
 
 .. code-block:: python
 
@@ -50,8 +50,8 @@ workflows:
 Logging Multiple Files
 ======================
 
-:meth:`litlogger.log_files() <litlogger.experiment.Experiment.log_files>` uploads
-a list of files in parallel for better throughput:
+:meth:`~litlogger.experiment.Experiment.log_files` uploads a list of files in
+parallel for better throughput:
 
 .. code-block:: python
 
@@ -65,7 +65,8 @@ Log and Retrieve Models
 =======================
 
 LitLogger integrates with ``litmodels`` for storing and loading model objects.
-The legacy helper API still supports direct model-object logging:
+The legacy helper API still supports direct model-object logging through
+:func:`~litlogger.log_model` and :func:`~litlogger.get_model`:
 
 .. code-block:: python
 
@@ -90,7 +91,7 @@ Logging Model Files
 ===================
 
 If you already have saved model files on disk, use
-:meth:`litlogger.log_model_artifact() <litlogger.experiment.Experiment.log_model_artifact>`:
+:meth:`~litlogger.experiment.Experiment.log_model_artifact`:
 
 .. code-block:: python
 
@@ -98,7 +99,8 @@ If you already have saved model files on disk, use
    exp.log_model_artifact("checkpoints/epoch_10.ckpt", version="epoch-10")
    exp.log_model_artifact("model_export/", version="export-v2")
 
-Download model artifacts back:
+Download model artifacts back with
+:meth:`~litlogger.experiment.Experiment.get_model_artifact`:
 
 .. code-block:: python
 

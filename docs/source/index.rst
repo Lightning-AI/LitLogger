@@ -35,11 +35,16 @@ Supported Workflows
 
 LitLogger currently supports these main workflows:
 
-- standalone logging with the dict-style ``Experiment`` API
+- standalone logging with the dict-style
+  :class:`~litlogger.experiment.Experiment` API
 - legacy module-level logging helpers for existing scripts
-- Lightning and Fabric integration through upstream ``LitLogger`` classes
-- file, image, text, and model logging through dedicated wrappers
-- experiment resume and later retrieval by name
+- Lightning and Fabric integration through upstream
+  :class:`lightning:lightning.pytorch.loggers.LitLogger`
+- file, image, text, and model logging through
+  :class:`~litlogger.media.File`, :class:`~litlogger.media.Image`,
+  :class:`~litlogger.media.Text`, and :class:`~litlogger.media.Model`
+- experiment resume and later retrieval by name through
+  :func:`litlogger.init.init`
 - inference logging from a LitServe endpoint
 
 Quick Example

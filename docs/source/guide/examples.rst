@@ -6,8 +6,9 @@ Examples
 Standalone
 ==========
 
-A standalone training script using the module-level API to log metrics,
-metadata, and files.
+A standalone training script using the module-level API through
+:func:`~litlogger.log_metrics`, :func:`~litlogger.log_metadata`, and
+:func:`~litlogger.log_file`.
 
 .. literalinclude:: ../../../examples/standalone_usage.py
    :language: python
@@ -17,8 +18,9 @@ metadata, and files.
 Files, Media, and Models
 ========================
 
-A dict-style example showing static uploads, file and text series, image logging,
-and the new ``Model`` API for artifacts, objects, and checkpoint series.
+A dict-style example showing static uploads, file and text series, image
+logging, and the :class:`~litlogger.media.Model` API for artifacts, objects,
+and checkpoint series.
 
 .. literalinclude:: ../../../examples/file_media_model_usage.py
    :language: python

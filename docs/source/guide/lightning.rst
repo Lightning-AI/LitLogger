@@ -86,19 +86,25 @@ logger:
        loss = train_step()
        fabric.log("train_loss", loss, step=step)
 
-Logging Files, Media, and Models
-================================
+Logging Files and Models
+========================
 
-The logger also exposes helper methods for artifact, media, and model logging:
+The logger also exposes matching file and model logging helpers on
+:class:`lightning:lightning.pytorch.loggers.LitLogger`:
 
 .. code-block:: python
 
    trainer.logger.log_file("config.yaml")
-   trainer.logger.log_media("sample", "output.png", step=epoch)
    trainer.logger.log_model_artifact("checkpoints/best.ckpt", version="best")
+
+For media uploads in Lightning workflows, use the standalone
+:class:`~litlogger.experiment.Experiment` API directly.
 
 Accessing the Experiment URL
 ============================
+
+Use the logger's ``url`` property to retrieve the run URL from the logger
+instance.
 
 .. code-block:: python
 

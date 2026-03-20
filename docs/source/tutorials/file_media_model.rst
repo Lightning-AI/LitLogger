@@ -70,13 +70,9 @@ Use :class:`~litlogger.media.Model` for model objects or saved model files.
 Unlike files, images, and text entries, logged models are registered in the
 ``Weights`` tab of Lightning AI rather than the experiment's ``Experiments``
 tab. For background, see the `Lightning model registry docs <https://lightning.ai/docs/overview/model-registry>`_.
-
-Current Recovery Note
-=====================
-
-Within the current process, uploaded ``Model`` values are rebound with download
-or load behavior. Resumed experiment recovery for models still needs dedicated
-backend support.
+Within the current process, uploaded :class:`~litlogger.media.Model` values are
+rebound with download or load behavior. Resumed experiment recovery for models
+still needs dedicated backend support.
 
 Finalize
 ========

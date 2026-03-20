@@ -89,7 +89,11 @@ logger:
 Logging Files, Media, and Models
 ================================
 
-The logger also exposes helper methods for artifact, media, and model logging:
+The logger also exposes
+:meth:`~litlogger.logger.LightningLogger.log_file`,
+:meth:`~litlogger.logger.LightningLogger.log_media`, and
+:meth:`~litlogger.logger.LightningLogger.log_model_artifact` for artifact,
+media, and model logging:
 
 .. code-block:: python
 
@@ -99,6 +103,9 @@ The logger also exposes helper methods for artifact, media, and model logging:
 
 Accessing the Experiment URL
 ============================
+
+Use :attr:`~litlogger.logger.LightningLogger.url` to retrieve the run URL from
+the logger instance.
 
 .. code-block:: python
 

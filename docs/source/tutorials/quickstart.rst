@@ -15,13 +15,15 @@ Create an Experiment
 
    experiment = litlogger.init(name="quickstart")
 
-``litlogger.init()`` returns an :class:`~litlogger.experiment.Experiment`
-instance. That object is the main entrypoint for the new API.
+:func:`litlogger.init() <litlogger.init.init>` returns an
+:class:`~litlogger.experiment.Experiment` instance. That object is the main
+entrypoint for the new API.
 
 Log Metadata
 ============
 
-Static string assignments become experiment metadata:
+Static string assignments become
+:attr:`~litlogger.experiment.Experiment.metadata` entries:
 
 .. code-block:: python
 
@@ -33,7 +35,8 @@ Log Metrics
 ===========
 
 Time-series metrics use :class:`~litlogger.series.Series` through
-``experiment["key"].append(...)`` or ``extend(...)``:
+:meth:`~litlogger.series.Series.append` or
+:meth:`~litlogger.series.Series.extend` on ``experiment["key"]``:
 
 .. code-block:: python
 
@@ -61,7 +64,11 @@ Use :class:`~litlogger.media.File` for static artifacts:
 Inspect Logged Data
 ===================
 
-The experiment exposes runtime views for metadata, metrics, and artifacts:
+The experiment exposes runtime views through
+:attr:`~litlogger.experiment.Experiment.metadata`,
+:attr:`~litlogger.experiment.Experiment.metrics`,
+:attr:`~litlogger.experiment.Experiment.artifacts`, and
+:attr:`~litlogger.experiment.Experiment.url`:
 
 .. code-block:: python
 
@@ -72,6 +79,8 @@ The experiment exposes runtime views for metadata, metrics, and artifacts:
 
 Finalize
 ========
+
+Use :meth:`~litlogger.experiment.Experiment.finalize` when the run is complete.
 
 .. code-block:: python
 

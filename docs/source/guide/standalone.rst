@@ -35,10 +35,12 @@ Recommended New API
 The new standalone API covers:
 
 - metadata through ``experiment["key"] = "value"``
-- metrics through ``append`` and ``extend``
+- metrics through :meth:`~litlogger.series.Series.append` and
+  :meth:`~litlogger.series.Series.extend`
 - artifacts, media, and models through file-like wrappers
-- retrieval through ``experiment.metadata``, ``experiment.metrics``, and
-  ``experiment.artifacts``
+- retrieval through :attr:`~litlogger.experiment.Experiment.metadata`,
+  :attr:`~litlogger.experiment.Experiment.metrics`, and
+  :attr:`~litlogger.experiment.Experiment.artifacts`
 
 Metric Logging
 ==============
@@ -88,6 +90,11 @@ Initializing with the same name reconnects to the same experiment.
 Runtime Views
 =============
 
+Use :attr:`~litlogger.experiment.Experiment.metadata`,
+:attr:`~litlogger.experiment.Experiment.metrics`,
+:attr:`~litlogger.experiment.Experiment.artifacts`, and
+:attr:`~litlogger.experiment.Experiment.url` to inspect the current run state.
+
 .. code-block:: python
 
    print(experiment.metadata)
@@ -98,7 +105,9 @@ Runtime Views
 Legacy Module-Level API
 =======================
 
-The older module-level API is still available for compatibility:
+The older module-level API is still available for compatibility through
+:func:`~litlogger.log_metrics`, :func:`~litlogger.log_file`,
+:func:`~litlogger.log_metadata`, and :func:`~litlogger.finalize`:
 
 .. code-block:: python
 

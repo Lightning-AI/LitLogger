@@ -25,8 +25,9 @@ New Dict-Style API
 Legacy Helper API
 =================
 
-The legacy helper method remains available for existing code, but new
-standalone code should prefer the dict-style wrappers.
+The legacy helper method :meth:`~litlogger.experiment.Experiment.log_media`
+remains available for existing code, but new standalone code should prefer the
+dict-style wrappers.
 
 Logging Images
 ==============
@@ -80,8 +81,9 @@ Deprecated Compatibility Logger
 
 :class:`~litlogger.logger.LightningLogger` is deprecated. For Lightning or
 Fabric integrations, prefer
-:class:`lightning:lightning.pytorch.loggers.LitLogger` and use its media
-helpers from callbacks or your LightningModule.
+:class:`lightning:lightning.pytorch.loggers.LitLogger` and use
+:meth:`~litlogger.logger.LightningLogger.log_media` from callbacks or your
+LightningModule.
 
 .. code-block:: python
 

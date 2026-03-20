@@ -64,7 +64,10 @@ Enable automatic checkpoint uploads with ``log_model=True``.
 Files and Media
 ===============
 
-The logger also exposes helper methods for artifact and media logging:
+The logger also exposes
+:meth:`~litlogger.logger.LightningLogger.log_file` and
+:meth:`~litlogger.logger.LightningLogger.log_media` for artifact and media
+logging:
 
 .. code-block:: python
 

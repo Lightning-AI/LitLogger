@@ -1,3 +1,4 @@
+
 #########
 Workflows
 #########
@@ -13,7 +14,8 @@ Recommended for new code.
 - initialize with :func:`litlogger.init.init`
 - work with the returned :class:`~litlogger.experiment.Experiment`
 - log metadata with ``experiment["key"] = "value"``
-- log metrics with ``experiment["key"].append(...)`` and ``extend(...)``
+- log metrics with :meth:`~litlogger.series.Series.append` and
+  :meth:`~litlogger.series.Series.extend` on ``experiment["key"]``
 - log files, media, and models with the file-like wrappers
 
 Legacy Module-Level API
@@ -22,11 +24,11 @@ Legacy Module-Level API
 Supported for existing standalone scripts, but the dict-style API is the main
 user-facing API going forward.
 
-- ``litlogger.log_metrics(...)``
-- ``litlogger.log_file(...)``
-- ``litlogger.log_model(...)``
-- ``litlogger.log_model_artifact(...)``
-- ``litlogger.log_metadata(...)``
+- :func:`~litlogger.log_metrics`
+- :func:`~litlogger.log_file`
+- :func:`~litlogger.log_model`
+- :func:`~litlogger.log_model_artifact`
+- :func:`~litlogger.log_metadata`
 
 Lightning and Fabric
 ====================
@@ -49,7 +51,9 @@ Resume and Retrieval
 ====================
 
 Re-initialize with the same experiment name to continue logging or inspect
-existing metadata, metrics, artifacts, and media.
+existing :attr:`~litlogger.experiment.Experiment.metadata`,
+:attr:`~litlogger.experiment.Experiment.metrics`,
+:attr:`~litlogger.experiment.Experiment.artifacts`, and media.
 
 End-to-End Log and Fetch
 ========================

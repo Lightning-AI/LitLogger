@@ -61,18 +61,23 @@ Enable automatic checkpoint uploads with ``log_model=True``.
        callbacks=[checkpoint_callback],
    )
 
-Files and Media
-===============
+Files and Models
+================
 
 The logger also exposes
 :meth:`~litlogger.logger.LightningLogger.log_file` and
-:meth:`~litlogger.logger.LightningLogger.log_media` for artifact and media
+:meth:`~litlogger.logger.LightningLogger.log_model_artifact` for file and model
 logging:
 
 .. code-block:: python
 
    trainer.logger.log_file("config.yaml")
-   trainer.logger.log_media("sample", "output.png", step=10)
+   trainer.logger.log_model_artifact("checkpoints/best.ckpt", version="best")
+
+For media uploads, use the standalone
+:class:`~litlogger.experiment.Experiment` API directly. The upstream
+:class:`lightning:lightning.pytorch.loggers.LitLogger` does not provide a
+``log_media`` helper.
 
 Runnable Example
 ================

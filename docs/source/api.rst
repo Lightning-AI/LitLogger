@@ -121,6 +121,4 @@ Deprecated compatibility alias for Lightning/Fabric integration. Prefer
 
 .. automethod:: LightningLogger.log_file
 
-.. automethod:: LightningLogger.log_media
-
 .. automethod:: LightningLogger.log_model_artifact

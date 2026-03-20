@@ -81,19 +81,8 @@ Deprecated Compatibility Logger
 
 :class:`~litlogger.logger.LightningLogger` is deprecated. For Lightning or
 Fabric integrations, prefer
-:class:`lightning:lightning.pytorch.loggers.LitLogger` and use
-:meth:`~litlogger.logger.LightningLogger.log_media` from callbacks or your
-LightningModule.
-
-.. code-block:: python
-
-   from lightning.pytorch.loggers import LitLogger
-
-   logger = LitLogger(name="vision-run")
-
-   logger.log_media(
-       "val_sample",
-       "val_output.png",
-       step=trainer.global_step,
-       caption="Validation sample",
-   )
+:class:`lightning:lightning.pytorch.loggers.LitLogger` for metrics, files, and
+model artifacts. For media uploads, use the standalone
+:class:`~litlogger.experiment.Experiment` API directly; the upstream
+:class:`lightning:lightning.pytorch.loggers.LitLogger` does not expose a
+``log_media`` helper.

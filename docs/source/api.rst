@@ -66,15 +66,19 @@ Media Wrappers
 
 .. autoclass:: File
    :members:
+   :show-inheritance:
 
 .. autoclass:: Image
    :members:
+   :show-inheritance:
 
 .. autoclass:: Text
    :members:
+   :show-inheritance:
 
 .. autoclass:: Model
    :members:
+   :show-inheritance:
 
 Series
 ======
@@ -83,6 +87,7 @@ Series
 
 .. autoclass:: Series
    :members:
+   :show-inheritance:
 
 Types
 =====
@@ -92,16 +97,20 @@ Types
 .. autoclass:: MediaType
    :members:
    :undoc-members:
+   :show-inheritance:
 
 .. autoclass:: PhaseType
    :members:
    :undoc-members:
+   :show-inheritance:
 
 .. autoclass:: MetricValue
    :members:
+   :show-inheritance:
 
 .. autoclass:: Metrics
    :members:
+   :show-inheritance:
 
 LightningLogger
 ===============

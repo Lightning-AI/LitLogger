@@ -130,7 +130,7 @@ autodoc_default_options = {
     "methods": True,
     "special-members": "__call__",
     "exclude-members": "_abc_impl",
-    "show-inheritance": True,
+    "show-inheritance": False,
 }
 
 # True to prefix each section label with the name of the document it is in

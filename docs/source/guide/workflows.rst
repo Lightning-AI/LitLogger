@@ -6,22 +6,22 @@ Workflows
 This guide maps the LitLogger feature set to concrete workflows so users can
 quickly choose the right API surface.
 
-Standalone New API
-==================
+Experiment API
+==============
 
 Recommended for new code.
 
-- initialize with :func:`litlogger.init.init`
-- work with the returned :class:`~litlogger.experiment.Experiment`
-- log metadata with ``experiment["key"] = "value"``
-- log metrics with :meth:`~litlogger.series.Series.append` and
+- Initialize with :func:`litlogger.init.init`
+- Work with the returned :class:`~litlogger.experiment.Experiment`
+- Log metadata with ``experiment["key"] = "value"``
+- Log metrics with :meth:`~litlogger.series.Series.append` and
   :meth:`~litlogger.series.Series.extend` on ``experiment["key"]``
-- log files, media, and models with the file-like wrappers
+- Log files, media, and models with the file-like wrappers
 
 Legacy Module-Level API
 =======================
 
-Supported for existing standalone scripts, but the dict-style API is the main
+Supported for existing standalone scripts, but the Experiment API is the main
 user-facing API going forward.
 
 - :func:`~litlogger.log_metrics`
@@ -30,8 +30,8 @@ user-facing API going forward.
 - :func:`~litlogger.log_model_artifact`
 - :func:`~litlogger.log_metadata`
 
-Lightning and Fabric
-====================
+PyTorch Lightning and Lightning Fabric
+======================================
 
 Use :class:`lightning:lightning.pytorch.loggers.LitLogger` with a Trainer or
 Fabric loop. The local :class:`~litlogger.logger.LightningLogger` alias is

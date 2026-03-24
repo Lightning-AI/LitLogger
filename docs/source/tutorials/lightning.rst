@@ -3,7 +3,7 @@ Lightning Tutorial
 ##################
 
 Use :class:`lightning:lightning.pytorch.loggers.LitLogger` when you want
-Lightning or Fabric to drive experiment logging for you.
+PyTorch Lightning or Lightning Fabric to drive experiment logging for you.
 :class:`~litlogger.logger.LightningLogger` is deprecated and remains only as a
 compatibility alias.
 

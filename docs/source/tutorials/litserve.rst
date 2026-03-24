@@ -22,10 +22,10 @@ for each request in ``predict()``.
 What This Workflow Covers
 =========================
 
-- request-time metric logging
-- inference latency tracking
-- token-count or request-shape metrics
-- deployment-oriented usage outside training loops
+- Request-time metric logging
+- Inference latency tracking
+- Token-count or request-shape metrics
+- Deployment-oriented usage outside training loops
 
 Related Docs
 ============

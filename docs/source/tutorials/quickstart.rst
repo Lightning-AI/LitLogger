@@ -2,7 +2,7 @@
 Quickstart
 ##########
 
-This tutorial introduces the new dict-style API through the smallest useful
+This tutorial introduces the Experiment API through the smallest useful
 workflow: create an experiment, log metadata and metrics, upload a file, and
 finalize the run.
 

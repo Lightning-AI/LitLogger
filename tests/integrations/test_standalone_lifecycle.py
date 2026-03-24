@@ -400,3 +400,38 @@ def test_get_or_create_experiment_metrics():
         project_id=teamspace_id,
         body=LitLoggerServiceDeleteMetricsStreamBody(ids=[original_id, new_experiment.id]),
     )
+
+
+@pytest.mark.cloud()
+def test_experiment_completion():
+    """Test that finalize correctly marks the experiment as complete."""
+    exp = litlogger.init(
+        name=f"lightning_experiment_completion-{uuid.uuid4().hex}",
+        teamspace="oss-litlogger",
+    )
+
+    for i in range(1000):
+        exp["my_metric"].append(i, step=i)
+
+    exp.finalize()
+
+    stream_id = exp._metrics_store.id
+
+    client = LitRestClient()
+
+    # Give enough time for the backend to perform its final tracker updates.
+    sleep(6)
+
+    response = client.lit_logger_service_get_metrics_stream(
+        project_name=exp._teamspace.name,
+        project_owner_name=exp._teamspace.owner.name,
+        id=stream_id,
+    )
+
+    client.lit_logger_service_delete_metrics_stream(
+        project_id=exp._teamspace.id,
+        body=LitLoggerServiceDeleteMetricsStreamBody(ids=[stream_id]),
+    )
+
+    assert response is not None
+    assert response.phase == "COMPLETED", f"Expected metrics stream status to be 'COMPLETED', but got {response.phase}"

@@ -4,11 +4,11 @@ Complete Workflow
 
 This tutorial covers a full experiment lifecycle:
 
-1. initialize a run
-2. log metadata, metrics, and artifacts
-3. finalize
-4. reconnect later
-5. retrieve metadata and files
+1. Initialize a run
+2. Log metadata, metrics, and artifacts
+3. Finalize
+4. Reconnect later
+5. Retrieve metadata and files
 
 .. image:: https://pl-bolts-doc-images.s3.us-east-2.amazonaws.com/litlogger/experiment_comparison_charts.png
    :alt: Comparing experiment metrics with charts
@@ -32,12 +32,12 @@ Fetch Script
 What This Covers
 ================
 
-- experiment creation by name
-- metadata logging
-- metric logging
-- artifact upload
-- reconnection to an existing experiment
-- file download and metadata access
+- Create experiment by name
+- Log metadata
+- Log metrics
+- Upload artifacts
+- Reconnect to an existing experiment
+- Download files and access metadata
 
 Related Guides
 ==============

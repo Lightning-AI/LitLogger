@@ -1,23 +1,17 @@
-######################
-Experiment Management
-######################
+##################################
+Experiment Tracking with LitLogger
+##################################
 
-LitLogger is the experiment tracker built into Lightning AI. It supports
-standalone scripts, the new dict-style
-:class:`~litlogger.experiment.Experiment` API, Lightning/Fabric integration,
-files, media, models, and retrieval workflows.
+LitLogger is the experiment tracker built into Lightning AI.
+Instrument your code with metrics, upload media and artifacts,
+and then visualize these over time inside the Lightning AI platform.
+LitLogger can be integrated into standalone scripts,
+or works seamlessly with PyTorch Lightning and Lightning Fabric.
 
 .. image:: https://pl-bolts-doc-images.s3.us-east-2.amazonaws.com/litlogger/experiment_comparison_charts.png
    :alt: Comparing experiment metrics with charts
    :width: 800px
    :align: center
-
-These docs are organized as a narrative:
-
-- tutorials to get from zero to a working flow
-- guides for specific workflows and API patterns
-- runnable examples from the repository
-- an API reference for the public surface
 
 Start Here
 ==========
@@ -33,38 +27,45 @@ Use this path if you are new to LitLogger:
 Supported Workflows
 ===================
 
-LitLogger currently supports these main workflows:
+LitLogger supports several key workflows:
 
-- standalone logging with the dict-style
-  :class:`~litlogger.experiment.Experiment` API
-- legacy module-level logging helpers for existing scripts
-- Lightning and Fabric integration through upstream
-  :class:`lightning:lightning.pytorch.loggers.LitLogger`
-- file, image, text, and model logging through
-  :class:`~litlogger.media.File`, :class:`~litlogger.media.Image`,
-  :class:`~litlogger.media.Text`, and :class:`~litlogger.media.Model`
-- experiment resume and later retrieval by name through
-  :func:`litlogger.init.init`
-- inference logging from a LitServe endpoint
+- Start or resume an :class:`~litlogger.experiment.Experiment` with :func:`litlogger.init.init`
+- Log numeric metrics, :class:`~litlogger.media.Model` or :class:`~litlogger.media.File` artifacts, and media such as :class:`~litlogger.media.Image` and
+  :class:`~litlogger.media.Text`
+- Integrate seamlessly with PyTorch Lightning or Lightning Fabric using the
+  :class:`lightning:lightning.pytorch.loggers.LitLogger` API
+- Log inference metrics from :doc:`LitServe <tutorials/litserve>`
 
 Quick Example
 =============
 
 .. code-block:: python
 
-   import litlogger
-   from litlogger import File, Text
+    import litlogger
+    from litlogger import Text, File, Model, Image
 
-   experiment = litlogger.init(name="quickstart")
+    # Create or resume an experiment with an optional name
+    experiment = litlogger.init(name="quickstart")
 
-   experiment["model"] = "resnet50"
-   experiment["notes"] = Text("first run")
+    # Set experiment-level metadata, media, or artifacts
+    experiment["model_name"] = "resnet50"
+    # experiment["model"] = Model(<filepath or object>)
+    # experiment["config"] = File(<filepath>)
 
-   for step in range(10):
-       experiment["train/loss"].append(1.0 / (step + 1), step=step)
+    # Use append to log metrics or media at each step or epoch
+    global_step = 0
+    for epoch in range(5):
+        for step in range(10):
+            experiment["epoch"].append(epoch, step=global_step)
+            experiment["train/loss"].append(1.0 / (global_step + 1), step=global_step)
+            global_step += 1
 
-   experiment["config"] = File("config.yaml")
-   experiment.finalize()
+        # experiment["validation_image"].append(Image(<filepath or object>), step=global_step)
+
+    experiment["summary"] = Text(f"Completed {global_step} steps across {epoch} epochs")
+
+    # Manually mark the experiment as complete
+    experiment.finalize()
 
 Documentation Map
 =================

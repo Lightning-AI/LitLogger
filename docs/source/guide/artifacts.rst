@@ -7,8 +7,8 @@ your experiments. The modern path is the file-like API with
 :class:`~litlogger.media.File` and :class:`~litlogger.media.Model`, while the
 older helper methods remain available for compatibility.
 
-New Dict-Style API
-==================
+Using the Experiment API
+========================
 
 Use the returned :class:`~litlogger.experiment.Experiment` and assign
 file-like wrappers directly:

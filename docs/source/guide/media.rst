@@ -6,8 +6,8 @@ LitLogger supports uploading images and text files that are displayed alongside
 your metrics in the experiment view. For new code, prefer the dict-style
 wrappers :class:`~litlogger.media.Image` and :class:`~litlogger.media.Text`.
 
-New Dict-Style API
-==================
+Using the Experiment API
+========================
 
 .. code-block:: python
 

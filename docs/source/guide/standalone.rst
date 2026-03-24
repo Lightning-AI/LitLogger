@@ -12,8 +12,8 @@ recommended standalone workflow is the dict-style
    :width: 800px
    :align: center
 
-Recommended New API
-===================
+Using the Experiment API
+========================
 
 .. code-block:: python
 
@@ -34,11 +34,11 @@ Recommended New API
 
 The new standalone API covers:
 
-- metadata through ``experiment["key"] = "value"``
-- metrics through :meth:`~litlogger.series.Series.append` and
+- Setting metadata with ``experiment["key"] = "value"``
+- Logging metrics with :meth:`~litlogger.series.Series.append` and
   :meth:`~litlogger.series.Series.extend`
-- artifacts, media, and models through file-like wrappers
-- retrieval through :attr:`~litlogger.experiment.Experiment.metadata`,
+- Logging artifacts, media, and models through file-like wrappers
+- Retrieving logged data through :attr:`~litlogger.experiment.Experiment.metadata`,
   :attr:`~litlogger.experiment.Experiment.metrics`, and
   :attr:`~litlogger.experiment.Experiment.artifacts`
 
@@ -119,7 +119,7 @@ The older module-level API is still available for compatibility through
    litlogger.log_metadata({"model": "resnet50"})
    litlogger.finalize()
 
-This API is useful for existing scripts, but the dict-style API is the primary
+This API is useful for existing scripts, but the dict-style :class:`~litlogger.experiment.Experiment` API is the primary
 user-facing workflow.
 
 Operational Options

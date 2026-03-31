@@ -607,7 +607,7 @@ class TestRebuildStateFiles:
         exp._update_metrics_store = MagicMock()
         exp._metrics_store.tags = []
         exp._metrics_api = MagicMock()
-        exp._metrics_api.get_trackers_from_metrics_store.return_value = []
+        exp._resumed_steps = {}
 
         art = MagicMock()
         art.path = "results.csv"
@@ -635,12 +635,12 @@ class TestRebuildStateFiles:
         exp._teamspace = MagicMock()
         exp._teamspace.id = "ts-1"
         exp._metrics_api = MagicMock()
-        exp._metrics_api.get_trackers_from_metrics_store.return_value = []
         art = MagicMock()
         art.path = "results.csv"
         exp._metrics_api.client.lit_logger_service_list_logger_artifacts.return_value.logger_artifacts = [art]
         exp._update_metrics_store = MagicMock()
         exp._create_download_fn = lambda key: lambda path: f"dl:{key}:{path}"
+        exp._resumed_steps = {}
 
         Experiment._rebuild_state(exp)
 
@@ -660,7 +660,6 @@ class TestRebuildStateFiles:
         exp._teamspace = MagicMock()
         exp._teamspace.id = "ts-1"
         exp._metrics_api = MagicMock()
-        exp._metrics_api.get_trackers_from_metrics_store.return_value = []
         art0 = MagicMock()
         art0.path = "reports/0"
         art1 = MagicMock()
@@ -668,6 +667,7 @@ class TestRebuildStateFiles:
         exp._metrics_api.client.lit_logger_service_list_logger_artifacts.return_value.logger_artifacts = [art1, art0]
         exp._update_metrics_store = MagicMock()
         exp._create_download_fn = lambda key: lambda path: f"dl:{key}:{path}"
+        exp._resumed_steps = {}
 
         Experiment._rebuild_state(exp)
 
@@ -685,7 +685,7 @@ class TestRebuildStateFiles:
         exp._update_metrics_store = MagicMock()
         exp._metrics_store.tags = []
         exp._metrics_api = MagicMock()
-        exp._metrics_api.get_trackers_from_metrics_store.return_value = []
+        exp._resumed_steps = {}
 
         art = MagicMock()
         art.path = "existing"
@@ -717,7 +717,6 @@ class TestRebuildStateFiles:
         exp._metrics_store.tags = []
         exp._metrics_store.artifacts = []
         exp._metrics_api = MagicMock()
-        exp._metrics_api.get_trackers_from_metrics_store.return_value = []
         exp._teamspace = MagicMock()
         exp._teamspace.id = "ts-1"
         exp._media_api = MagicMock()
@@ -726,6 +725,7 @@ class TestRebuildStateFiles:
         exp._create_media_download_fn = lambda storage_path, cloud_account=None: Experiment._create_media_download_fn(
             exp, storage_path, cloud_account
         )
+        exp._resumed_steps = {}
 
         Experiment._rebuild_state(exp)
 
@@ -760,7 +760,6 @@ class TestRebuildStateFiles:
         exp._metrics_store.tags = []
         exp._metrics_store.artifacts = []
         exp._metrics_api = MagicMock()
-        exp._metrics_api.get_trackers_from_metrics_store.return_value = []
         exp._teamspace = MagicMock()
         exp._teamspace.id = "ts-1"
         exp._media_api = MagicMock()
@@ -769,6 +768,7 @@ class TestRebuildStateFiles:
         exp._create_media_download_fn = lambda storage_path, cloud_account=None: Experiment._create_media_download_fn(
             exp, storage_path, cloud_account
         )
+        exp._resumed_steps = {}
 
         Experiment._rebuild_state(exp)
 
@@ -805,7 +805,6 @@ class TestRebuildStateFiles:
         exp._metrics_store.tags = []
         exp._metrics_store.artifacts = []
         exp._metrics_api = MagicMock()
-        exp._metrics_api.get_trackers_from_metrics_store.return_value = []
         exp._teamspace = MagicMock()
         exp._teamspace.id = "ts-1"
         exp._media_api = MagicMock()
@@ -814,6 +813,7 @@ class TestRebuildStateFiles:
         exp._create_media_download_fn = lambda storage_path, cloud_account=None: Experiment._create_media_download_fn(
             exp, storage_path, cloud_account
         )
+        exp._resumed_steps = {}
 
         Experiment._rebuild_state(exp)
 

@@ -158,6 +158,7 @@ class Experiment(LegacyExperiment):
         self._metrics_queue: JoinableQueue[dict[str, Metrics]] = JoinableQueue()
         self._stop_event = Event()
         self._is_ready_event = Event()
+        self._resumed_steps = self._metrics_api.get_last_steps(self._teamspace.id, self._metrics_store.id) or {}
         self._manager = _BackgroundThread(
             teamspace_id=self._teamspace.id,
             metrics_store_id=self._metrics_store.id,
@@ -170,7 +171,7 @@ class Experiment(LegacyExperiment):
             store_created_at=bool(store_created_at),
             rate_limiting_interval=rate_limiting_interval,
             max_batch_size=max_batch_size,
-            last_steps=self._metrics_api.get_last_steps(self._teamspace.id, self._metrics_store.id),
+            last_steps=self._resumed_steps,
         )
 
         self._manager.start()

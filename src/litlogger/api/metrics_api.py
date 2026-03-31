@@ -17,15 +17,12 @@ import contextlib
 import os
 from typing import Any
 
-from google.protobuf import timestamp_pb2
-from google.protobuf.json_format import MessageToDict
 from lightning_sdk.lightning_cloud.openapi import (
     LitLoggerServiceAppendLoggerMetricsBody,
     LitLoggerServiceCreateMetricsStreamBody,
     LitLoggerServiceUpdateMetricsStreamBody,
     V1Metrics,
     V1MetricsTags,
-    V1MetricsTracker,
     V1MetricValue,
     V1PhaseType,
     V1SystemInfo,
@@ -34,7 +31,7 @@ from lightning_sdk.lightning_cloud.openapi import (
 from litlogger.api.client import LitRestClient
 from litlogger.colors import _create_colors
 from litlogger.diagnostics import collect_system_info
-from litlogger.types import Metrics, MetricsTracker, MetricValue, PhaseType
+from litlogger.types import Metrics, MetricValue, PhaseType
 
 
 # Translation functions between user-facing models and V1 models
@@ -59,64 +56,6 @@ def _to_v1_metrics(metrics: Metrics) -> V1Metrics:
     """Convert user-facing Metrics to V1Metrics."""
     v1_values = [_to_v1_metric_value(v) for v in metrics.values]
     return V1Metrics(name=metrics.name, values=v1_values)
-
-
-def _to_v1_metrics_tracker(tracker: MetricsTracker) -> V1MetricsTracker:
-    """Convert user-facing MetricsTracker to V1MetricsTracker."""
-    started_at_val = None
-    if tracker.started_at:
-        # Convert datetime to protobuf Timestamp format
-        timestamp = timestamp_pb2.Timestamp()
-        timestamp.FromDatetime(tracker.started_at)
-        started_at_val = MessageToDict(timestamp)
-
-    updated_at_val = None
-    if tracker.updated_at:
-        # Convert datetime to protobuf Timestamp format
-        timestamp = timestamp_pb2.Timestamp()
-        timestamp.FromDatetime(tracker.updated_at)
-        updated_at_val = MessageToDict(timestamp)
-
-    # Build kwargs, excluding None values that the API might not accept
-    kwargs = {
-        "name": tracker.name,
-        "num_rows": tracker.num_rows,
-    }
-    if tracker.min_value is not None:
-        kwargs["min_value"] = tracker.min_value
-    if tracker.max_value is not None:
-        kwargs["max_value"] = tracker.max_value
-    if tracker.min_index is not None:
-        kwargs["min_index"] = tracker.min_index
-    if tracker.max_index is not None:
-        kwargs["max_index"] = tracker.max_index
-    if tracker.last_value is not None:
-        kwargs["last_value"] = tracker.last_value
-    if tracker.last_index is not None:
-        kwargs["last_index"] = tracker.last_index
-    if started_at_val is not None:
-        kwargs["started_at"] = started_at_val
-    if updated_at_val is not None:
-        kwargs["updated_at"] = updated_at_val
-    if tracker.max_user_step is not None:
-        kwargs["max_user_step"] = tracker.max_user_step
-
-    return V1MetricsTracker(**kwargs)
-
-
-def _from_v1_metrics_tracker(v1_tracker: V1MetricsTracker) -> MetricsTracker:
-    """Convert V1MetricsTracker from API response to user-facing MetricsTracker."""
-    return MetricsTracker(
-        name=v1_tracker.name,
-        num_rows=v1_tracker.num_rows or 0,
-        min_value=v1_tracker.min_value,
-        max_value=v1_tracker.max_value,
-        min_index=v1_tracker.min_index,
-        max_index=v1_tracker.max_index,
-        last_value=v1_tracker.last_value,
-        last_index=v1_tracker.last_index,
-        max_user_step=v1_tracker.max_user_step,
-    )
 
 
 def _to_v1_phase_type(phase: PhaseType) -> str:
@@ -304,10 +243,9 @@ class MetricsApi:
         metrics_store_id: str,
         persisted: bool = True,
         phase: PhaseType = PhaseType.COMPLETED,
-        trackers: dict[str, MetricsTracker] | None = None,
         metadata: dict[str, str] | None = None,
     ) -> None:
-        """Update an experiment metrics store with completion status, trackers, and/or metadata.
+        """Update an experiment metrics store with completion status, and/or metadata.
 
         When ``metadata`` is ``None`` (the default), existing tags on the server are
         left untouched.  Pass an explicit dict to replace the tags.
@@ -317,15 +255,11 @@ class MetricsApi:
             metrics_store_id: The metrics store ID.
             persisted: Whether the metrics have been persisted.
             phase: The phase of the metrics store (e.g., COMPLETED).
-            trackers: Optional dictionary of metric trackers.
             metadata: Optional metadata to attach to the experiment. If None,
                 existing tags are preserved.
         """
-        # Convert user-facing phase and trackers to V1 types
+        # Convert user-facing phase to V1 types
         v1_phase = _to_v1_phase_type(phase)
-        v1_trackers = None
-        if trackers:
-            v1_trackers = {name: _to_v1_metrics_tracker(tracker) for name, tracker in trackers.items()}
 
         self.client.lit_logger_service_update_metrics_stream(
             project_id=teamspace_id,
@@ -333,7 +267,6 @@ class MetricsApi:
             body=LitLoggerServiceUpdateMetricsStreamBody(
                 persisted=persisted,
                 phase=v1_phase,
-                trackers=v1_trackers,
                 tags=self._metadata_to_tags(metadata=metadata) if metadata is not None else None,
             ),
         )
@@ -362,20 +295,6 @@ class MetricsApi:
             with contextlib.suppress(TypeError, ValueError):
                 result[name] = int(last_step)
         return result
-
-    def get_trackers_from_metrics_store(self, metrics_store: Any) -> dict[str, MetricsTracker] | None:
-        """Extract and convert trackers from a metrics store object.
-
-        Args:
-            metrics_store: The metrics store object from the API.
-
-        Returns:
-            Dictionary of MetricsTracker objects, or None if no trackers exist.
-        """
-        if not hasattr(metrics_store, "trackers") or not metrics_store.trackers:
-            return None
-
-        return {name: _from_v1_metrics_tracker(v1_tracker) for name, v1_tracker in metrics_store.trackers.items()}
 
     @staticmethod
     def _metadata_to_tags(metadata: dict[str, Any] | None) -> list[V1MetricsTags]:

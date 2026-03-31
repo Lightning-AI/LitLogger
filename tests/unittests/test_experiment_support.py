@@ -117,7 +117,6 @@ class TestExperimentStateSupport:
         exp._metrics_store.tags = []
         exp._metrics_store.artifacts = []
         exp._metrics_api = MagicMock()
-        exp._metrics_api.get_trackers_from_metrics_store.return_value = []
         exp._teamspace = MagicMock()
         exp._teamspace.id = "ts-1"
         exp._media_api = MagicMock()
@@ -128,10 +127,12 @@ class TestExperimentStateSupport:
         exp._create_media_download_fn = lambda storage_path, cloud_account=None: (
             ExperimentStateSupport.create_media_download_fn(exp, storage_path, cloud_account)
         )
+        exp._resumed_steps = {"loss": 10}
 
         ExperimentStateSupport.rebuild_state(exp)
 
         assert exp._key_types["logs"] == "file_series"
+        assert exp._key_types["loss"] == "metric"
         assert isinstance(exp._series["logs"], Series)
         assert [item.path for item in exp._series["logs"]] == ["logs/0", "logs/1"]
 
@@ -162,7 +163,6 @@ class TestExperimentStateSupport:
         exp._metrics_store.tags = []
         exp._metrics_store.artifacts = []
         exp._metrics_api = MagicMock()
-        exp._metrics_api.get_trackers_from_metrics_store.return_value = []
         exp._teamspace = MagicMock()
         exp._teamspace.id = "ts-1"
         exp._media_api = MagicMock()
@@ -173,9 +173,11 @@ class TestExperimentStateSupport:
         exp._create_media_download_fn = lambda storage_path, cloud_account=None: (
             ExperimentStateSupport.create_media_download_fn(exp, storage_path, cloud_account)
         )
+        exp._resumed_steps = {"loss": 10}
 
         ExperimentStateSupport.rebuild_state(exp)
 
         assert exp._key_types["logs"] == "file_series"
+        assert exp._key_types["loss"] == "metric"
         assert isinstance(exp._series["logs"], Series)
         assert [item.path for item in exp._series["logs"]] == ["logs", "logs"]

@@ -53,7 +53,9 @@ class Series:
                 self._type = "file"
                 self._experiment._register_key_type(self._key, "file_series")
             self._values.append(value)
-            self._experiment._log_file_series_value(self._key, value, len(self._values) - 1, step=step)
+            index = len(self._values) - 1
+            file_step = index if step is None else step
+            self._experiment._log_file_series_value(self._key, value, index, step=file_step)
         elif isinstance(value, int | float):
             if self._type is not None and self._type != "metric":
                 raise TypeError(f"Key {self._key!r} is a file series, cannot append numeric value")

@@ -249,7 +249,7 @@ class TestAddFileSeries:
         assert len(exp["frames"]) == 1
         assert exp["frames"][0] is f
         assert exp._key_types["frames"] == "file_series"
-        exp._log_file_series_value.assert_called_once_with("frames", f, 0, step=None)
+        exp._log_file_series_value.assert_called_once_with("frames", f, 0, step=0)
 
     def test_append_multiple_files(self):
         exp = _make_exp()
@@ -262,9 +262,9 @@ class TestAddFileSeries:
 
         assert len(exp["frames"]) == 3
         calls = exp._log_file_series_value.call_args_list
-        assert calls[0] == (("frames", f0, 0), {"step": None})
-        assert calls[1] == (("frames", f1, 1), {"step": None})
-        assert calls[2] == (("frames", f2, 2), {"step": None})
+        assert calls[0] == (("frames", f0, 0), {"step": 0})
+        assert calls[1] == (("frames", f1, 1), {"step": 1})
+        assert calls[2] == (("frames", f2, 2), {"step": 2})
 
     def test_extend_files(self):
         exp = _make_exp()

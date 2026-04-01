@@ -27,7 +27,7 @@ from litlogger.experiment import Experiment
 
 # Import SDK functions
 from litlogger.init import finish, get_metadata, init
-from litlogger.media import File, Image, Model, Text
+from litlogger.media import File, Image, Model, Text, Video
 
 # Global variables
 experiment: Experiment | None = None
@@ -48,6 +48,7 @@ __all__ = [
     "Image",
     "Model",
     "Text",
+    "Video",
     "experiment",
     "finalize",
     "finish",

@@ -16,11 +16,11 @@
 import contextlib
 import re
 from datetime import datetime
-from typing import TYPE_CHECKING, Callable
+from typing import TYPE_CHECKING, Callable, cast
 
 from lightning_sdk.lightning_cloud.openapi import V1MediaType
 
-from litlogger.media import File, Image, Model, Text
+from litlogger.media import File, Image, Model, Text, Video
 from litlogger.series import Series
 from litlogger.types import MediaType, Metrics, MetricValue, PhaseType
 
@@ -296,6 +296,9 @@ class ExperimentStateSupport:
             text = Text("")
             text.path = media_name
             return text
+
+        if media_type == "MEDIA_TYPE_VIDEO": # TODO: use proper V1MediaType
+            return Video(media_name)
         return File(media_name)
 
     @staticmethod
@@ -318,6 +321,9 @@ class ExperimentIOSupport:
             return V1MediaType.IMAGE
         if media_type == MediaType.TEXT:
             return V1MediaType.TEXT
+
+        if media_type == MediaType.VIDEO:
+            return cast(V1MediaType, "MEDIA_TYPE_VIDEO") # TODO: Use proper V1MediaType
         raise ValueError(f"Unsupported media type for file upload: {media_type}")
 
     @staticmethod

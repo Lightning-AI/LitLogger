@@ -11,7 +11,7 @@ from litlogger.models.cloud import upload_model_files
 from litlogger.models.serialization import _KERAS_AVAILABLE, dump_pickle
 from torch.nn import Module
 
-LIT_ORG = "lightning-ai"
+LIT_USER = "i-am-ci"
 LIT_TEAMSPACE = "OSS | litModels"
 
 
@@ -25,13 +25,13 @@ class PickleModel:
 def test_upload_wrong_model_name(mock_sdk_upload, name, in_studio, monkeypatch):
     teamspace = mock.MagicMock()
     teamspace.name = LIT_TEAMSPACE
-    teamspace.owner.name = LIT_ORG
+    teamspace.owner.name = LIT_USER
     monkeypatch.setattr(
         "lightning_sdk.models._resolve_teamspace", mock.MagicMock(return_value=teamspace if in_studio else None)
     )
 
     if in_studio:
-        monkeypatch.setenv("LIGHTNING_ORG", LIT_ORG)
+        monkeypatch.setenv("LIGHTNING_USERNAME", LIT_USER)
         monkeypatch.setenv("LIGHTNING_TEAMSPACE", LIT_TEAMSPACE)
         monkeypatch.setattr("lightning_sdk.organization.Organization", mock.MagicMock)
         monkeypatch.setattr("lightning_sdk.teamspace.Teamspace", mock.MagicMock)

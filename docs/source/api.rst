@@ -112,6 +112,26 @@ Types
    :members:
    :show-inheritance:
 
+Model Registry Helpers
+======================
+
+These helpers are available from :mod:`litlogger.models` and expose the
+vendored model-registry API on the LitLogger side.
+
+.. currentmodule:: litlogger.models
+
+.. autofunction:: upload_model
+
+.. autofunction:: save_model
+
+.. autofunction:: download_model
+
+.. autofunction:: load_model
+
+.. autofunction:: upload_model_files
+
+.. autofunction:: download_model_files
+
 LightningLogger
 ===============
 

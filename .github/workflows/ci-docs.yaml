@@ -13,10 +13,10 @@ jobs:
     timeout-minutes: 10
 
     steps:
-    - uses: actions/checkout@v5
+    - uses: actions/checkout@v6
 
     - name: Install uv and setup python
-      uses: astral-sh/setup-uv@v6
+      uses: astral-sh/setup-uv@v7
       with:
         activate-environment: true
         python-version: "3.12"
@@ -34,7 +34,7 @@ jobs:
 
     - name: Upload docs artifact
       if: github.event_name == 'pull_request'
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7
       with:
         name: docs-build
         path: docs/build/html/
@@ -46,10 +46,10 @@ jobs:
     timeout-minutes: 10
 
     steps:
-    - uses: actions/checkout@v5
+    - uses: actions/checkout@v6
 
     - name: Install uv and setup python
-      uses: astral-sh/setup-uv@v6
+      uses: astral-sh/setup-uv@v7
       with:
         activate-environment: true
         python-version: "3.12"
@@ -71,10 +71,10 @@ jobs:
     timeout-minutes: 10
 
     steps:
-    - uses: actions/checkout@v5
+    - uses: actions/checkout@v6
 
     - name: Install uv and setup python
-      uses: astral-sh/setup-uv@v6
+      uses: astral-sh/setup-uv@v7
       with:
         activate-environment: true
         python-version: "3.12"

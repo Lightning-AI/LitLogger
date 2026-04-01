@@ -115,7 +115,7 @@ Types
 Model Registry Helpers
 ======================
 
-These helpers are available from :mod:`litlogger.models` and expose the
+These helpers are available from ``litlogger.models`` and expose the
 vendored model-registry API on the LitLogger side.
 
 .. currentmodule:: litlogger.models

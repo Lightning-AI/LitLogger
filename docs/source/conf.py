@@ -105,6 +105,7 @@ nitpick_ignore = [
     ("py:class", "Teamspace"),
     ("py:class", "lightning_sdk.Teamspace"),
     ("py:class", "lightning_sdk.teamspace.Teamspace"),
+    ("py:class", "lightning_sdk.models.UploadedModelInfo"),
     # Internal type aliases
     ("py:class", "_PATH"),
     ("py:data", "typing.Any"),

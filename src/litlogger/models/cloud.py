@@ -48,10 +48,13 @@ def upload_model_files(
     experiment: "Experiment | None" = None,
 ) -> "UploadedModelInfo":
     """Upload local artifact(s) to Lightning Cloud using the SDK."""
+    resolved_name = _extend_model_name_with_teamspace(name)
+    _parse_org_teamspace_model_version(resolved_name)
+
     upload_metadata = dict(metadata or {})
     upload_metadata["litModels"] = _litlogger_version()
     info = sdk_upload_model(
-        name=name,
+        name=resolved_name,
         path=path,
         progress_bar=progress_bar,
         cloud_account=cloud_account,
@@ -59,7 +62,7 @@ def upload_model_files(
         experiment=experiment,
     )
     if verbose:
-        _print_model_link(name, verbose)
+        _print_model_link(resolved_name, verbose)
     return info
 
 

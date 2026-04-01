@@ -23,6 +23,13 @@ class PickleModel:
 @pytest.mark.parametrize("in_studio", [True, False])
 @mock.patch("litlogger.models.cloud.sdk_upload_model")
 def test_upload_wrong_model_name(mock_sdk_upload, name, in_studio, monkeypatch):
+    teamspace = mock.MagicMock()
+    teamspace.name = LIT_TEAMSPACE
+    teamspace.owner.name = LIT_ORG
+    monkeypatch.setattr(
+        "lightning_sdk.models._resolve_teamspace", mock.MagicMock(return_value=teamspace if in_studio else None)
+    )
+
     if in_studio:
         monkeypatch.setenv("LIGHTNING_ORG", LIT_ORG)
         monkeypatch.setenv("LIGHTNING_TEAMSPACE", LIT_TEAMSPACE)
@@ -31,7 +38,7 @@ def test_upload_wrong_model_name(mock_sdk_upload, name, in_studio, monkeypatch):
         monkeypatch.setattr("lightning_sdk.teamspace.TeamspaceApi", mock.MagicMock)
         monkeypatch.setattr("lightning_sdk.models._get_teamspace", mock.MagicMock)
 
-    allow_short_name = name == "model-name"
+    allow_short_name = in_studio and name == "model-name"
     with (
         pytest.raises(ValueError, match=r".*organization/teamspace/model.*") if not allow_short_name else nullcontext()
     ):

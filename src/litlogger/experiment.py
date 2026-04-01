@@ -504,4 +504,4 @@ class Experiment(LegacyExperiment):
 
     @property
     def id(self) -> str:
-        return self._metrics_store.id
+        return str(self._metrics_store.id)

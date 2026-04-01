@@ -29,6 +29,11 @@ dependencies = [
     "rich",
 ]
 
+[project.optional-dependencies]
+models = [
+    "joblib>=1.0.0",
+]
+
 [dependency-groups]
 dev = [
     "mypy>=1.18.2",

@@ -21,7 +21,7 @@ them to temporary files for upload.
 import os
 import tempfile
 from importlib import import_module
-from typing import TYPE_CHECKING, Any, Callable
+from typing import Any, Callable
 
 from lightning_sdk import Teamspace
 from typing_extensions import override
@@ -30,9 +30,6 @@ from litlogger.api.artifacts_api import ArtifactsApi
 from litlogger.api.client import LitRestClient
 from litlogger.models import download_model, load_model, save_model, upload_model
 from litlogger.types import MediaType
-
-if TYPE_CHECKING:
-    from litlogger.experiment import Experiment
 
 
 def _sanitize_version_for_model_name(version: str) -> str:
@@ -416,7 +413,7 @@ class Model(File):
         *,
         experiment_name: str,
         teamspace: Teamspace,
-        experiment: "Experiment | None" = None,
+        experiment: Any = None,
         cloud_account: str | None = None,
         verbose: bool = False,
     ) -> str:

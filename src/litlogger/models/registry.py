@@ -12,12 +12,10 @@ if _PYTORCH_AVAILABLE:
     import torch
 
 if _KERAS_AVAILABLE:
-    from tensorflow import keras
+    from tensorflow import keras  # type: ignore[import-untyped]
 
 if TYPE_CHECKING:
     from lightning_sdk.models import UploadedModelInfo
-
-    from litlogger.experiment import Experiment
 
 
 def upload_model(
@@ -27,7 +25,7 @@ def upload_model(
     cloud_account: str | None = None,
     verbose: bool | int = 1,
     metadata: dict[str, str] | None = None,
-    experiment: "Experiment | None" = None,
+    experiment: Any = None,
 ) -> "UploadedModelInfo":
     """Upload a local artifact (file or directory) to Lightning Cloud Models."""
     if not isinstance(model, str | Path):
@@ -55,7 +53,7 @@ def save_model(
     staging_dir: str | None = None,
     verbose: bool | int = 1,
     metadata: dict[str, str] | None = None,
-    experiment: "Experiment | None" = None,
+    experiment: Any = None,
 ) -> "UploadedModelInfo":
     """Serialize an in-memory model and upload it to Lightning Cloud Models."""
     if isinstance(model, str | Path):
@@ -119,7 +117,7 @@ def load_model(name: str, download_dir: str | Path = ".") -> Any:
         model_path = Path(download_dir) / model_path
 
     if model_path.suffix.lower() == ".ts":
-        return torch.jit.load(model_path)
+        return torch.jit.load(model_path)  # type: ignore[no-untyped-call]
     if model_path.suffix.lower() == ".keras":
         return keras.models.load_model(model_path)
     if model_path.suffix.lower() == ".pkl":

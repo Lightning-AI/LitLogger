@@ -1,7 +1,7 @@
 """Cloud-facing model registry helpers."""
 
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, cast
 
 from lightning_sdk.lightning_cloud.env import LIGHTNING_CLOUD_URL
 from lightning_sdk.models import _extend_model_name_with_teamspace, _parse_org_teamspace_model_version
@@ -11,8 +11,6 @@ from lightning_sdk.models import upload_model as sdk_upload_model
 
 if TYPE_CHECKING:
     from lightning_sdk.models import UploadedModelInfo
-
-    from litlogger.experiment import Experiment
 
 
 _SHOWED_MODEL_LINKS: list[str] = []
@@ -45,7 +43,7 @@ def upload_model_files(
     cloud_account: str | None = None,
     verbose: bool | int = 1,
     metadata: dict[str, str] | None = None,
-    experiment: "Experiment | None" = None,
+    experiment: Any = None,
 ) -> "UploadedModelInfo":
     """Upload local artifact(s) to Lightning Cloud using the SDK."""
     resolved_name = _extend_model_name_with_teamspace(name)
@@ -72,14 +70,17 @@ def download_model_files(
     progress_bar: bool = True,
 ) -> str | list[str]:
     """Download artifact(s) for a model version using the SDK."""
-    return sdk_download_model(
-        name=name,
-        download_dir=download_dir,
-        progress_bar=progress_bar,
+    return cast(
+        str | list[str],
+        sdk_download_model(
+            name=name,
+            download_dir=download_dir,
+            progress_bar=progress_bar,
+        ),
     )
 
 
-def _list_available_teamspaces() -> dict[str, dict]:
+def _list_available_teamspaces() -> dict[str, dict[str, object]]:
     """List teamspaces available to the authenticated user."""
     from lightning_sdk.api import OrgApi, UserApi
     from lightning_sdk.utils import resolve as sdk_resolvers

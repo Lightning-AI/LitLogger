@@ -31,7 +31,7 @@ with _suppress_os_stderr():
     _KERAS_AVAILABLE = RequirementCache("tensorflow >=2.0.0")
 
 if _JOBLIB_AVAILABLE:
-    import joblib
+    import joblib  # type: ignore[import-not-found]
 
 
 def dump_pickle(model: Any, path: str | Path) -> None:

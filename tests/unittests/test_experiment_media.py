@@ -11,7 +11,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 from lightning_sdk.lightning_cloud.openapi import V1MediaType
 from litlogger.experiment import Experiment
-from litlogger.media import File, Image, Model, Text
+from litlogger.media import File, Image, Model, Text, Video
 from litlogger.series import Series
 
 
@@ -91,6 +91,15 @@ class TestAddStaticFile:
         assert exp._key_types["notes"] == "static_file"
         assert exp._static_files["notes"] is t
         exp._set_static_file.assert_called_once_with("notes", t)
+
+    def test_setitem_video(self):
+        exp = _make_exp()
+        video = Video("preview.mp4")
+        exp["preview"] = video
+
+        assert exp._key_types["preview"] == "static_file"
+        assert exp._static_files["preview"] is video
+        exp._set_static_file.assert_called_once_with("preview", video)
 
     def test_overwrite_same_type(self):
         """Overwriting a static_file key with another File is allowed."""
@@ -188,6 +197,48 @@ class TestAddStaticFileBindings:
         assert kwargs["media_type"] == V1MediaType.IMAGE
         assert exp._stats.media_logged == 1
 
+    def test_video_media_uses_media_api(self):
+        exp = MagicMock(spec=Experiment)
+        exp._media_api = MagicMock()
+        exp._metrics_store = MagicMock()
+        exp._metrics_store.id = "store-1"
+        exp._teamspace = MagicMock()
+        exp._stats = MagicMock()
+        exp._stats.media_logged = 0
+        exp._media_type_to_v1 = lambda media_type: Experiment._media_type_to_v1(exp, media_type)
+        exp._upload_media = (
+            lambda name, file_path, media_type, step=None, epoch=None, caption=None: Experiment._upload_media(
+                exp,
+                name,
+                file_path,
+                media_type,
+                step=step,
+                epoch=epoch,
+                caption=caption,
+            )
+        )
+        exp._upload_media_value = (
+            lambda key, value, name=None, step=None, epoch=None, caption=None: Experiment._upload_media_value(
+                exp,
+                key,
+                value,
+                name=name,
+                step=step,
+                epoch=epoch,
+                caption=caption,
+            )
+        )
+
+        video = Video("preview.mp4")
+        Experiment._set_static_file(exp, "preview", video)
+
+        exp._media_api.upload_media.assert_called_once()
+        _, kwargs = exp._media_api.upload_media.call_args
+        assert kwargs["name"] == "preview"
+        assert kwargs["file_path"] == "preview.mp4"
+        assert kwargs["media_type"] == V1MediaType.VIDEO
+        assert exp._stats.media_logged == 1
+
     @patch.object(Model, "_log_model", return_value="owner/team/exp-model:latest")
     def test_model_artifact_uses_litmodels(self, mock_log_model):
         exp = Experiment.__new__(Experiment)
@@ -208,6 +259,7 @@ class TestAddStaticFileBindings:
         mock_log_model.assert_called_once_with(
             experiment_name="exp",
             teamspace=exp._teamspace,
+            key="checkpoint",
             experiment=exp,
             cloud_account="acc-1",
         )
@@ -235,6 +287,7 @@ class TestAddStaticFileBindings:
         mock_log_model.assert_called_once_with(
             experiment_name="exp",
             teamspace=exp._teamspace,
+            key="model-object",
             experiment=exp,
             cloud_account="acc-1",
         )
@@ -299,6 +352,14 @@ class TestAddFileSeries:
 
         assert len(exp["logs"]) == 1
         assert exp._key_types["logs"] == "file_series"
+
+    def test_append_video_to_series(self):
+        exp = _make_exp()
+        video = Video("preview.mp4")
+        exp["clips"].append(video)
+
+        assert len(exp["clips"]) == 1
+        assert exp._key_types["clips"] == "file_series"
 
 
 class TestFileSeriesBindings:
@@ -400,6 +461,48 @@ class TestFileSeriesBindings:
         assert kwargs["media_type"] == V1MediaType.TEXT
         assert exp._stats.media_logged == 1
 
+    def test_video_series_uses_media_api(self):
+        exp = MagicMock(spec=Experiment)
+        exp._media_api = MagicMock()
+        exp._metrics_store = MagicMock()
+        exp._metrics_store.id = "store-1"
+        exp._teamspace = MagicMock()
+        exp._stats = MagicMock()
+        exp._stats.media_logged = 0
+        exp._media_type_to_v1 = lambda media_type: Experiment._media_type_to_v1(exp, media_type)
+        exp._upload_media = (
+            lambda name, file_path, media_type, step=None, epoch=None, caption=None: Experiment._upload_media(
+                exp,
+                name,
+                file_path,
+                media_type,
+                step=step,
+                epoch=epoch,
+                caption=caption,
+            )
+        )
+        exp._upload_media_value = (
+            lambda key, value, name=None, step=None, epoch=None, caption=None: Experiment._upload_media_value(
+                exp,
+                key,
+                value,
+                name=name,
+                step=step,
+                epoch=epoch,
+                caption=caption,
+            )
+        )
+
+        video = Video("preview.mp4")
+        Experiment._log_file_series_value(exp, "clips", video, 2, step=7)
+
+        exp._media_api.upload_media.assert_called_once()
+        _, kwargs = exp._media_api.upload_media.call_args
+        assert kwargs["name"] == "clips"
+        assert kwargs["step"] == 7
+        assert kwargs["media_type"] == V1MediaType.VIDEO
+        assert exp._stats.media_logged == 1
+
     @patch.object(Model, "_log_model", return_value="owner/team/exp-model-series:latest")
     def test_model_series_uses_series_key_for_remote_binding(self, mock_log_model):
         exp = Experiment.__new__(Experiment)
@@ -420,6 +523,7 @@ class TestFileSeriesBindings:
         mock_log_model.assert_called_once_with(
             experiment_name="exp",
             teamspace=exp._teamspace,
+            key="models",
             experiment=exp,
             cloud_account="acc-1",
         )
@@ -459,6 +563,13 @@ class TestRetrieveStaticFile:
         exp["notes"] = t
 
         assert exp["notes"] is t
+
+    def test_getitem_returns_video(self):
+        exp = _make_exp()
+        video = Video("preview.mp4")
+        exp["preview"] = video
+
+        assert exp["preview"] is video
 
     def test_save_without_upload_raises(self):
         """File.save() fails if not yet uploaded (no _download_fn)."""
@@ -746,6 +857,42 @@ class TestRebuildStateFiles:
 
         wrapped = exp._static_files["preview"]
         assert isinstance(wrapped, Image)
+        assert wrapped.name == "preview"
+        assert wrapped._download_fn is not None
+
+    def test_rebuilds_static_video_with_wrapper(self):
+        media = MagicMock()
+        media.name = "preview"
+        media.storage_path = "media/preview.mp4"
+        media.cluster_id = "cloud-1"
+        media.media_type = V1MediaType.VIDEO
+        media.id = "media-1"
+
+        exp = MagicMock(spec=Experiment)
+        exp._key_types = {}
+        exp._metadata_values = {}
+        exp._static_files = {}
+        exp._series = {}
+        exp._metrics_store = MagicMock()
+        exp._metrics_store.id = "store-1"
+        exp._update_metrics_store = MagicMock()
+        exp._metrics_store.tags = []
+        exp._metrics_store.artifacts = []
+        exp._metrics_api = MagicMock()
+        exp._teamspace = MagicMock()
+        exp._teamspace.id = "ts-1"
+        exp._media_api = MagicMock()
+        exp._media_api.client.lit_logger_service_list_lit_logger_media.return_value.media = [media]
+        exp._wrap_media_file = lambda media_name, media_type: Experiment._wrap_media_file(exp, media_name, media_type)
+        exp._create_media_download_fn = lambda storage_path, cloud_account=None: Experiment._create_media_download_fn(
+            exp, storage_path, cloud_account
+        )
+        exp._resumed_steps = {}
+
+        Experiment._rebuild_state(exp)
+
+        wrapped = exp._static_files["preview"]
+        assert isinstance(wrapped, Video)
         assert wrapped.name == "preview"
         assert wrapped._download_fn is not None
 

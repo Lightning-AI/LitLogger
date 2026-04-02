@@ -370,8 +370,8 @@ class Video(File):
         try:
             # MoviePy 2.x layout
             video_clip_mod = import_module("moviepy.video.VideoClip")
-            VideoClip = getattr(video_clip_mod, "VideoClip")
-            if isinstance(data, VideoClip):
+            video_clip = video_clip_mod.VideoClip
+            if isinstance(data, video_clip):
                 return data
         except Exception:
             pass
@@ -379,15 +379,15 @@ class Video(File):
         try:
             # Older common import path
             editor_mod = import_module("moviepy.editor")
-            VideoClip = getattr(editor_mod, "VideoClip")
-            if isinstance(data, VideoClip):
+            video_clip = editor_mod.VideoClip
+            if isinstance(data, video_clip):
                 return data
         except Exception:
             pass
 
         return None
 
-    def _moviepy_clip_from_array(self, data, fps: float):
+    def _moviepy_clip_from_array(self, data: Any, fps: float) -> Any:
         np = import_module("numpy")
 
         if data.dtype != np.uint8:
@@ -402,8 +402,7 @@ class Video(File):
 
         if data.ndim not in (3, 4):
             raise ValueError(
-                f"Unsupported array shape for video: {data.shape}. "
-                "Expected (T,H,W), (T,H,W,C), or (T,C,H,W)."
+                f"Unsupported array shape for video: {data.shape}. Expected (T,H,W), (T,H,W,C), or (T,C,H,W)."
             )
 
         # (T, H, W) -> grayscale => expand to (T, H, W, 1)
@@ -420,9 +419,7 @@ class Video(File):
             data = np.repeat(data, 3, axis=-1)
 
         if data.shape[-1] not in (3, 4):
-            raise ValueError(
-                f"Unsupported channel count for video frames: {data.shape[-1]}"
-            )
+            raise ValueError(f"Unsupported channel count for video frames: {data.shape[-1]}")
 
         # Drop alpha for now unless you explicitly want to preserve/use masks.
         if data.shape[-1] == 4:
@@ -430,24 +427,18 @@ class Video(File):
 
         try:
             # MoviePy 2.x
-            ImageSequenceClip = getattr(
-                import_module("moviepy.video.io.ImageSequenceClip"),
-                "ImageSequenceClip",
-            )
+            image_sequence_clip = import_module("moviepy.video.io.ImageSequenceClip").ImageSequenceClip
         except Exception:
             # Older common path
-            ImageSequenceClip = getattr(
-                import_module("moviepy.editor"),
-                "ImageSequenceClip",
-            )
+            image_sequence_clip = import_module("moviepy.editor").ImageSequenceClip
 
         # list(...) avoids some ndarray edge cases in callers and matches
         # common usage for frame sequences.
-        return ImageSequenceClip(list(data), fps=fps)
+        return image_sequence_clip(list(data), fps=fps)
 
-    def _write_moviepy_clip(self, clip, path: str, fps: float) -> None:
+    def _write_moviepy_clip(self, clip: Any, path: str, fps: float) -> None:
         # For MP4, libx264 is the usual sensible default.
-        kwargs = {
+        kwargs: dict[str, Any] = {
             "fps": fps,
             "logger": None,
         }

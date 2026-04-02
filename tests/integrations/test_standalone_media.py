@@ -377,3 +377,63 @@ def test_new_dict_api_file_download():
             project_id=project_id,
             body=LitLoggerServiceDeleteMetricsStreamBody(ids=[stream_id]),
         )
+
+
+@pytest.mark.cloud()
+def test_new_dict_api_video_download():
+    """Test the new dict-like API for uploading and downloading videos."""
+    from litlogger import Video
+
+    experiment_name = f"standalone_dict_video_test-{uuid.uuid4().hex}"
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        exp = litlogger.init(
+            name=experiment_name,
+            teamspace="oss-litlogger",
+            root_dir=tmpdir,
+        )
+
+        video_path = os.path.join(tmpdir, "preview.mp4")
+        with open(video_path, "wb") as f:
+            f.write(b"\x00\x00\x00\x18ftypmp42\x00\x00\x00\x00mp42isom")
+
+        exp["preview"] = Video(video_path)
+
+        assert isinstance(exp["preview"], Video)
+        assert exp["preview"].name == "preview"
+
+        litlogger.finalize()
+
+        exp2 = litlogger.init(name=experiment_name, teamspace="oss-litlogger")
+
+        download_path = os.path.join(tmpdir, "downloaded_preview.mp4")
+        video_downloaded = False
+        last_exception = None
+        for attempt in range(30):
+            try:
+                preview = exp2["preview"]
+                if isinstance(preview, Video):
+                    preview.save(download_path)
+                    video_downloaded = True
+                    break
+            except Exception as e:
+                last_exception = e
+            if attempt < 29:
+                sleep(1)
+
+        litlogger.finalize()
+
+        if video_downloaded:
+            assert os.path.exists(download_path)
+            with open(video_path, "rb") as original, open(download_path, "rb") as downloaded:
+                assert downloaded.read() == original.read()
+        else:
+            print(f"\nWarning: Could not download video. Last exception: {last_exception}")
+
+        project_id = exp._teamspace.id
+        stream_id = exp._metrics_store.id
+        client = LitRestClient()
+        client.lit_logger_service_delete_metrics_stream(
+            project_id=project_id,
+            body=LitLoggerServiceDeleteMetricsStreamBody(ids=[stream_id]),
+        )

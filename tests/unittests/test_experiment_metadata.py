@@ -218,7 +218,6 @@ class TestRebuildStateMetadata:
         exp._static_files = {}
         exp._series = {}
         exp._metrics_api = MagicMock()
-        exp._metrics_api.get_trackers_from_metrics_store.return_value = []
 
         tag = MagicMock()
         tag.name = "model"
@@ -234,6 +233,7 @@ class TestRebuildStateMetadata:
         exp._metrics_store.tags = [tag, non_code_tag]
         exp._metrics_store.artifacts = []
         exp._create_download_fn = MagicMock()
+        exp._resumed_steps = {}
 
         Experiment._rebuild_state(exp)
 
@@ -252,8 +252,8 @@ class TestRebuildStateMetadata:
         exp._metrics_store.tags = []
         exp._metrics_store.artifacts = []
         exp._metrics_api = MagicMock()
-        exp._metrics_api.get_trackers_from_metrics_store.return_value = ["loss", "acc"]
         exp._create_download_fn = MagicMock()
+        exp._resumed_steps = {"loss": 10, "acc": 5}
 
         Experiment._rebuild_state(exp)
 

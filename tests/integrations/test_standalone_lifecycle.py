@@ -188,8 +188,8 @@ def test_custom_colors():
 
 
 @pytest.mark.cloud()
-def test_resume_experiment_with_tracker_initialization():
-    """Test that resuming an experiment initializes trackers and augments steps correctly."""
+def test_resume_experiment():
+    """Test that resuming an experiment augments steps correctly."""
     experiment_name = f"standalone_resume_tracker-{uuid.uuid4().hex}"
 
     # First experiment run - log metrics with explicit steps

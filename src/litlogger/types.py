@@ -68,34 +68,3 @@ class Metrics:
 
     name: str
     values: list[MetricValue] = field(default_factory=list)
-
-
-@dataclass
-class MetricsTracker:
-    """Tracks statistics about a metric series.
-
-    Attributes:
-        name: The metric name.
-        num_rows: Total number of values logged.
-        min_value: Minimum value observed.
-        max_value: Maximum value observed.
-        min_index: Index where minimum value occurred.
-        max_index: Index where maximum value occurred.
-        last_value: Most recent value.
-        last_index: Index of most recent value.
-        started_at: Datetime when tracking started.
-        updated_at: Datetime of last update.
-        max_user_step: Maximum user-provided step value.
-    """
-
-    name: str
-    num_rows: int = 0
-    min_value: float | None = None
-    max_value: float | None = None
-    min_index: int | None = None
-    max_index: int | None = None
-    last_value: float | None = None
-    last_index: int | None = None
-    started_at: datetime | None = None
-    updated_at: datetime | None = None
-    max_user_step: int | None = None

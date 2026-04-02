@@ -549,35 +549,41 @@ class TestModelInit:
         teamspace = MagicMock()
         teamspace.name = "teamspace"
         teamspace.owner.name = "owner"
+        experiment = MagicMock()
 
         with tempfile.TemporaryDirectory() as tmpdir:
             staging_dir = os.path.join(tmpdir, "nested", "staging")
             model = Model(object(), staging_dir=staging_dir)
 
-            model._log_model(experiment_name="exp-name", teamspace=teamspace)
+            model._log_model(experiment_name="exp-name", teamspace=teamspace, experiment=experiment)
 
             assert os.path.isdir(staging_dir)
             mock_save_model.assert_called_once()
             assert mock_save_model.call_args.kwargs["staging_dir"] == staging_dir
+            assert mock_save_model.call_args.kwargs["experiment"] is experiment
 
     @patch("litlogger.media.upload_model")
     def test_log_model_uses_exp_name_by_default(self, mock_upload_model):
         teamspace = MagicMock()
         teamspace.name = "teamspace"
         teamspace.owner.name = "owner"
+        experiment = MagicMock()
 
         model = Model("checkpoint.ckpt", version="v1")
-        model._log_model(experiment_name="exp-name", teamspace=teamspace)
+        model._log_model(experiment_name="exp-name", teamspace=teamspace, experiment=experiment)
 
         assert mock_upload_model.call_args.kwargs["name"] == "owner/teamspace/exp-name:v1"
+        assert mock_upload_model.call_args.kwargs["experiment"] is experiment
 
     @patch("litlogger.media.upload_model")
     def test_log_model_uses_custom_name_override(self, mock_upload_model):
         teamspace = MagicMock()
         teamspace.name = "teamspace"
         teamspace.owner.name = "owner"
+        experiment = MagicMock()
 
         model = Model("checkpoint.ckpt", name="custom-model", version="v1")
-        model._log_model(experiment_name="exp-name", teamspace=teamspace)
+        model._log_model(experiment_name="exp-name", teamspace=teamspace, experiment=experiment)
 
         assert mock_upload_model.call_args.kwargs["name"] == "owner/teamspace/custom-model:v1"
+        assert mock_upload_model.call_args.kwargs["experiment"] is experiment

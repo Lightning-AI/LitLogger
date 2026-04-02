@@ -24,11 +24,11 @@ from importlib import import_module
 from typing import Any, Callable
 
 from lightning_sdk import Teamspace
-from litmodels import download_model, load_model, save_model, upload_model
 from typing_extensions import override
 
 from litlogger.api.artifacts_api import ArtifactsApi
 from litlogger.api.client import LitRestClient
+from litlogger.models import download_model, load_model, save_model, upload_model
 from litlogger.types import MediaType
 
 
@@ -508,7 +508,7 @@ class Model(File):
     """Represents a model to be logged.
 
     Can take either a Python model object or a local path to a pre-saved model
-    artifact. Uploads are handled through litmodels rather than the artifact API.
+    artifact. Uploads are handled through the model registry.
 
     Args:
         data: Python model object or path to a pre-saved model file/directory.
@@ -568,7 +568,7 @@ class Model(File):
         return super()._get_upload_path()
 
     def _registry_name(self, experiment_name: str, teamspace: Teamspace) -> str:
-        """Resolve the litmodels registry name for this model."""
+        """Resolve the registry name for this model."""
         model_name = f"{teamspace.owner.name}/{teamspace.name}/{experiment_name}"
         if self.version:
             model_name += f":{_sanitize_version_for_model_name(self.version)}"
@@ -597,10 +597,11 @@ class Model(File):
         *,
         experiment_name: str,
         teamspace: Teamspace,
+        experiment: Any = None,
         cloud_account: str | None = None,
         verbose: bool = False,
     ) -> str:
-        """Upload this model to litmodels and return its registry name."""
+        """Upload this model to the registry and return its registry name."""
         model_name = self._registry_name(self.registry_name or experiment_name, teamspace)
 
         if self._model_kind == "artifact":
@@ -611,6 +612,7 @@ class Model(File):
                 progress_bar=verbose,
                 cloud_account=cloud_account,
                 metadata=self.metadata,
+                experiment=experiment,
             )
         else:
             if self.staging_dir is not None:
@@ -623,13 +625,14 @@ class Model(File):
                 progress_bar=verbose,
                 cloud_account=cloud_account,
                 metadata=self.metadata,
+                experiment=experiment,
             )
 
         self._cleanup()
         return model_name
 
     def load(self, staging_dir: str | None = None) -> Any:
-        """Load a remote model object via litmodels."""
+        """Load a remote model object via the registry helpers."""
         if self._load_fn is None:
             raise RuntimeError("Model has no remote load context. It must be uploaded to an experiment first.")
         return self._load_fn(staging_dir)

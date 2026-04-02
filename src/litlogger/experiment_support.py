@@ -143,7 +143,7 @@ class ExperimentStateSupport:
 
     @staticmethod
     def rebuild_state(exp: "Experiment") -> None:
-        """Rebuild state from remote metadata, trackers, artifacts, and media.
+        """Rebuild state from remote metadata, steps, artifacts, and media.
 
         TODO: Add backend-supported recovery for model bindings so resumed
         experiments can reconstruct ``Model`` values without storing them in
@@ -156,10 +156,8 @@ class ExperimentStateSupport:
                 exp._key_types[tag.name] = "metadata"
                 exp._metadata_values[tag.name] = tag.value
 
-        trackers = exp._metrics_api.get_trackers_from_metrics_store(exp._metrics_store)
-        if trackers:
-            for name in trackers:
-                exp._key_types[name] = "metric"
+        for name in exp._resumed_steps:
+            exp._key_types[name] = "metric"
 
         artifacts = getattr(exp._metrics_store, "artifacts", None) or []
         with contextlib.suppress(AttributeError):
@@ -375,6 +373,7 @@ class ExperimentIOSupport:
         model_name = value._log_model(
             experiment_name=exp.name,
             teamspace=exp._teamspace,
+            experiment=exp,
             cloud_account=cloud_account if isinstance(cloud_account, str) else None,
         )
         exp._stats.models_logged += 1

@@ -9,7 +9,7 @@ from unittest.mock import MagicMock
 from lightning_sdk.lightning_cloud.openapi import V1MediaType
 from litlogger.experiment import Experiment
 from litlogger.experiment_support import ExperimentIOSupport, ExperimentStateSupport
-from litlogger.media import Model, Text
+from litlogger.media import Model, Text, Video
 from litlogger.series import Series
 from litlogger.types import MediaType
 
@@ -69,6 +69,25 @@ class TestExperimentIOSupport:
         exp._upload_media_value.assert_called_once_with("logs", text, name="logs", step=7)
         exp._upload_model_value.assert_not_called()
 
+    def test_log_file_series_value_routes_video_with_exact_key_name(self):
+        exp = MagicMock(spec=Experiment)
+        exp._upload_media_value = MagicMock()
+        exp._upload_model_value = MagicMock()
+        exp._stats = MagicMock()
+        exp._stats.media_logged = 0
+
+        video = Video("preview.mp4")
+
+        ExperimentIOSupport.log_file_series_value(exp, "clips", video, 2, step=7)
+
+        exp._upload_media_value.assert_called_once_with("clips", video, name="clips", step=7)
+        exp._upload_model_value.assert_not_called()
+
+    def test_media_type_to_v1_maps_video(self):
+        exp = MagicMock(spec=Experiment)
+
+        assert ExperimentIOSupport.media_type_to_v1(exp, MediaType.VIDEO) == V1MediaType.VIDEO
+
     def test_log_file_series_value_auto_versions_models_from_v1(self):
         exp = MagicMock(spec=Experiment)
         exp._upload_model_value = MagicMock()
@@ -91,6 +110,14 @@ class TestExperimentStateSupport:
 
         assert isinstance(wrapped, Text)
         assert wrapped.path == "logs/0"
+
+    def test_wrap_media_file_returns_video_wrapper(self):
+        exp = MagicMock(spec=Experiment)
+
+        wrapped = ExperimentStateSupport.wrap_media_file(exp, "clips/0", V1MediaType.VIDEO)
+
+        assert isinstance(wrapped, Video)
+        assert wrapped.path == "clips/0"
 
     def test_rebuild_state_reconstructs_sorted_text_series(self):
         media1 = MagicMock()

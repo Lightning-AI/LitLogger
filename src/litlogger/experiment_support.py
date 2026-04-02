@@ -16,7 +16,7 @@
 import contextlib
 import re
 from datetime import datetime
-from typing import TYPE_CHECKING, Callable, cast
+from typing import TYPE_CHECKING, Callable
 
 from lightning_sdk.lightning_cloud.openapi import V1MediaType
 
@@ -143,12 +143,8 @@ class ExperimentStateSupport:
 
     @staticmethod
     def rebuild_state(exp: "Experiment") -> None:
-        """Rebuild state from remote metadata, steps, artifacts, and media.
-
-        TODO: Add backend-supported recovery for model bindings so resumed
-        experiments can reconstruct ``Model`` values without storing them in
-        frontend-visible metadata tags.
-        """
+        """Rebuild state from remote metadata, steps, artifacts, and media."""
+        # TODO: add BE support for restoring model states as well
         exp._update_metrics_store()
         tags = getattr(exp._metrics_store, "tags", None) or []
         for tag in tags:
@@ -295,7 +291,7 @@ class ExperimentStateSupport:
             text.path = media_name
             return text
 
-        if media_type == "MEDIA_TYPE_VIDEO": # TODO: use proper V1MediaType
+        if media_type == V1MediaType.VIDEO:
             return Video(media_name)
         return File(media_name)
 
@@ -321,7 +317,7 @@ class ExperimentIOSupport:
             return V1MediaType.TEXT
 
         if media_type == MediaType.VIDEO:
-            return cast(V1MediaType, "MEDIA_TYPE_VIDEO") # TODO: Use proper V1MediaType
+            return V1MediaType.VIDEO
         raise ValueError(f"Unsupported media type for file upload: {media_type}")
 
     @staticmethod

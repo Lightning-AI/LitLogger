@@ -315,7 +315,6 @@ class ExperimentIOSupport:
             return V1MediaType.IMAGE
         if media_type == MediaType.TEXT:
             return V1MediaType.TEXT
-
         if media_type == MediaType.VIDEO:
             return V1MediaType.VIDEO
         raise ValueError(f"Unsupported media type for file upload: {media_type}")
@@ -360,15 +359,14 @@ class ExperimentIOSupport:
 
     @staticmethod
     def upload_model_value(exp: "Experiment", key: str, value: Model) -> None:
-        """Upload a model through litmodels and bind the remote wrapper.
-
-        TODO: Persist model recovery data via backend-supported experiment
-        bindings so resumed experiments can rebuild these wrappers.
-        """
+        """Upload a model through litmodels and bind the remote wrapper."""
+        # TODO: Persist model recovery data via backend-supported experiment
+        # bindings so resumed experiments can rebuild these wrappers.
         cloud_account = exp._metrics_store.cluster_id
         model_name = value._log_model(
             experiment_name=exp.name,
             teamspace=exp._teamspace,
+            key=exp._model_experiment_name(key),
             experiment=exp,
             cloud_account=cloud_account if isinstance(cloud_account, str) else None,
         )

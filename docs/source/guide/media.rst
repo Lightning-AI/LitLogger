@@ -2,9 +2,10 @@
 Logging Media
 #############
 
-LitLogger supports uploading images and text files that are displayed alongside
-your metrics in the experiment view. For new code, prefer the dict-style
-wrappers :class:`~litlogger.media.Image` and :class:`~litlogger.media.Text`.
+LitLogger supports uploading images, text files, and videos that are displayed
+alongside your metrics in the experiment view. For new code, prefer the
+dict-style wrappers :class:`~litlogger.media.Image`,
+:class:`~litlogger.media.Text`, and :class:`~litlogger.media.Video`.
 
 Using the Experiment API
 ========================
@@ -12,15 +13,17 @@ Using the Experiment API
 .. code-block:: python
 
    import litlogger
-   from litlogger import Image, Text
+   from litlogger import Image, Text, Video
 
    experiment = litlogger.init(name="media-demo")
 
    experiment["preview"] = Image("generated.png")
    experiment["notes"] = Text("epoch 0 summary")
+   experiment["video_preview"] = Video("preview.mp4")
 
    experiment["samples"].append(Image("sample-0.png"), step=0)
    experiment["captions"].append(Text("reconstruction"), step=0)
+   experiment["clips"].append(Video("sample-0.mp4"), step=0)
 
 Legacy Helper API
 =================
@@ -56,6 +59,13 @@ Logging Text
 
    exp.log_media("predictions", "predictions.txt", kind=MediaType.TEXT, step=5)
 
+Logging Video
+=============
+
+.. code-block:: python
+
+   exp.log_media("rollout", "preview.mp4", kind=MediaType.VIDEO, step=5)
+
 Supported Types
 ===============
 
@@ -72,6 +82,9 @@ Supported Types
    * - ``TEXT``
      - ``.txt``, ``.csv``, ``.json``, ``.log``
      - Displayed as text in the experiment view
+   * - ``VIDEO``
+     - ``.mp4``, ``.mov``, ``.avi``, ``.webm``
+     - Displayed as videos in the experiment view
 
 When ``kind`` is not provided, LitLogger guesses the type from the file's MIME
 type. If the type cannot be determined, a ``ValueError`` is raised.

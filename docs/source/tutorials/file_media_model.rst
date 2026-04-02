@@ -7,6 +7,7 @@ This tutorial covers the new file-like API surface:
 - :class:`~litlogger.media.File`
 - :class:`~litlogger.media.Image`
 - :class:`~litlogger.media.Text`
+- :class:`~litlogger.media.Video`
 - :class:`~litlogger.media.Model`
 
 Static Files
@@ -54,6 +55,18 @@ Images
 
    experiment["preview"] = Image("preview.png")
    experiment["samples"].append(Image("sample-0.png"), step=0)
+
+Videos
+======
+
+Use :class:`~litlogger.media.Video` for video files or in-memory frame data.
+
+.. code-block:: python
+
+   from litlogger import Video
+
+   experiment["demo"] = Video("preview.mp4")
+   experiment["clips"].append(Video("sample-0.mp4"), step=0)
 
 Models
 ======

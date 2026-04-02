@@ -52,6 +52,7 @@ for i in range(10):
 # log more than just metrics (files, text, artifacts, model weights or series thereof)
 # exp["config"] = File("/path/to/config.txt")
 # exp["summary"] = Text("first run")
+# exp["rollout"] = Video("/path/to/preview.mp4")
 # exp["model"] = Model(torch.nn.Module)
 # exp["config-series"].append(File("/path/to/config1.txt"))
 # exp["config-series"].append(File("path/to/config2.txt"))

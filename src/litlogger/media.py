@@ -588,12 +588,13 @@ class Model(File):
         *,
         experiment_name: str,
         teamspace: Teamspace,
+        key: str | None = None,
         experiment: Any = None,
         cloud_account: str | None = None,
         verbose: bool = False,
     ) -> str:
         """Upload this model to the registry and return its registry name."""
-        model_name = self._registry_name(self.registry_name or experiment_name, teamspace)
+        model_name = self._registry_name(self.registry_name or key or experiment_name, teamspace)
 
         if self._model_kind == "artifact":
             upload_model(

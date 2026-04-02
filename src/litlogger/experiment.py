@@ -501,3 +501,7 @@ class Experiment(LegacyExperiment):
         # This follows the convention for signal-induced termination
         self.finalize()
         sys.exit(128 + signum)
+
+    @property
+    def id(self) -> str:
+        return str(self._metrics_store.id)

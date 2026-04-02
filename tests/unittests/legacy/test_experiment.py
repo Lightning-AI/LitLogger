@@ -205,7 +205,12 @@ class TestExperimentArtifactMethods:
 
         Experiment.log_model_artifact(exp, "model.pt", verbose=False, version="v2.0")
 
-        mock_log_model.assert_called_once()
+        mock_log_model.assert_called_once_with(
+            experiment_name="test_exp",
+            teamspace=exp._teamspace,
+            experiment=exp,
+            cloud_account="acc-1",
+        )
 
     @patch.object(legacy_experiment_module.MediaModel, "save", return_value="/path/to/model.pt")
     @patch.object(legacy_experiment_module.MediaModel, "_bind_remote_model")
@@ -240,7 +245,12 @@ class TestExperimentArtifactMethods:
 
         Experiment.log_model(exp, mock_model_obj, staging_dir="/tmp/staging", verbose=False, metadata={"key": "value"})
 
-        mock_log_model.assert_called_once()
+        mock_log_model.assert_called_once_with(
+            experiment_name="test_exp",
+            teamspace=exp._teamspace,
+            experiment=exp,
+            cloud_account="acc-1",
+        )
 
     @patch.object(legacy_experiment_module.MediaModel, "load")
     @patch.object(legacy_experiment_module.MediaModel, "_bind_remote_model")
@@ -955,7 +965,12 @@ class TestExperimentStatsTracking:
         from litlogger.experiment import Experiment
 
         Experiment.log_model_artifact(exp, "model.pt", verbose=False)
-        mock_log_model.assert_called_once()
+        mock_log_model.assert_called_once_with(
+            experiment_name="test",
+            teamspace=exp._teamspace,
+            experiment=exp,
+            cloud_account="acc-1",
+        )
         assert exp._stats.models_logged == 1
 
     @patch.object(legacy_experiment_module.MediaModel, "_log_model", return_value="owner/team/test:latest")
@@ -972,7 +987,12 @@ class TestExperimentStatsTracking:
         from litlogger.experiment import Experiment
 
         Experiment.log_model(exp, MagicMock(), verbose=False)
-        mock_log_model.assert_called_once()
+        mock_log_model.assert_called_once_with(
+            experiment_name="test",
+            teamspace=exp._teamspace,
+            experiment=exp,
+            cloud_account="acc-1",
+        )
         assert exp._stats.models_logged == 1
 
 

@@ -205,7 +205,12 @@ class TestAddStaticFileBindings:
         model = Model("model.ckpt")
         Experiment._set_static_file(exp, "checkpoint", model)
 
-        mock_log_model.assert_called_once()
+        mock_log_model.assert_called_once_with(
+            experiment_name="exp",
+            teamspace=exp._teamspace,
+            experiment=exp,
+            cloud_account="acc-1",
+        )
         assert model._model_name == "owner/team/exp-model:latest"
         assert model._download_fn is not None
         assert exp._stats.models_logged == 1
@@ -227,7 +232,12 @@ class TestAddStaticFileBindings:
         model = Model(object())
         Experiment._set_static_file(exp, "model-object", model)
 
-        mock_log_model.assert_called_once()
+        mock_log_model.assert_called_once_with(
+            experiment_name="exp",
+            teamspace=exp._teamspace,
+            experiment=exp,
+            cloud_account="acc-1",
+        )
         assert model._model_name == "owner/team/exp-model-object:latest"
         assert model._load_fn is not None
         assert exp._stats.models_logged == 1
@@ -407,7 +417,12 @@ class TestFileSeriesBindings:
         model = Model("checkpoint.ckpt")
         Experiment._log_file_series_value(exp, "models", model, 2)
 
-        mock_log_model.assert_called_once()
+        mock_log_model.assert_called_once_with(
+            experiment_name="exp",
+            teamspace=exp._teamspace,
+            experiment=exp,
+            cloud_account="acc-1",
+        )
         assert model.version == "v3"
         assert model.name == "models"
         assert exp._stats.models_logged == 1

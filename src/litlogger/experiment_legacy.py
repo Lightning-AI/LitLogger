@@ -302,6 +302,7 @@ class LegacyExperiment:
         model_artifact._log_model(
             experiment_name=self.name,
             teamspace=self._teamspace,
+            experiment=self,
             cloud_account=getattr(self._metrics_store, "cluster_id", None),
         )
         self._stats.models_logged += 1
@@ -372,6 +373,7 @@ class LegacyExperiment:
         model_name = model_obj._log_model(
             experiment_name=self.name,
             teamspace=self._teamspace,
+            experiment=self,
             cloud_account=getattr(self._metrics_store, "cluster_id", None),
         )
         self._stats.models_logged += 1

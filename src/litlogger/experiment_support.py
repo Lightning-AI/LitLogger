@@ -367,6 +367,7 @@ class ExperimentIOSupport:
         model_name = value._log_model(
             experiment_name=exp.name,
             teamspace=exp._teamspace,
+            experiment=exp,
             cloud_account=cloud_account if isinstance(cloud_account, str) else None,
         )
         exp._stats.models_logged += 1

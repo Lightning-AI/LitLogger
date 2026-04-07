@@ -76,6 +76,10 @@ Media Wrappers
    :members:
    :show-inheritance:
 
+.. autoclass:: Video
+   :members:
+   :show-inheritance:
+
 .. autoclass:: Model
    :members:
    :show-inheritance:

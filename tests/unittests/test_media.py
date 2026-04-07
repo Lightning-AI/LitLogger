@@ -2,14 +2,15 @@
 # Licensed under the Apache License, Version 2.0 (the "License");
 #     http://www.apache.org/licenses/LICENSE-2.0
 #
-"""Tests for File, Image, Text, and Model media types."""
+"""Tests for File, Image, Text, Video, and Model media types."""
 
 import os
 import tempfile
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
-from litlogger.media import File, Image, Model, Text, _sanitize_version_for_model_name
+from litlogger.media import File, Image, Model, Text, Video, _sanitize_version_for_model_name
 from litlogger.types import MediaType
 
 
@@ -404,6 +405,163 @@ class TestImageRepr:
             pytest.skip("PIL not available")
         pil = PILImage.new("RGB", (8, 8))
         assert repr(Image(pil)) == "Image('')"
+
+
+# ---------------------------------------------------------------------------
+# Video
+# ---------------------------------------------------------------------------
+
+
+class TestVideoInit:
+    """Test Video construction."""
+
+    def test_from_path(self):
+        video = Video("clip.mp4")
+        assert video.path == "clip.mp4"
+        assert video._data == "clip.mp4"
+        assert video._format == "mp4"
+        assert video._fps is None
+
+    def test_from_path_with_description(self):
+        video = Video("clip.mp4", description="preview clip")
+        assert video.description == "preview clip"
+
+    def test_custom_format_and_fps(self):
+        video = Video("clip.mov", format="mov", fps=12)
+        assert video._format == "mov"
+        assert video._fps == 12
+
+    def test_media_type(self):
+        assert Video("x.mp4")._media_type == MediaType.VIDEO
+
+
+class TestVideoUploadPath:
+    """Test Video._get_upload_path for different data types."""
+
+    def test_string_path_nonexistent_returns_path(self):
+        video = Video("nonexistent.mp4")
+        assert video._get_upload_path() == "nonexistent.mp4"
+
+    @patch.object(Video, "_write_moviepy_clip")
+    @patch.object(Video, "_moviepy_clip_from_array")
+    def test_numpy_frames_render_to_temp(self, mock_clip_from_array, mock_write_moviepy_clip):
+        try:
+            import numpy as np
+        except ImportError:
+            pytest.skip("numpy not available")
+
+        clip = object()
+        mock_clip_from_array.return_value = clip
+
+        frames = np.zeros((2, 8, 8, 3), dtype=np.uint8)
+        video = Video(frames, fps=12)
+        path = video._get_upload_path()
+
+        assert path.endswith(".mp4")
+        assert os.path.exists(path)
+        mock_clip_from_array.assert_called_once()
+        mock_write_moviepy_clip.assert_called_once_with(clip, path, 12)
+        video._cleanup()
+
+    def test_moviepy_clip_from_array_transposes_tchw_and_scales_floats(self):
+        try:
+            import numpy as np
+        except ImportError:
+            pytest.skip("numpy not available")
+
+        captured: dict[str, object] = {}
+
+        class FakeImageSequenceClip:
+            def __init__(self, frames, fps):
+                captured["frames"] = frames
+                captured["fps"] = fps
+
+        def fake_import_module(name: str):
+            if name == "numpy":
+                return np
+            if name == "moviepy.video.io.ImageSequenceClip":
+                return SimpleNamespace(ImageSequenceClip=FakeImageSequenceClip)
+            raise ImportError(name)
+
+        frames = np.full((2, 3, 4, 5), 0.5, dtype=np.float32)
+        video = Video(frames)
+        with patch("litlogger.media.import_module", side_effect=fake_import_module):
+            clip = video._moviepy_clip_from_array(frames, fps=7)
+
+        assert isinstance(clip, FakeImageSequenceClip)
+        assert captured["fps"] == 7
+        rendered_frames = captured["frames"]
+        assert isinstance(rendered_frames, list)
+        assert len(rendered_frames) == 2
+        assert rendered_frames[0].shape == (4, 5, 3)
+        assert rendered_frames[0].dtype == np.uint8
+        assert rendered_frames[0][0, 0, 0] in (127, 128)
+
+    def test_moviepy_clip_from_array_promotes_grayscale_to_rgb(self):
+        try:
+            import numpy as np
+        except ImportError:
+            pytest.skip("numpy not available")
+
+        captured: dict[str, object] = {}
+
+        class FakeImageSequenceClip:
+            def __init__(self, frames, fps):
+                captured["frames"] = frames
+                captured["fps"] = fps
+
+        def fake_import_module(name: str):
+            if name == "numpy":
+                return np
+            if name == "moviepy.video.io.ImageSequenceClip":
+                return SimpleNamespace(ImageSequenceClip=FakeImageSequenceClip)
+            raise ImportError(name)
+
+        frames = np.zeros((2, 6, 7), dtype=np.uint8)
+        video = Video(frames)
+        with patch("litlogger.media.import_module", side_effect=fake_import_module):
+            video._moviepy_clip_from_array(frames, fps=5)
+
+        rendered_frames = captured["frames"]
+        assert isinstance(rendered_frames, list)
+        assert rendered_frames[0].shape == (6, 7, 3)
+        assert captured["fps"] == 5
+
+    def test_numpy_unsupported_shape_raises(self):
+        try:
+            import numpy as np
+        except ImportError:
+            pytest.skip("numpy not available")
+
+        video = Video(np.zeros((2, 3, 4, 5, 6), dtype=np.uint8))
+        with pytest.raises(ValueError, match="Unsupported array shape"):
+            video._moviepy_clip_from_array(video._data, fps=Video.DEFAULT_FPS)
+
+    def test_unsupported_type_raises(self):
+        video = Video({"not": "a video"})
+        with pytest.raises(TypeError, match="Unsupported video type"):
+            video._get_upload_path()
+
+
+class TestVideoCleanup:
+    """Test Video._cleanup removes rendered temp files."""
+
+    @patch.object(Video, "_write_moviepy_clip")
+    @patch.object(Video, "_moviepy_clip_from_array")
+    def test_cleanup_removes_rendered_temp(self, mock_clip_from_array, mock_write_moviepy_clip):
+        try:
+            import numpy as np
+        except ImportError:
+            pytest.skip("numpy not available")
+
+        mock_clip_from_array.return_value = object()
+        video = Video(np.zeros((1, 4, 4, 3), dtype=np.uint8))
+        path = video._get_upload_path()
+        assert os.path.exists(path)
+
+        video._cleanup()
+        assert not os.path.exists(path)
+        assert video._temp_path is None
 
 
 # ---------------------------------------------------------------------------

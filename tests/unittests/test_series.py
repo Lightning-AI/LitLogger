@@ -50,7 +50,7 @@ class TestSeriesAppend:
         assert series[0] is f
         assert series._type == "file"
         exp._register_key_type.assert_called_once_with("files", "file_series")
-        exp._log_file_series_value.assert_called_once_with("files", f, 0, step=None)
+        exp._log_file_series_value.assert_called_once_with("files", f, 0, step=0)
 
     def test_append_with_step(self):
         """Test appending a metric with an explicit step."""
@@ -106,8 +106,8 @@ class TestSeriesAppend:
 
         assert len(series) == 2
         calls = exp._log_file_series_value.call_args_list
-        assert calls[0] == (("files", f1, 0), {"step": None})
-        assert calls[1] == (("files", f2, 1), {"step": None})
+        assert calls[0] == (("files", f1, 0), {"step": 0})
+        assert calls[1] == (("files", f2, 1), {"step": 1})
 
 
 class TestSeriesTypeSafety:

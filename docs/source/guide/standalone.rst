@@ -69,11 +69,12 @@ Files, Media, and Models
 
 .. code-block:: python
 
-   from litlogger import File, Image, Model, Text
+   from litlogger import File, Image, Model, Text, Video
 
    experiment["config"] = File("config.yaml")
    experiment["preview"] = Image("sample.png")
    experiment["notes"] = Text("training summary")
+   experiment["rollout"] = Video("preview.mp4")
    experiment["checkpoint"] = Model("checkpoint.ckpt")
 
 Resume by Name

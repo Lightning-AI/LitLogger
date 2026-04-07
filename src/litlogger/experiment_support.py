@@ -20,7 +20,7 @@ from typing import TYPE_CHECKING, Callable
 
 from lightning_sdk.lightning_cloud.openapi import V1MediaType
 
-from litlogger.media import File, Image, Model, Text
+from litlogger.media import File, Image, Model, Text, Video
 from litlogger.series import Series
 from litlogger.types import MediaType, Metrics, MetricValue, PhaseType
 
@@ -143,12 +143,8 @@ class ExperimentStateSupport:
 
     @staticmethod
     def rebuild_state(exp: "Experiment") -> None:
-        """Rebuild state from remote metadata, steps, artifacts, and media.
-
-        TODO: Add backend-supported recovery for model bindings so resumed
-        experiments can reconstruct ``Model`` values without storing them in
-        frontend-visible metadata tags.
-        """
+        """Rebuild state from remote metadata, steps, artifacts, and media."""
+        # TODO: add BE support for restoring model states as well
         exp._update_metrics_store()
         tags = getattr(exp._metrics_store, "tags", None) or []
         for tag in tags:
@@ -294,6 +290,9 @@ class ExperimentStateSupport:
             text = Text("")
             text.path = media_name
             return text
+
+        if media_type == V1MediaType.VIDEO:
+            return Video(media_name)
         return File(media_name)
 
     @staticmethod
@@ -316,6 +315,8 @@ class ExperimentIOSupport:
             return V1MediaType.IMAGE
         if media_type == MediaType.TEXT:
             return V1MediaType.TEXT
+        if media_type == MediaType.VIDEO:
+            return V1MediaType.VIDEO
         raise ValueError(f"Unsupported media type for file upload: {media_type}")
 
     @staticmethod
@@ -358,15 +359,14 @@ class ExperimentIOSupport:
 
     @staticmethod
     def upload_model_value(exp: "Experiment", key: str, value: Model) -> None:
-        """Upload a model through litmodels and bind the remote wrapper.
-
-        TODO: Persist model recovery data via backend-supported experiment
-        bindings so resumed experiments can rebuild these wrappers.
-        """
+        """Upload a model through litmodels and bind the remote wrapper."""
+        # TODO: Persist model recovery data via backend-supported experiment
+        # bindings so resumed experiments can rebuild these wrappers.
         cloud_account = exp._metrics_store.cluster_id
         model_name = value._log_model(
             experiment_name=exp.name,
             teamspace=exp._teamspace,
+            key=exp._model_experiment_name(key),
             experiment=exp,
             cloud_account=cloud_account if isinstance(cloud_account, str) else None,
         )

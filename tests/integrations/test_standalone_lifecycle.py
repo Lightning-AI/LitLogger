@@ -255,6 +255,47 @@ def test_resume_experiment():
 
 
 @pytest.mark.cloud()
+def test_resume_old_experiment():
+    """Resume an experiment that has many newer experiments in the same teamspace."""
+    from litlogger.api.metrics_api import MetricsApi
+
+    target_name = f"standalone_resume_old-{uuid.uuid4().hex}"
+    filler_prefix = f"standalone_resume_old_filler-{uuid.uuid4().hex}"
+
+    exp1 = litlogger.init(name=target_name, teamspace="oss-litlogger")
+    litlogger.log_metrics({"loss": 0.5}, step=0)
+    litlogger.finalize()
+
+    project_id = exp1._teamspace.id
+    target_stream_id = exp1._metrics_store.id
+
+    api = MetricsApi()
+    client = LitRestClient()
+
+    filler_ids: list[str] = []
+    try:
+        for i in range(51):
+            stream = api.create_experiment_metrics(
+                teamspace_id=project_id,
+                name=f"{filler_prefix}-{i}",
+            )
+            filler_ids.append(stream.id)
+
+        exp2 = litlogger.init(name=target_name, teamspace="oss-litlogger")
+        try:
+            assert (
+                exp2._metrics_store.id == target_stream_id
+            ), "Expected to resume the original experiment, got a new stream"
+        finally:
+            litlogger.finalize()
+    finally:
+        client.lit_logger_service_delete_metrics_stream(
+            project_id=project_id,
+            body=LitLoggerServiceDeleteMetricsStreamBody(ids=[target_stream_id, *filler_ids]),
+        )
+
+
+@pytest.mark.cloud()
 def test_new_dict_api_resume():
     """Test resuming an experiment with the new dict-like API."""
     experiment_name = f"standalone_dict_resume_test-{uuid.uuid4().hex}"

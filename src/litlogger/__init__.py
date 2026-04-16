@@ -18,7 +18,7 @@ For guides and examples, see https://lightning.ai.
 For reference documentation, see https://github.com/Lightning-AI/litlogger.
 """
 
-__version__ = "2026.03.17"
+__version__ = "2026.04.16"
 
 # Import core classes
 # Import preinit utilities

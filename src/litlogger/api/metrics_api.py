@@ -27,6 +27,7 @@ from lightning_sdk.lightning_cloud.openapi import (
     V1PhaseType,
     V1SystemInfo,
 )
+from lightning_sdk.lightning_cloud.openapi.rest import ApiException
 
 from litlogger.api.client import LitRestClient
 from litlogger.colors import _create_colors
@@ -103,18 +104,12 @@ class MetricsApi:
         Returns:
             The metrics stream object for the experiment, or None if not found.
         """
-        response = self.client.lit_logger_service_list_metrics_streams(project_id=teamspace_id)
-
-        if not response.metrics_streams:
-            return None
-
-        # Filter by name
-        matching = [ms for ms in response.metrics_streams if ms.name == name]
-
-        if not matching:
-            return None
-
-        return matching[0]
+        try:
+            return self.client.lit_logger_service_get_metrics_stream(project_id=teamspace_id, name=name)
+        except ApiException as ex:
+            if ex.status == 404:
+                return None
+            raise
 
     def get_or_create_experiment_metrics(
         self,

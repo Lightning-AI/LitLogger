@@ -6,11 +6,13 @@
 
 from unittest.mock import MagicMock, patch
 
+import pytest
 from lightning_sdk.lightning_cloud.openapi import (
     V1Metrics,
     V1MetricValue,
     V1PhaseType,
 )
+from lightning_sdk.lightning_cloud.openapi.rest import ApiException
 from litlogger.api.metrics_api import MetricsApi
 from litlogger.types import PhaseType
 
@@ -30,10 +32,7 @@ class TestMetricsApi:
         mock_stream = MagicMock()
         mock_stream.id = "ms-123"
         mock_stream.name = "my-experiment"
-        mock_stream.version_number = 1
-        mock_response = MagicMock()
-        mock_response.metrics_streams = [mock_stream]
-        mock_client.lit_logger_service_list_metrics_streams.return_value = mock_response
+        mock_client.lit_logger_service_get_metrics_stream.return_value = mock_stream
         api = MetricsApi(client=mock_client)
 
         result = api.get_experiment_metrics_by_name(
@@ -41,8 +40,9 @@ class TestMetricsApi:
             name="my-experiment",
         )
 
-        mock_client.lit_logger_service_list_metrics_streams.assert_called_once_with(
+        mock_client.lit_logger_service_get_metrics_stream.assert_called_once_with(
             project_id="ts-123",
+            name="my-experiment",
         )
         assert result.id == "ms-123"
         assert result.name == "my-experiment"
@@ -50,9 +50,7 @@ class TestMetricsApi:
     def test_get_experiment_metrics_by_name_not_found(self):
         """Test that get_experiment_metrics_by_name returns None when experiment not found."""
         mock_client = MagicMock()
-        mock_response = MagicMock()
-        mock_response.metrics_streams = []
-        mock_client.lit_logger_service_list_metrics_streams.return_value = mock_response
+        mock_client.lit_logger_service_get_metrics_stream.side_effect = ApiException(status=404)
         api = MetricsApi(client=mock_client)
 
         result = api.get_experiment_metrics_by_name(
@@ -62,13 +60,23 @@ class TestMetricsApi:
 
         assert result is None
 
+    def test_get_experiment_metrics_by_name_raises_on_other_errors(self):
+        """Test that non-404 errors from get_metrics_stream propagate."""
+        mock_client = MagicMock()
+        mock_client.lit_logger_service_get_metrics_stream.side_effect = ApiException(status=500)
+        api = MetricsApi(client=mock_client)
+
+        with pytest.raises(ApiException):
+            api.get_experiment_metrics_by_name(
+                teamspace_id="ts-123",
+                name="my-experiment",
+            )
+
     def test_get_or_create_experiment_metrics_creates_new(self):
         """Test get_or_create_experiment_metrics creates a new experiment when none exists."""
         mock_client = MagicMock()
-        # First call to list returns empty (no existing experiment)
-        mock_list_response = MagicMock()
-        mock_list_response.metrics_streams = []
-        mock_client.lit_logger_service_list_metrics_streams.return_value = mock_list_response
+        # Get returns 404 (no existing experiment)
+        mock_client.lit_logger_service_get_metrics_stream.side_effect = ApiException(status=404)
         # Create returns a new experiment
         mock_created = MagicMock()
         mock_created.id = "ms-new"
@@ -92,13 +100,11 @@ class TestMetricsApi:
     def test_get_or_create_experiment_metrics_returns_existing(self):
         """Test get_or_create_experiment_metrics returns existing experiment without creating."""
         mock_client = MagicMock()
-        # List returns an existing experiment
+        # Get returns an existing experiment
         mock_existing = MagicMock()
         mock_existing.id = "ms-existing"
         mock_existing.name = "my-experiment"
-        mock_list_response = MagicMock()
-        mock_list_response.metrics_streams = [mock_existing]
-        mock_client.lit_logger_service_list_metrics_streams.return_value = mock_list_response
+        mock_client.lit_logger_service_get_metrics_stream.return_value = mock_existing
         api = MetricsApi(client=mock_client)
 
         result, created = api.get_or_create_experiment_metrics(

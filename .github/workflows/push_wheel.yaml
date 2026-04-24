@@ -20,8 +20,8 @@ jobs:
     permissions:
       id-token: write
     steps:
-    - uses: actions/checkout@v5
-    - uses: actions/setup-python@v5
+    - uses: actions/checkout@v6
+    - uses: actions/setup-python@v6
       with:
         python-version: "3.8"
         cache: "pip"
@@ -50,14 +50,14 @@ jobs:
     # TODO: add back once ownership is transferred
     # - name: Publish to Test PyPI
     #   if: startsWith(github.event.ref, 'refs/tags')
-    #   uses: pypa/gh-action-pypi-publish@v1.12.4
+    #   uses: pypa/gh-action-pypi-publish@v1.13.0
     #   with:
     #     repository_url: https://test.pypi.org/legacy/
     #     verbose: true
 
     - name: Publish distribution 📦 to PyPI
       if: startsWith(github.event.ref, 'refs/tags')
-      uses: pypa/gh-action-pypi-publish@v1.12.4
+      uses: pypa/gh-action-pypi-publish@v1.13.0
       with:
         user: __token__
         password: ${{ secrets.pypi_password }}

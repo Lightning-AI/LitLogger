@@ -734,6 +734,14 @@ class TestRebuildStateFiles:
         exp._metrics_store.tags = []
         exp._metrics_api = MagicMock()
         exp._resumed_steps = {}
+        exp._teamspace = MagicMock()
+        exp._teamspace.id = "ts-1"
+        exp._media_api = MagicMock()
+        exp._media_api.client.lit_logger_service_list_lit_logger_media.return_value.media = []
+        response = MagicMock()
+        response.named_metrics = {}
+        exp._metrics_api.client.lit_logger_service_get_logger_metrics.return_value = response
+        exp._metrics_store.id = "store-1"
 
         art = MagicMock()
         art.path = "results.csv"
@@ -812,6 +820,14 @@ class TestRebuildStateFiles:
         exp._metrics_store.tags = []
         exp._metrics_api = MagicMock()
         exp._resumed_steps = {}
+        exp._teamspace = MagicMock()
+        exp._teamspace.id = "ts-1"
+        exp._media_api = MagicMock()
+        exp._media_api.client.lit_logger_service_list_lit_logger_media.return_value.media = []
+        response = MagicMock()
+        response.named_metrics = {}
+        exp._metrics_api.client.lit_logger_service_get_logger_metrics.return_value = response
+        exp._metrics_store.id = "store-1"
 
         art = MagicMock()
         art.path = "existing"

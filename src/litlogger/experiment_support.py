@@ -154,6 +154,11 @@ class ExperimentStateSupport:
 
         for name in exp._resumed_steps:
             exp._key_types[name] = "metric"
+            series = Series(exp, name)
+            series._type = "metric"
+            # TODO: should we load last values?
+            exp._series[name] = series
+            
 
         artifacts = getattr(exp._metrics_store, "artifacts", None) or []
         with contextlib.suppress(AttributeError):

@@ -152,8 +152,18 @@ class ExperimentStateSupport:
                 exp._key_types[tag.name] = "metadata"
                 exp._metadata_values[tag.name] = tag.value
 
+        response = exp._metrics_api.client.lit_logger_service_get_logger_metrics(
+            project_id=exp._teamspace.id, ids=[exp._metrics_store.id]
+        )
         for name in exp._resumed_steps:
             exp._key_types[name] = "metric"
+            series = Series(exp, name)
+            series._type = "metric"
+            if name in response.named_metrics:
+                id_metrics = response.named_metrics[name].ids_metrics
+                metrics_values = next(iter(id_metrics.values())).metrics_values
+                series._values = [mv.value for mv in metrics_values]
+            exp._series[name] = series
 
         artifacts = getattr(exp._metrics_store, "artifacts", None) or []
         with contextlib.suppress(AttributeError):

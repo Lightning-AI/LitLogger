@@ -208,3 +208,45 @@ class TestExperimentStateSupport:
         assert exp._key_types["loss"] == "metric"
         assert isinstance(exp._series["logs"], Series)
         assert [item.path for item in exp._series["logs"]] == ["logs", "logs"]
+
+    def test_rebuild_state_hydrates_metric_values_from_api(self):
+        mv0 = MagicMock()
+        mv0.value = 1.0
+        mv1 = MagicMock()
+        mv1.value = 0.5
+        mv2 = MagicMock()
+        mv2.value = 0.333
+
+        id_metrics_entry = MagicMock()
+        id_metrics_entry.metrics_values = [mv0, mv1, mv2]
+
+        named_metric = MagicMock()
+        named_metric.ids_metrics = {"test-id": id_metrics_entry}
+
+        response = MagicMock()
+        response.named_metrics = {"train/loss": named_metric}
+
+        exp = MagicMock(spec=Experiment)
+        exp._key_types = {}
+        exp._metadata_values = {}
+        exp._static_files = {}
+        exp._series = {}
+        exp._metrics_store = MagicMock()
+        exp._metrics_store.id = "store-1"
+        exp._metrics_store.tags = []
+        exp._metrics_store.artifacts = []
+        exp._metrics_api = MagicMock()
+        exp._metrics_api.client.lit_logger_service_get_logger_metrics.return_value = response
+        exp._teamspace = MagicMock()
+        exp._teamspace.id = "ts-1"
+        exp._media_api = MagicMock()
+        exp._media_api.client.lit_logger_service_list_lit_logger_media.return_value.media = []
+        exp._resumed_steps = {"train/loss": 2}
+
+        ExperimentStateSupport.rebuild_state(exp)
+
+        assert exp._key_types["train/loss"] == "metric"
+        series = exp._series["train/loss"]
+        assert isinstance(series, Series)
+        assert series._type == "metric"
+        assert series._values == [1.0, 0.5, 0.333]

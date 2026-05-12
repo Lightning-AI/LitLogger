@@ -14,8 +14,8 @@
 """Deprecated compatibility logger for Lightning/Fabric integrations."""
 
 import logging
-import os
 import math
+import os
 import warnings
 from argparse import Namespace
 from collections.abc import Mapping

@@ -219,6 +219,12 @@ class TestRebuildStateMetadata:
         exp._series = {}
         exp._metrics_api = MagicMock()
 
+        exp._teamspace = MagicMock()
+        exp._teamspace.id = "ts-1"
+        exp._update_metrics_store = MagicMock()
+        exp._media_api = MagicMock()
+        exp._media_api.client.lit_logger_service_list_lit_logger_media.return_value.media = []
+
         tag = MagicMock()
         tag.name = "model"
         tag.value = "resnet50"
@@ -254,6 +260,11 @@ class TestRebuildStateMetadata:
         exp._metrics_api = MagicMock()
         exp._create_download_fn = MagicMock()
         exp._resumed_steps = {"loss": 10, "acc": 5}
+        exp._teamspace = MagicMock()
+        exp._teamspace.id = "ts-1"
+        exp._update_metrics_store = MagicMock()
+        exp._media_api = MagicMock()
+        exp._media_api.client.lit_logger_service_list_lit_logger_media.return_value.media = []
 
         Experiment._rebuild_state(exp)
 

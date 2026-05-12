@@ -14,7 +14,6 @@
 """Deprecated compatibility logger for Lightning/Fabric integrations."""
 
 import logging
-import math
 import os
 import warnings
 from argparse import Namespace
@@ -279,18 +278,7 @@ else:
             self._store_step = True
 
             prefixed_metrics = _add_prefix(metrics, self._prefix, self.LOGGER_JOIN_CHAR)
-            normalized_metrics = {}
-            for k, v in prefixed_metrics.items():
-                if isinstance(v, Tensor):
-                    v = v.item()
-                if isinstance(v, float) and (math.isnan(v) or math.isinf(v)):
-                    # FIXME: Remove this when NaN is handled correctly
-                    warnings.warn(
-                        f"Metric '{k}' = {v} at step {self._step} is not a finite number. Skipping.",
-                        stacklevel=2,
-                    )
-                    continue
-                normalized_metrics[k] = v
+            normalized_metrics = {k: v.item() if isinstance(v, Tensor) else v for k, v in prefixed_metrics.items()}
             self._require_experiment().log_metrics(normalized_metrics, step=self._step)
 
         @override

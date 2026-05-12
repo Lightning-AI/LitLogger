@@ -15,6 +15,8 @@
 
 from __future__ import annotations
 
+import math
+import warnings
 from typing import TYPE_CHECKING, Any, overload
 
 from litlogger.media import File
@@ -63,6 +65,13 @@ class Series:
                 self._type = "metric"
                 self._experiment._register_key_type(self._key, "metric")
             float_val = float(value)
+            if math.isnan(float_val) or math.isinf(float_val):
+                # FIXME: Remove this when NaN is handled correctly
+                warnings.warn(
+                    f"Metric '{self._key}' = {float_val} is not a finite number. Skipping.",
+                    stacklevel=2,
+                )
+                return
             self._values.append(float_val)
             self._experiment._log_metric_value(self._key, float_val, step=step)
         else:

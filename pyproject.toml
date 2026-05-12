@@ -22,7 +22,7 @@ classifiers = [
 
 dependencies = [
     "blake3",
-    "lightning-sdk >=2026.05.12",
+    "lightning-sdk<2026.05.12",
     "lightning-utilities<=0.15.3",
     "protobuf",
     "psutil",

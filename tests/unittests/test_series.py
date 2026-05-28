@@ -302,3 +302,21 @@ class TestSeriesContainerProtocol:
         series.extend([1.0, 2.0])
 
         assert repr(series) == "[1.0, 2.0]"
+
+    @pytest.mark.parametrize("value", [float("nan"), float("inf"), float("-inf")])
+    def test_append_non_finite_skipped_with_warning(self, value):
+        """Test that NaN, Inf, and -Inf values are skipped and subsequent finite appends still work."""
+        exp = MagicMock(spec=Experiment)
+        exp._key_types = {}
+        series = Series(exp, "loss")
+
+        with pytest.warns(match="not a finite number"):
+            series.append(value)
+
+        assert len(series) == 0
+        exp._log_metric_value.assert_not_called()
+
+        # Finite value still works after skip
+        series.append(0.5)
+        assert len(series) == 1
+        assert series[0] == 0.5

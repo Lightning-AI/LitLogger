@@ -18,14 +18,14 @@ jobs:
       matrix:
         os: ["ubuntu-latest", "macos-latest", "windows-latest"]
         auth_mode: ["user", "guest"]
-        python-version: ["3.10", "3.11", "3.12", "3.13"]
+        python-version: ["3.11", "3.12", "3.13"]
         requires: ["latest"]
         include:
-          - python-version: "3.10"
+          - python-version: "3.11"
             requires: "oldest"
             os: "ubuntu-latest"
             auth_mode: "guest"
-          - python-version: "3.10"
+          - python-version: "3.11"
             requires: "oldest"
             os: "ubuntu-latest"
             auth_mode: "user"

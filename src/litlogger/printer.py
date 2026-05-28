@@ -111,7 +111,7 @@ def _rich_to_str(*renderables: Any, force_terminal: bool = False) -> str:
 
     with open(os.devnull, "w") as f:
         console = Console(file=f, record=True, force_terminal=force_terminal)
-        console.print(*renderables)
+        console.print(*renderables, soft_wrap=True)
     return console.export_text(styles=True)
 
 

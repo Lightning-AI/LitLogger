@@ -19,11 +19,11 @@ jobs:
       fail-fast: false
       matrix:
         os: ["ubuntu-latest", "macos-latest", "windows-latest"]
-        python-version: ["3.10", "3.11", "3.12", "3.13"]
+        python-version: ["3.11", "3.12", "3.13"]
         dependency: ["lightning"]
         requires: ["latest"]
         include:
-            - { os: "ubuntu-latest", python-version: "3.10", dependency: "lightning", requires: "oldest" }
+            - { os: "ubuntu-latest", python-version: "3.11", dependency: "lightning", requires: "oldest" }
     timeout-minutes: 20
     env:
       LIGHTNING_CLOUD_URL: https://staging.gridai.dev

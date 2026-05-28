@@ -1290,7 +1290,7 @@ def _create_name() -> str:
     if app_name and work_id:
         return ""
 
-    adjective = _ADJECTIVES[random.randint(0, len(_ADJECTIVES) - 1)]
-    color = _COLORS[random.randint(0, len(_COLORS) - 1)]
-    suffix = "".join(random.choice(string.ascii_letters) for _ in range(4)).lower()
+    adjective = random.choice(_ADJECTIVES)
+    color = random.choice(_COLORS)
+    suffix = "".join(random.choices(string.ascii_letters, k=4)).lower()
     return f"{adjective}-{color}-{suffix}"

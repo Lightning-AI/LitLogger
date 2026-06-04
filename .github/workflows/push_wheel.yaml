@@ -1,12 +1,10 @@
 name: Push wheel
 
 # https://help.github.com/en/actions/reference/events-that-trigger-workflows
-on:  # Trigger the workflow on push or pull request, but only for the main branch
+on:
   push:
     branches: [main, "release/*"]
     tags: ["*"]
-  pull_request:
-    branches: [main]
   release:
     types: [published]
 

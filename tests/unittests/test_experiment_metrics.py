@@ -5,9 +5,11 @@
 """Tests for adding and retrieving metrics via the experiment dict-like API."""
 
 import sys
+from datetime import datetime
 from unittest.mock import MagicMock
 
 import pytest
+
 from litlogger.experiment import Experiment
 from litlogger.media import File
 from litlogger.series import Series
@@ -83,6 +85,18 @@ class TestAddMetricAppend:
         assert "loss" in batch
         assert batch["loss"].values[0].value == 0.5
         assert batch["loss"].values[0].step == 3
+
+    def test_append_records_walltime_before_queueing(self):
+        exp = _make_exp(store_created_at=True)
+        before = datetime.now()
+
+        exp["loss"].append(0.5, step=3)
+
+        batch = exp._metrics_queue.put.call_args[0][0]
+        metric_value = batch["loss"].values[0]
+        assert metric_value.walltime is not None
+        assert metric_value.created_at == metric_value.walltime
+        assert before <= metric_value.walltime <= datetime.now()
 
     def test_append_respects_store_step_false(self):
         exp = _make_exp(store_step=False)

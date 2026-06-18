@@ -67,15 +67,17 @@ class BinaryFileWriter:
                 self.files[k] = open(filepath, "wb")  # noqa: SIM115
 
                 # Convert datetime to ISO string for header if present
-                created_at_str = None
-                if v.values[0].created_at:
-                    created_at_str = v.values[0].created_at.strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "+00:00"
+                walltime = v.values[0].walltime or v.values[0].created_at
+                walltime_str = None
+                if walltime:
+                    walltime_str = walltime.strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "+00:00"
 
                 header = {
                     "version": 1,
                     "store_created_at": self.store_created_at,
                     "store_step": self.store_step,
-                    "created_at": created_at_str,
+                    "created_at": walltime_str,
+                    "walltime": walltime_str,
                 }
 
                 header_in_bytes = json.dumps(header).encode("utf-8")
@@ -117,8 +119,9 @@ class BinaryFileWriter:
         for value in values:
             # Handle None timestamps (e.g., when store_created_at=False)
             tracker_started_at = trackers[k].started_at
-            if value.created_at is not None and tracker_started_at is not None:
-                relative_time = value.created_at.timestamp() - tracker_started_at.timestamp()
+            walltime = value.walltime or value.created_at
+            if walltime is not None and tracker_started_at is not None:
+                relative_time = walltime.timestamp() - tracker_started_at.timestamp()
             else:
                 relative_time = 0.0
 

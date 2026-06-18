@@ -212,9 +212,10 @@ class _BackgroundThread(Thread):
                 value_obj.step = tracker.num_rows
 
             value = float(value_obj.value)
+            walltime = value_obj.walltime or value_obj.created_at
 
-            if tracker.started_at is None and self.store_created_at and value_obj.created_at:
-                tracker.started_at = value_obj.created_at
+            if tracker.started_at is None and self.store_created_at and walltime:
+                tracker.started_at = walltime
 
             if tracker.min_value is None or (tracker.min_value is not None and value < tracker.min_value):
                 tracker.min_value = value
@@ -227,8 +228,8 @@ class _BackgroundThread(Thread):
             tracker.last_index = tracker.num_rows
             tracker.last_value = value
 
-            if self.store_created_at and value_obj.created_at:
-                tracker.updated_at = value_obj.created_at
+            if self.store_created_at and walltime:
+                tracker.updated_at = walltime
 
             tracker.num_rows += 1
 

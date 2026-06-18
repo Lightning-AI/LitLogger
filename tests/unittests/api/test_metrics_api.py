@@ -4,6 +4,7 @@
 #
 """Unit tests for metrics API."""
 
+from datetime import datetime
 from unittest.mock import MagicMock, patch
 
 from lightning_sdk.lightning_cloud.openapi import (
@@ -12,12 +13,30 @@ from lightning_sdk.lightning_cloud.openapi import (
     V1MetricValue,
     V1PhaseType,
 )
-from litlogger.api.metrics_api import MetricsApi, _from_v1_metrics_tracker
-from litlogger.types import MetricsTracker, PhaseType
+
+from litlogger.api.metrics_api import (
+    MetricsApi,
+    _from_v1_metrics_tracker,
+    _to_v1_metric_value,
+)
+from litlogger.types import MetricsTracker, MetricValue, PhaseType
 
 
 class TestMetricsApi:
     """Test the MetricsApi class."""
+
+    def test_metric_value_serialization_prefers_walltime_and_keeps_created_at(self):
+        """Test metric values send walltime while preserving created_at compatibility."""
+        walltime = datetime(2026, 6, 17, 12, 0, 0)
+        created_at = datetime(2026, 6, 17, 11, 0, 0)
+
+        result = _to_v1_metric_value(MetricValue(value=0.5, step=3, created_at=created_at, walltime=walltime))
+
+        assert result.value == 0.5
+        assert result.step == 3
+        assert result.created_at == "2026-06-17T12:00:00.000+00:00"
+        if hasattr(result, "walltime"):
+            assert result.walltime == "2026-06-17T12:00:00.000+00:00"
 
     def test_init_with_client(self):
         """Test initialization with a custom client."""

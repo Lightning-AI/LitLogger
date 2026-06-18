@@ -14,6 +14,7 @@
 """API layer for metrics and experiment operations."""
 
 import os
+from inspect import signature
 from typing import Any
 
 from google.protobuf import timestamp_pb2
@@ -39,17 +40,20 @@ from litlogger.types import Metrics, MetricsTracker, MetricValue, PhaseType
 # Translation functions between user-facing models and V1 models
 def _to_v1_metric_value(value: MetricValue) -> V1MetricValue:
     """Convert user-facing MetricValue to V1MetricValue."""
-    created_at_str = None
-    if value.created_at:
+    walltime = getattr(value, "walltime", None) or value.created_at
+    walltime_str = None
+    if walltime:
         # Convert datetime to ISO format string with timezone
-        created_at_str = value.created_at.strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "+00:00"
+        walltime_str = walltime.strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "+00:00"
 
     # Build kwargs, excluding None values that the API might not accept
     kwargs: dict[str, float | int | str] = {"value": value.value}
     if value.step is not None:
         kwargs["step"] = value.step
-    if created_at_str is not None:
-        kwargs["created_at"] = created_at_str
+    if walltime_str is not None:
+        kwargs["created_at"] = walltime_str
+        if "walltime" in signature(V1MetricValue).parameters:
+            kwargs["walltime"] = walltime_str
 
     return V1MetricValue(**kwargs)
 

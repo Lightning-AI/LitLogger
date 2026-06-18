@@ -50,9 +50,9 @@ class ExperimentSeriesSupport:
         if exp._manager.exception is not None:
             raise exp._manager.exception
 
-        created_at = datetime.now() if exp.store_created_at else None
+        walltime = datetime.now() if exp.store_created_at else None
         actual_step = step if exp.store_step else None
-        mv = MetricValue(value=value, created_at=created_at, step=actual_step)
+        mv = MetricValue(value=value, created_at=walltime, walltime=walltime, step=actual_step)
         batch: dict[str, Metrics] = {key: Metrics(name=key, values=[mv])}
         exp._metrics_queue.put(batch)
         exp._stats.record_metric(key, value)

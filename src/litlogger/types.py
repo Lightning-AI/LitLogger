@@ -43,17 +43,19 @@ class MediaType(str, Enum):
 
 @dataclass
 class MetricValue:
-    """A single metric value with optional step and timestamp.
+    """A single metric value with optional step and wall-clock timestamp.
 
     Attributes:
         value: The numeric metric value.
         step: Optional step number for this value.
         created_at: Optional datetime when this value was created.
+        walltime: Optional wall-clock datetime when this value was logged.
     """
 
     value: float
     step: int | None = None
     created_at: datetime | None = None
+    walltime: datetime | None = None
 
 
 @dataclass

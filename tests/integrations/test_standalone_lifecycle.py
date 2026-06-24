@@ -3,16 +3,16 @@
 Covers error handling, sequential experiments, resume, console output, and API internals.
 """
 
-import os
 import uuid
 from contextlib import redirect_stderr
 from io import StringIO
 from time import sleep
 
-import litlogger
 import pytest
 from lightning_sdk.lightning_cloud.openapi.models import LitLoggerServiceDeleteMetricsStreamBody
 from lightning_sdk.utils.resolve import _get_cloud_url
+
+import litlogger
 from litlogger.api.client import LitRestClient
 
 # Suppress deprecation warnings from legacy API usage in integration tests
@@ -256,7 +256,6 @@ def test_resume_experiment():
 
 
 @pytest.mark.cloud()
-@pytest.mark.skipif(bool(os.environ.get("TEST_GUEST_MODE", "")), reason="guests can only create up to 25 experiments")
 def test_resume_old_experiment():
     """Resume an experiment that has many newer experiments in the same teamspace."""
     from litlogger.api.metrics_api import MetricsApi

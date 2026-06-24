@@ -117,7 +117,7 @@ def load_model(name: str, download_dir: str | Path = ".") -> Any:
         model_path = Path(download_dir) / model_path
 
     if model_path.suffix.lower() == ".ts":
-        return torch.jit.load(model_path)  # type: ignore[no-untyped-call]
+        return torch.jit.load(model_path)
     if model_path.suffix.lower() == ".keras":
         return keras.models.load_model(model_path)
     if model_path.suffix.lower() == ".pkl":

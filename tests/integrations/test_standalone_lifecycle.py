@@ -8,11 +8,10 @@ from contextlib import redirect_stderr
 from io import StringIO
 from time import sleep
 
+import litlogger
 import pytest
 from lightning_sdk.lightning_cloud.openapi.models import LitLoggerServiceDeleteMetricsStreamBody
 from lightning_sdk.utils.resolve import _get_cloud_url
-
-import litlogger
 from litlogger.api.client import LitRestClient
 
 # Suppress deprecation warnings from legacy API usage in integration tests

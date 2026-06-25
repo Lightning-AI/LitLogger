@@ -13,15 +13,15 @@ concurrency:
 
 jobs:
   check-schema:
-    uses: Lightning-AI/utilities/.github/workflows/check-schema.yml@main
+    uses: Lightning-AI/utilities/.github/workflows/check-schema.yml@86fe1b20b4609835ba9e8c8739cd39707ba76868 # v0.15.3
     with:
       azure-dir: ''
 
   check-package:
     if: github.event.pull_request.draft == false
-    uses: Lightning-AI/utilities/.github/workflows/check-package.yml@main
+    uses: Lightning-AI/utilities/.github/workflows/check-package.yml@86fe1b20b4609835ba9e8c8739cd39707ba76868 # v0.15.3
     with:
-      actions-ref: main
+      actions-ref: 86fe1b20b4609835ba9e8c8739cd39707ba76868 # v0.15.3
       artifact-name: dist-packages-${{ github.sha }}
       import-name: "litlogger"
       install-flags: "--extra-index-url https://download.pytorch.org/whl/cpu"
@@ -32,4 +32,4 @@ jobs:
         }
 
   pre-commit:
-    uses: Lightning-AI/utilities/.github/workflows/check-precommit.yml@main
+    uses: Lightning-AI/utilities/.github/workflows/check-precommit.yml@86fe1b20b4609835ba9e8c8739cd39707ba76868 # v0.15.3

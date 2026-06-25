@@ -29,3 +29,19 @@ class TestAuthApi:
             api.authenticate()
 
             mock_auth.authenticate.assert_called_once()
+
+    def test_authenticate_without_credentials_uses_normal_authentication(self):
+        """Test authenticate does not fall back to guest login."""
+        with patch("litlogger.api.auth_api.Auth") as mock_auth_class:
+            mock_auth = MagicMock()
+            mock_auth.user_id = None
+            mock_auth.api_key = None
+            mock_auth_class.return_value = mock_auth
+
+            api = AuthApi()
+            api.authenticate()
+
+            mock_auth.load.assert_called_once()
+            mock_auth.authenticate.assert_called_once()
+            mock_auth.guest_login.assert_not_called()
+            assert not hasattr(api, "guest_id")

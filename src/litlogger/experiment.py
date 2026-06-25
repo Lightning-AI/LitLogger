@@ -31,7 +31,7 @@ from litlogger.api.artifacts_api import ArtifactsApi
 from litlogger.api.auth_api import AuthApi
 from litlogger.api.media_api import MediaApi
 from litlogger.api.metrics_api import MetricsApi
-from litlogger.api.utils import _resolve_teamspace, build_experiment_url, get_accessible_url, get_guest_url
+from litlogger.api.utils import _resolve_teamspace, build_experiment_url, get_accessible_url
 from litlogger.background import _BackgroundThread
 from litlogger.capture import rerun_and_record
 from litlogger.experiment_legacy import LegacyExperiment, MetadataValue
@@ -116,10 +116,7 @@ class Experiment(LegacyExperiment):
             sys.exit(0)
 
         self._auth_api = AuthApi()
-        is_authenticated = self._auth_api.authenticate()
-        if not is_authenticated:
-            self._printer.log("No credentials found. Logging in as a guest user.")
-            teamspace = None
+        self._auth_api.authenticate()
 
         self._metrics_api = MetricsApi()
         self._media_api = MediaApi(client=self._metrics_api.client)
@@ -138,14 +135,11 @@ class Experiment(LegacyExperiment):
         )
 
         # Build URLs using API
-        if is_authenticated:
-            self._url = build_experiment_url(
-                owner_name=self._teamspace.owner.name,
-                teamspace_name=self._teamspace.name,
-                experiment_name=self.name,
-            )
-        else:
-            self._url = get_guest_url(self._auth_api)
+        self._url = build_experiment_url(
+            owner_name=self._teamspace.owner.name,
+            teamspace_name=self._teamspace.name,
+            experiment_name=self.name,
+        )
 
         self._accessible_url = get_accessible_url(
             teamspace=self._teamspace,

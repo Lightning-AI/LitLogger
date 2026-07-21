@@ -171,35 +171,28 @@ class TestArtifactsApi:
             assert call_args[1]["cloud_account"] == "acc-default"
 
     def test_upload_metrics_binary(self):
-        """Test uploading metrics binary tar.gz file."""
-        mock_client = MagicMock()
-        mock_client.api_client.configuration.host = "https://lightning.ai"
-        api = ArtifactsApi(client=mock_client)
+        """Test uploading metrics binary tar.gz file delegates to the SDK teamspace upload."""
+        mock_teamspace = MagicMock()
+        api = ArtifactsApi()
 
         with tempfile.NamedTemporaryFile(mode="wb", delete=False, suffix=".tar.gz") as f:
             f.write(b"compressed metrics data")
             temp_file = f.name
 
         try:
-            with patch("litlogger.api.artifacts_api._BlobUploader") as mock_uploader:
-                api.upload_metrics_binary(
-                    teamspace_id="ts-123",
-                    cloud_account="acc-456",
-                    file_path=temp_file,
-                    remote_path="/litlogger/stream-789.tar.gz",
-                )
+            api.upload_metrics_binary(
+                teamspace=mock_teamspace,
+                cloud_account="acc-456",
+                file_path=temp_file,
+                remote_path="/litlogger/stream-789.tar.gz",
+            )
 
-                # Check that BlobUploader was called with correct parameters
-                mock_uploader.assert_called_once_with(
-                    client=mock_client,
-                    endpoint_base="https://lightning.ai/v1/projects/ts-123/artifacts",
-                    file_path=temp_file,
-                    remote_path="litlogger/stream-789.tar.gz",
-                    progress_bar=False,
-                    cluster_id="acc-456",
-                )
-
-                # Check that the uploader was called (executed)
-                mock_uploader.return_value.assert_called_once()
+            # Delegates to the public teamspace upload method
+            mock_teamspace.upload_file.assert_called_once_with(
+                file_path=temp_file,
+                remote_path="/litlogger/stream-789.tar.gz",
+                progress_bar=False,
+                cloud_account="acc-456",
+            )
         finally:
             os.unlink(temp_file)

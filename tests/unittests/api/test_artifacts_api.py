@@ -173,6 +173,7 @@ class TestArtifactsApi:
     def test_upload_metrics_binary(self):
         """Test uploading metrics binary tar.gz file."""
         mock_client = MagicMock()
+        mock_client.api_client.configuration.host = "https://lightning.ai"
         api = ArtifactsApi(client=mock_client)
 
         with tempfile.NamedTemporaryFile(mode="wb", delete=False, suffix=".tar.gz") as f:
@@ -180,7 +181,7 @@ class TestArtifactsApi:
             temp_file = f.name
 
         try:
-            with patch("litlogger.api.artifacts_api._FileUploader") as mock_uploader:
+            with patch("litlogger.api.artifacts_api._BlobUploader") as mock_uploader:
                 api.upload_metrics_binary(
                     teamspace_id="ts-123",
                     cloud_account="acc-456",
@@ -188,14 +189,14 @@ class TestArtifactsApi:
                     remote_path="/litlogger/stream-789.tar.gz",
                 )
 
-                # Check that FileUploader was called with correct parameters
+                # Check that BlobUploader was called with correct parameters
                 mock_uploader.assert_called_once_with(
                     client=mock_client,
-                    teamspace_id="ts-123",
-                    cloud_account="acc-456",
+                    endpoint_base="https://lightning.ai/v1/projects/ts-123/artifacts",
                     file_path=temp_file,
-                    remote_path="/litlogger/stream-789.tar.gz",
+                    remote_path="litlogger/stream-789.tar.gz",
                     progress_bar=False,
+                    cluster_id="acc-456",
                 )
 
                 # Check that the uploader was called (executed)

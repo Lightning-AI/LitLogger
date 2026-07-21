@@ -15,7 +15,7 @@ import os
 from typing import Any
 
 from lightning_sdk import Teamspace
-from lightning_sdk.api.utils import _FileUploader
+from lightning_sdk.api.utils import _BlobUploader
 from lightning_sdk.lightning_cloud.openapi import LitLoggerServiceCreateLoggerArtifactBody
 
 from litlogger.api.client import LitRestClient
@@ -216,12 +216,14 @@ class ArtifactsApi:
             file_path: Local path to the tar.gz file to upload.
             remote_path: Remote path where the file will be uploaded.
         """
-        file_uploader = _FileUploader(
+        client_host = self.client.api_client.configuration.host
+        endpoint_base = f"{client_host}/v1/projects/{teamspace_id}/artifacts"
+        blob_uploader = _BlobUploader(
             client=self.client,
-            teamspace_id=teamspace_id,
-            cloud_account=cloud_account,
+            endpoint_base=endpoint_base,
             file_path=file_path,
-            remote_path=remote_path,
+            remote_path=remote_path.lstrip("/"),
             progress_bar=False,
+            cluster_id=cloud_account,
         )
-        file_uploader()
+        blob_uploader()

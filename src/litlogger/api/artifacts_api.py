@@ -18,6 +18,7 @@ from lightning_sdk import Teamspace
 from lightning_sdk.lightning_cloud.openapi import LitLoggerServiceCreateLoggerArtifactBody
 
 from litlogger.api.client import LitRestClient
+from litlogger.api.utils import _resolve_teamspace
 
 
 class ArtifactsApi:
@@ -202,7 +203,7 @@ class ArtifactsApi:
 
     def upload_metrics_binary(
         self,
-        teamspace: Teamspace,
+        teamspace: str | Teamspace,
         cloud_account: str,
         file_path: str,
         remote_path: str,
@@ -210,12 +211,13 @@ class ArtifactsApi:
         """Upload a metrics binary tar.gz file to the teamspace.
 
         Args:
-            teamspace: Teamspace object where the file will be uploaded.
+            teamspace: Teamspace object, or its name, where the file will be uploaded.
             cloud_account: Cloud account identifier.
             file_path: Local path to the tar.gz file to upload.
             remote_path: Remote path where the file will be uploaded.
         """
-        teamspace.upload_file(
+        resolved_teamspace = _resolve_teamspace(teamspace)
+        resolved_teamspace.upload_file(
             file_path=file_path,
             remote_path=remote_path,
             progress_bar=False,

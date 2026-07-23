@@ -180,9 +180,7 @@ class TestArtifactsApi:
             temp_file = f.name
 
         try:
-            with patch(
-                "litlogger.api.artifacts_api._resolve_teamspace", return_value=mock_teamspace
-            ) as mock_resolve:
+            with patch("litlogger.api.artifacts_api._resolve_teamspace", return_value=mock_teamspace) as mock_resolve:
                 api.upload_metrics_binary(
                     teamspace="my-teamspace",
                     cloud_account="acc-456",

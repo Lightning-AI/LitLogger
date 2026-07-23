@@ -171,7 +171,7 @@ class TestArtifactsApi:
             assert call_args[1]["cloud_account"] == "acc-default"
 
     def test_upload_metrics_binary(self):
-        """Test uploading metrics binary tar.gz file delegates to the SDK teamspace upload."""
+        """Test uploading metrics binary tar.gz resolves the teamspace and delegates to upload_file."""
         mock_teamspace = MagicMock()
         api = ArtifactsApi()
 
@@ -180,14 +180,18 @@ class TestArtifactsApi:
             temp_file = f.name
 
         try:
-            api.upload_metrics_binary(
-                teamspace=mock_teamspace,
-                cloud_account="acc-456",
-                file_path=temp_file,
-                remote_path="/litlogger/stream-789.tar.gz",
-            )
+            with patch(
+                "litlogger.api.artifacts_api._resolve_teamspace", return_value=mock_teamspace
+            ) as mock_resolve:
+                api.upload_metrics_binary(
+                    teamspace="my-teamspace",
+                    cloud_account="acc-456",
+                    file_path=temp_file,
+                    remote_path="/litlogger/stream-789.tar.gz",
+                )
 
-            # Delegates to the public teamspace upload method
+            # A teamspace name is resolved to a Teamspace, then uploaded via its public method
+            mock_resolve.assert_called_once_with("my-teamspace")
             mock_teamspace.upload_file.assert_called_once_with(
                 file_path=temp_file,
                 remote_path="/litlogger/stream-789.tar.gz",

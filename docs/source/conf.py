@@ -123,7 +123,11 @@ nitpick_ignore = [
 autosummary_generate = True
 autodoc_member_order = "groupwise"
 autoclass_content = "both"
-autodoc_typehints = "description"
+# Let sphinx-autodoc-typehints render hints into the documented parameters. Core autodoc's
+# "description" would render them a second time (its own target defaults to "all"), so every
+# parameter showed up twice — once with its description, once as a bare type. "none" leaves the
+# type hints entirely to the extension below.
+autodoc_typehints = "none"
 typehints_description_target = "documented_params"
 
 autodoc_default_options = {

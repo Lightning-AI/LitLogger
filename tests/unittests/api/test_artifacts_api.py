@@ -171,34 +171,30 @@ class TestArtifactsApi:
             assert call_args[1]["cloud_account"] == "acc-default"
 
     def test_upload_metrics_binary(self):
-        """Test uploading metrics binary tar.gz file."""
-        mock_client = MagicMock()
-        api = ArtifactsApi(client=mock_client)
+        """Test uploading metrics binary tar.gz resolves the teamspace and delegates to upload_file."""
+        mock_teamspace = MagicMock()
+        api = ArtifactsApi()
 
         with tempfile.NamedTemporaryFile(mode="wb", delete=False, suffix=".tar.gz") as f:
             f.write(b"compressed metrics data")
             temp_file = f.name
 
         try:
-            with patch("litlogger.api.artifacts_api._FileUploader") as mock_uploader:
+            with patch("litlogger.api.artifacts_api._resolve_teamspace", return_value=mock_teamspace) as mock_resolve:
                 api.upload_metrics_binary(
-                    teamspace_id="ts-123",
+                    teamspace="my-teamspace",
                     cloud_account="acc-456",
                     file_path=temp_file,
                     remote_path="/litlogger/stream-789.tar.gz",
                 )
 
-                # Check that FileUploader was called with correct parameters
-                mock_uploader.assert_called_once_with(
-                    client=mock_client,
-                    teamspace_id="ts-123",
-                    cloud_account="acc-456",
-                    file_path=temp_file,
-                    remote_path="/litlogger/stream-789.tar.gz",
-                    progress_bar=False,
-                )
-
-                # Check that the uploader was called (executed)
-                mock_uploader.return_value.assert_called_once()
+            # A teamspace name is resolved to a Teamspace, then uploaded via its public method
+            mock_resolve.assert_called_once_with("my-teamspace")
+            mock_teamspace.upload_file.assert_called_once_with(
+                file_path=temp_file,
+                remote_path="/litlogger/stream-789.tar.gz",
+                progress_bar=False,
+                cloud_account="acc-456",
+            )
         finally:
             os.unlink(temp_file)

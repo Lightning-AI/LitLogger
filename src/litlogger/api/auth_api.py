@@ -18,26 +18,7 @@ class AuthApi:
     def __init__(self) -> None:
         self.auth = Auth()
 
-    def authenticate(self) -> bool:
-        """Authenticate the user or perform a guest login.
-
-        Returns:
-            bool: True if the user is authenticated, False if the user is a guest.
-        """
+    def authenticate(self) -> None:
+        """Authenticate the user."""
         self.auth.load()
-
-        if getattr(self.auth, "user_id", None) and getattr(self.auth, "api_key", None):
-            self.auth.authenticate()
-            return True
-
-        self.auth.guest_login()
-        return False
-
-    @property
-    def guest_id(self) -> str:
-        """Get the guest ID.
-
-        Returns:
-            str: The guest ID.
-        """
-        return str(self.auth.api_key)
+        self.auth.authenticate()

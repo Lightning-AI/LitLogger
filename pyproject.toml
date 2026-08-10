@@ -22,7 +22,7 @@ classifiers = [
 
 dependencies = [
     "blake3",
-    "lightning-sdk >=2026.05.12",
+    "lightning-sdk >=2026.8.5",
     "lightning-utilities<=0.15.3",
     "protobuf",
     "psutil",
@@ -37,6 +37,7 @@ models = [
 [dependency-groups]
 dev = [
     "mypy>=1.18.2",
+    "numpy<2.5",
     "pre-commit >= 4.3.0",
     "types-psutil",
     "types-protobuf",
@@ -196,6 +197,7 @@ addopts = [
   "--ignore=legacy/checkpoints",
 ]
 markers = [
+    "cloud: marker for tests that require Lightning Cloud credentials",
     "project_permission_test: marker for project permission tests",
 ]
 filterwarnings = [

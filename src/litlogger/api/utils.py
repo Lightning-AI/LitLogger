@@ -18,7 +18,6 @@ from lightning_sdk import Teamspace
 from lightning_sdk.api.utils import _get_cloud_url
 from lightning_sdk.lightning_cloud.openapi import V1OwnerType
 
-from litlogger.api.auth_api import AuthApi
 from litlogger.api.client import LitRestClient
 
 
@@ -133,13 +132,3 @@ def get_accessible_url(
         return base_url + f"studios/{cloudspace.name}/app?app_id={app_id}&job_name={metrics_store.job_name}"
 
     return base_url + f"studios/{cloudspace.name}/lit-logger?app_id=031"
-
-
-def get_guest_url(auth_api: AuthApi) -> str:
-    """Get the guest URL for viewing metrics.
-
-    Returns:
-        str: The guest URL.
-    """
-    cloud_url = _get_cloud_url()
-    return f"{cloud_url}/guest/experiments?guestId={auth_api.guest_id}"

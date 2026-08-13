@@ -26,7 +26,7 @@ from typing import TYPE_CHECKING, Callable
 from lightning_sdk.lightning_cloud.openapi import V1MediaType
 
 from litlogger.media import File, Image, Model, Text, Video
-from litlogger.primitives import Metadata, Metric
+from litlogger.primitives import Metadata, Metric, _to_v1_media_type
 from litlogger.series import Series
 from litlogger.session import ExperimentSession
 from litlogger.types import MediaType
@@ -285,11 +285,9 @@ class ExperimentStateSupport:
     def create_download_fn(exp: "Experiment", key: str) -> Callable[[str], str]:
         def _download(path: str) -> str:
             file = File(path)
-            file._bind_remote_artifact(
-                teamspace=exp._teamspace,
-                experiment_name=exp.name,
+            file._bind_remote(
+                _session_for(exp),
                 remote_path=key,
-                client=exp._artifacts_api.client,
                 cloud_account=getattr(exp._metrics_store, "cluster_id", None),
             )
             return file.save(path)
@@ -349,13 +347,7 @@ class ExperimentIOSupport:
 
     @staticmethod
     def media_type_to_v1(exp: "Experiment", media_type: MediaType) -> V1MediaType:
-        if media_type == MediaType.IMAGE:
-            return V1MediaType.IMAGE
-        if media_type == MediaType.TEXT:
-            return V1MediaType.TEXT
-        if media_type == MediaType.VIDEO:
-            return V1MediaType.VIDEO
-        raise ValueError(f"Unsupported media type for file upload: {media_type}")
+        return _to_v1_media_type(media_type)
 
     @staticmethod
     def upload_media(
@@ -413,27 +405,12 @@ class ExperimentIOSupport:
 
     @staticmethod
     def log_file_series_value(exp: "Experiment", key: str, value: File, index: int, step: int | None = None) -> None:
-        if value._media_type == MediaType.MODEL:
-            if not isinstance(value, Model):
-                raise TypeError("Model media values must use the Model wrapper.")
-            if not value._version_provided:
-                value.version = f"v{index + 1}"
-            exp._upload_model_value(key, value)
-            return
-
-        if value._media_type != MediaType.FILE:
-            exp._upload_media_value(key, value, name=key, step=step)
-            return
-
-        remote_path = f"{key}/{index}"
-        value._log_artifact(
-            teamspace=exp._teamspace,
-            metrics_store=exp._metrics_store,
-            remote_path=remote_path,
-            client=exp._artifacts_api.client,
-            experiment_name=exp.name,
-        )
-        exp._stats.artifacts_logged += 1
+        if value._media_type == MediaType.MODEL and not isinstance(value, Model):
+            raise TypeError("Model media values must use the Model wrapper.")
+        value._log_key = key
+        value._series_index = index
+        value._series_step = step
+        value.log(_session_for(exp))
 
     @staticmethod
     def set_metadata_value(exp: "Experiment", key: str, value: str) -> None:
@@ -441,21 +418,9 @@ class ExperimentIOSupport:
 
     @staticmethod
     def set_static_file(exp: "Experiment", key: str, value: File) -> None:
-        if value._media_type == MediaType.MODEL:
-            if not isinstance(value, Model):
-                raise TypeError("Model media values must use the Model wrapper.")
-            exp._upload_model_value(key, value)
-            return
-
-        if value._media_type != MediaType.FILE:
-            exp._upload_media_value(key, value)
-            return
-
-        value._log_artifact(
-            teamspace=exp._teamspace,
-            metrics_store=exp._metrics_store,
-            remote_path=key,
-            client=exp._artifacts_api.client,
-            experiment_name=exp.name,
-        )
-        exp._stats.artifacts_logged += 1
+        if value._media_type == MediaType.MODEL and not isinstance(value, Model):
+            raise TypeError("Model media values must use the Model wrapper.")
+        value._log_key = key
+        value._series_index = None
+        value._series_step = None
+        value.log(_session_for(exp))

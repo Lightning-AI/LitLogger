@@ -21,15 +21,17 @@ them to temporary files for upload.
 import os
 import tempfile
 from importlib import import_module
-from typing import Any, Callable
+from typing import TYPE_CHECKING, Any, Callable
 
 from lightning_sdk import Teamspace
 from typing_extensions import override
 
-from litlogger.api.artifacts_api import ArtifactsApi
-from litlogger.api.client import LitRestClient
 from litlogger.models import download_model, load_model, save_model, upload_model
+from litlogger.primitives import _enqueue_write, _to_v1_media_type, sanitize_model_key
 from litlogger.types import MediaType
+
+if TYPE_CHECKING:
+    from litlogger.session import ExperimentSession
 
 
 def _sanitize_version_for_model_name(version: str) -> str:
@@ -51,6 +53,11 @@ class File:
         self.description = description
         self._temp_path: str | None = None
         self._download_fn: Callable[[str], str] | None = None
+        # Placement stamped by the experiment at dispatch time: the experiment
+        # key, and for series elements the index (and step) within the series.
+        self._log_key: str | None = None
+        self._series_index: int | None = None
+        self._series_step: int | None = None
 
     def _get_upload_path(self) -> str:
         """Get a stable path for upload.
@@ -123,18 +130,30 @@ class File:
             return rel_path.replace("\\", "/")
         return os.path.basename(self.path).replace("\\", "/")
 
-    def _bind_remote_artifact(
+    def _remote_path(self) -> str | None:
+        """Resolve the artifact remote path from the stamped placement.
+
+        Static values upload under the experiment key; series elements under
+        ``{key}/{index}``. Without a stamped key (standalone ``log()``), the
+        path is derived from the local file path at write time.
+        """
+        if self._log_key is None:
+            return None
+        if self._series_index is None:
+            return self._log_key
+        return f"{self._log_key}/{self._series_index}"
+
+    def _bind_remote(
         self,
+        session: "ExperimentSession",
         *,
-        teamspace: Teamspace,
-        experiment_name: str,
         remote_path: str,
-        client: LitRestClient,
         cloud_account: str | None = None,
     ) -> None:
         """Bind remote artifact download behavior to this file wrapper."""
-        api = ArtifactsApi(client=client)
-        full_remote_path = f"experiments/{experiment_name}/{remote_path}"
+        api = session.artifacts_api
+        teamspace = session.teamspace
+        full_remote_path = f"experiments/{session.experiment_name}/{remote_path}"
         self.name = remote_path
         self._download_fn = lambda path: api.download_file(
             teamspace=teamspace,
@@ -143,36 +162,34 @@ class File:
             cloud_account=cloud_account,
         )
 
-    def _log_artifact(
-        self,
-        *,
-        teamspace: Teamspace,
-        metrics_store: Any,
-        experiment_name: str,
-        client: LitRestClient,
-        remote_path: str | None = None,
-    ) -> str:
+    def _upload_artifact(self, session: "ExperimentSession", remote_path: str | None = None) -> str:
         """Upload this file as an experiment artifact and bind remote access."""
         upload_path = self._get_upload_path()
         display_path = self._artifact_display_path(remote_path)
-        api = ArtifactsApi(client=client)
-        api.upload_experiment_file_artifact(
-            teamspace=teamspace,
-            metrics_store=metrics_store,
-            experiment_name=experiment_name,
+        session.artifacts_api.upload_experiment_file_artifact(
+            teamspace=session.teamspace,
+            metrics_store=session.metrics_store,
+            experiment_name=session.experiment_name,
             file_path=upload_path,
             remote_path=display_path,
         )
         self._cleanup()
-        cloud_account = getattr(metrics_store, "cluster_id", None)
-        self._bind_remote_artifact(
-            teamspace=teamspace,
-            experiment_name=experiment_name,
+        cloud_account = getattr(session.metrics_store, "cluster_id", None)
+        self._bind_remote(
+            session,
             remote_path=display_path,
-            client=api.client,
             cloud_account=cloud_account if isinstance(cloud_account, str) else None,
         )
         return display_path
+
+    def log(self, session: "ExperimentSession") -> None:
+        """Upload this file as an experiment artifact now, in the caller's thread."""
+        self._upload_artifact(session, remote_path=self._remote_path())
+        session.stats.artifacts_logged += 1
+
+    def enqueue(self, session: "ExperimentSession") -> None:
+        """Hand this file to the background pipeline for asynchronous upload."""
+        _enqueue_write(self, session)
 
     @property
     def _media_type(self) -> MediaType:
@@ -190,7 +207,32 @@ class File:
         return hash((type(self), self.path))
 
 
-class Image(File):
+class _MediaFile(File):
+    """Base for rendered media (images, videos, text) uploaded through the media API."""
+
+    @override
+    def log(self, session: "ExperimentSession") -> None:
+        """Upload this media now, in the caller's thread.
+
+        Media uploads share one remote name per key: series elements are
+        differentiated by their step, not by an indexed path.
+        """
+        name = self._log_key if self._log_key is not None else (self.name or self._artifact_display_path(None))
+        upload_path = self._get_upload_path()
+        session.media_api.upload_media(
+            experiment_id=session.metrics_store.id,
+            teamspace=session.teamspace,
+            file_path=upload_path,
+            name=name,
+            media_type=_to_v1_media_type(self._media_type),
+            step=self._series_step,
+        )
+        self.name = name
+        self._cleanup()
+        session.stats.media_logged += 1
+
+
+class Image(_MediaFile):
     """Represents an image to be logged.
 
     Can take a file path (str) or a Python object (PIL Image, numpy array,
@@ -282,7 +324,7 @@ class Image(File):
         return MediaType.IMAGE
 
 
-class Video(File):
+class Video(_MediaFile):
     DEFAULT_FPS = 24
 
     """Represents a video to be logged.
@@ -457,7 +499,7 @@ class Video(File):
         return MediaType.VIDEO
 
 
-class Text(File):
+class Text(_MediaFile):
     """Represents text content to be logged.
 
     Takes a string and writes it to a temporary file for upload.
@@ -622,6 +664,28 @@ class Model(File):
 
         self._cleanup()
         return model_name
+
+    @override
+    def log(self, session: "ExperimentSession") -> None:
+        """Upload this model to the registry now, in the caller's thread.
+
+        Series elements without an explicit version are auto-versioned from
+        their position (``v{index + 1}``).
+        """
+        if self._series_index is not None and not self._version_provided:
+            self.version = f"v{self._series_index + 1}"
+
+        key = self._log_key
+        cloud_account = getattr(session.metrics_store, "cluster_id", None)
+        model_name = self._log_model(
+            experiment_name=session.experiment_name,
+            teamspace=session.teamspace,
+            key=sanitize_model_key(key) if key is not None else None,
+            experiment=session.experiment,
+            cloud_account=cloud_account if isinstance(cloud_account, str) else None,
+        )
+        session.stats.models_logged += 1
+        self._bind_remote_model(key=key if key is not None else model_name, model_name=model_name)
 
     def load(self, staging_dir: str | None = None) -> Any:
         """Load a remote model object via the registry helpers."""

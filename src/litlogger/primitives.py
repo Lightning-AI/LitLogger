@@ -27,14 +27,33 @@ primitives :class:`Metric` and :class:`Metadata`.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from datetime import datetime
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
-from litlogger.types import Metrics, MetricValue, PhaseType
+from lightning_sdk.lightning_cloud.openapi import V1MediaType
+
+from litlogger.types import MediaType, Metrics, MetricValue, PhaseType
 
 if TYPE_CHECKING:
     from litlogger.session import ExperimentSession
+
+
+def sanitize_model_key(key: str) -> str:
+    """Reduce an experiment key to the registry's allowed model-name alphabet."""
+    return re.sub(r"[^A-Za-z0-9._-]+", "-", key).strip("-") or "model"
+
+
+def _to_v1_media_type(media_type: MediaType) -> V1MediaType:
+    """Map a user-facing media type to its V1 wire type."""
+    if media_type == MediaType.IMAGE:
+        return V1MediaType.IMAGE
+    if media_type == MediaType.TEXT:
+        return V1MediaType.TEXT
+    if media_type == MediaType.VIDEO:
+        return V1MediaType.VIDEO
+    raise ValueError(f"Unsupported media type for file upload: {media_type}")
 
 
 @runtime_checkable

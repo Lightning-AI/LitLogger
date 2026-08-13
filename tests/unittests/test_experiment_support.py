@@ -4,7 +4,7 @@
 #
 """Focused tests for internal experiment support helpers."""
 
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 from lightning_sdk.lightning_cloud.openapi import V1MediaType
 from litlogger.experiment import Experiment
@@ -44,65 +44,78 @@ class TestExperimentIOSupport:
         metadata = exp._metrics_api.update_experiment_metrics.call_args.kwargs["metadata"]
         assert metadata == {"lr": "0.001", "batch_size": "32"}
 
-    def test_set_static_file_routes_model_by_media_type(self):
+    @staticmethod
+    def _make_io_exp():
         exp = MagicMock(spec=Experiment)
-        exp._upload_model_value = MagicMock()
-        exp._upload_media_value = MagicMock()
+        exp.name = "exp"
+        exp._teamspace = MagicMock()
+        exp._metrics_store = MagicMock()
+        exp._metrics_store.id = "store-1"
+        exp._metrics_store.cluster_id = "acc-1"
+        exp._metrics_api = MagicMock()
+        exp._media_api = MagicMock()
         exp._artifacts_api = MagicMock()
         exp._stats = MagicMock()
         exp._stats.artifacts_logged = 0
+        exp._stats.media_logged = 0
+        exp._stats.models_logged = 0
+        return exp
+
+    @patch.object(Model, "_log_model", return_value="owner/team/model:latest")
+    def test_set_static_file_routes_model_by_media_type(self, mock_log_model):
+        exp = self._make_io_exp()
 
         model = Model("checkpoint.ckpt")
         assert model._media_type == MediaType.MODEL
 
         ExperimentIOSupport.set_static_file(exp, "model", model)
 
-        exp._upload_model_value.assert_called_once_with("model", model)
-        exp._upload_media_value.assert_not_called()
+        mock_log_model.assert_called_once()
+        exp._media_api.upload_media.assert_not_called()
+        exp._artifacts_api.upload_experiment_file_artifact.assert_not_called()
 
     def test_log_file_series_value_routes_text_with_exact_key_name(self):
-        exp = MagicMock(spec=Experiment)
-        exp._upload_media_value = MagicMock()
-        exp._upload_model_value = MagicMock()
-        exp._stats = MagicMock()
-        exp._stats.media_logged = 0
+        exp = self._make_io_exp()
 
         text = Text("hello")
 
         ExperimentIOSupport.log_file_series_value(exp, "logs", text, 2, step=7)
 
-        exp._upload_media_value.assert_called_once_with("logs", text, name="logs", step=7)
-        exp._upload_model_value.assert_not_called()
+        # Media series upload under the bare key (differentiated by step),
+        # never under a key/index path.
+        exp._media_api.upload_media.assert_called_once()
+        kwargs = exp._media_api.upload_media.call_args.kwargs
+        assert kwargs["name"] == "logs"
+        assert kwargs["step"] == 7
+        assert text.name == "logs"
 
     def test_log_file_series_value_routes_video_with_exact_key_name(self):
-        exp = MagicMock(spec=Experiment)
-        exp._upload_media_value = MagicMock()
-        exp._upload_model_value = MagicMock()
-        exp._stats = MagicMock()
-        exp._stats.media_logged = 0
+        exp = self._make_io_exp()
 
         video = Video("preview.mp4")
 
         ExperimentIOSupport.log_file_series_value(exp, "clips", video, 2, step=7)
 
-        exp._upload_media_value.assert_called_once_with("clips", video, name="clips", step=7)
-        exp._upload_model_value.assert_not_called()
+        exp._media_api.upload_media.assert_called_once()
+        kwargs = exp._media_api.upload_media.call_args.kwargs
+        assert kwargs["name"] == "clips"
+        assert kwargs["step"] == 7
 
     def test_media_type_to_v1_maps_video(self):
         exp = MagicMock(spec=Experiment)
 
         assert ExperimentIOSupport.media_type_to_v1(exp, MediaType.VIDEO) == V1MediaType.VIDEO
 
-    def test_log_file_series_value_auto_versions_models_from_v1(self):
-        exp = MagicMock(spec=Experiment)
-        exp._upload_model_value = MagicMock()
+    @patch.object(Model, "_log_model", return_value="owner/team/checkpoints:v1")
+    def test_log_file_series_value_auto_versions_models_from_v1(self, mock_log_model):
+        exp = self._make_io_exp()
 
         model = Model("checkpoint.ckpt")
 
         ExperimentIOSupport.log_file_series_value(exp, "checkpoints", model, 0, step=0)
 
         assert model.version == "v1"
-        exp._upload_model_value.assert_called_once_with("checkpoints", model)
+        mock_log_model.assert_called_once()
 
 
 class TestExperimentStateSupport:

@@ -468,13 +468,9 @@ class Experiment(LegacyExperiment):
             sleep(0.1)
 
         if self.save_logs and os.path.exists(self.terminal_logs_path):
-            File(self.terminal_logs_path)._log_artifact(
-                teamspace=self._teamspace,
-                metrics_store=self._metrics_store,
-                remote_path="console_output.txt",
-                client=self._artifacts_api.client,
-                experiment_name=self.name,
-            )
+            # Uploaded directly (not registered locally, no stats bump) —
+            # console output is bookkeeping, not experiment data.
+            File(self.terminal_logs_path)._upload_artifact(self._session, remote_path="console_output.txt")
 
         # Print completion summary with stats
         if print_summary:

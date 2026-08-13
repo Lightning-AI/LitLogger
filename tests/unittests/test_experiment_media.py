@@ -408,6 +408,9 @@ class TestFileSeriesBindings:
         exp._metrics_store.id = "store-1"
         exp._metrics_store.cluster_id = "acc-1"
         exp._artifacts_api = MagicMock()
+        exp._artifacts_api.download_file.side_effect = (
+            lambda teamspace, remote_path, local_path, cloud_account=None: local_path
+        )
         exp._stats = MagicMock()
         exp._stats.artifacts_logged = 0
 
@@ -418,6 +421,8 @@ class TestFileSeriesBindings:
             download_path = os.path.join(tmpdir, "frame.png")
             result = f.save(download_path)
             assert result == download_path
+            kwargs = exp._artifacts_api.download_file.call_args.kwargs
+            assert kwargs["remote_path"] == "experiments/exp1/frames/0"
 
     def test_non_file_series_uses_media_api(self):
         exp = MagicMock(spec=Experiment)

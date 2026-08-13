@@ -107,6 +107,9 @@ class File:
         self._log_key: str | None = None
         self._series_index: int | None = None
         self._series_step: int | None = None
+        # Read barrier attached when the write is queued: reading the remote
+        # side (save/load) first waits for queued writes to land.
+        self._read_barrier: Callable[[], None] | None = None
 
     def _get_upload_path(self) -> str:
         """Get a stable path for upload.
@@ -161,6 +164,8 @@ class File:
         Raises:
             RuntimeError: If the file has no remote download context.
         """
+        if self._read_barrier is not None:
+            self._read_barrier()
         if self._download_fn is None:
             raise RuntimeError("File has no remote context. It must be uploaded to an experiment first.")
         return self._download_fn(path)
@@ -238,6 +243,7 @@ class File:
 
     def enqueue(self, session: "ExperimentSession") -> None:
         """Hand this file to the background pipeline for asynchronous upload."""
+        self._read_barrier = session.flush
         _enqueue_write(self, session)
 
     @staticmethod
@@ -878,6 +884,8 @@ class Model(File):
 
     def load(self, staging_dir: str | None = None) -> Any:
         """Load a remote model object via the registry helpers."""
+        if self._read_barrier is not None:
+            self._read_barrier()
         if self._load_fn is None:
             raise RuntimeError("Model has no remote load context. It must be uploaded to an experiment first.")
         return self._load_fn(staging_dir)

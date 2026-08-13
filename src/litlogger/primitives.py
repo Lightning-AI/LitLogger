@@ -30,7 +30,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from datetime import datetime
-from typing import TYPE_CHECKING, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Protocol, TypeAlias, runtime_checkable
 
 from lightning_sdk.lightning_cloud.openapi import V1MediaType
 
@@ -119,6 +119,11 @@ class _QueuedWrite:
     primitive: Primitive
 
 
+#: Items carried by the experiment queue: metric batches (merged and sent in
+#: bulk) or queued primitives (executed one by one by the worker).
+QueueItem: TypeAlias = "dict[str, Metrics] | _QueuedWrite"
+
+
 @dataclass
 class RestoredFiles:
     """Result of one bulk file-restore pass: statics plus ordered series values."""
@@ -130,9 +135,7 @@ class RestoredFiles:
 def _enqueue_write(primitive: Primitive, session: ExperimentSession) -> None:
     """Queue a primitive for the background worker, surfacing prior failures first."""
     session.raise_if_background_failed()
-    # The queue's item type broadens to include _QueuedWrite when the
-    # background worker learns to execute queued primitives (async flip).
-    session.queue.put(_QueuedWrite(primitive))  # type: ignore[arg-type]
+    session.queue.put(_QueuedWrite(primitive))
 
 
 @dataclass

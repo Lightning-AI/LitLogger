@@ -26,7 +26,7 @@ import threading
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from multiprocessing import JoinableQueue
+    from queue import Queue
 
     from lightning_sdk import Teamspace
 
@@ -36,8 +36,8 @@ if TYPE_CHECKING:
     from litlogger.api.metrics_api import MetricsApi
     from litlogger.background import _BackgroundThread
     from litlogger.experiment import Experiment
+    from litlogger.primitives import QueueItem
     from litlogger.printer import RunStats
-    from litlogger.types import Metrics
 
 
 class ExperimentSession:
@@ -74,7 +74,7 @@ class ExperimentSession:
         artifacts_api: ArtifactsApi,
         teamspace: Teamspace,
         experiment: Experiment,
-        queue: JoinableQueue[dict[str, Metrics]],
+        queue: Queue[QueueItem],
         stats: RunStats,
         store_step: bool,
         store_created_at: bool,

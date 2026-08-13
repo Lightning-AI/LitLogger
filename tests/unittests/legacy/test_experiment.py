@@ -15,6 +15,7 @@ pytestmark = pytest.mark.filterwarnings("ignore::DeprecationWarning")
 import litlogger  # noqa: F401
 from litlogger.background import _BackgroundThread
 from litlogger.experiment import Experiment
+from litlogger.primitives import _QueuedWrite
 from litlogger.session import ExperimentSession
 from litlogger.types import MediaType, Metrics, MetricValue
 
@@ -320,6 +321,10 @@ def _make_metric_exp(**overrides):
     exp.store_step = True
     exp.store_created_at = False
     exp._metrics_queue = MagicMock()
+    # The dict API queues writes; execute them inline the way the worker would.
+    exp._metrics_queue.put.side_effect = (
+        lambda item: item.primitive.log(exp._session) if isinstance(item, _QueuedWrite) else None
+    )
     exp._stats = MagicMock()
     # Wire dunder methods on the *type* so MagicMock dispatches them
     type(exp).__getitem__ = lambda self, key: Experiment.__getitem__(self, key)
@@ -772,6 +777,8 @@ class TestExperimentMetadataProperty:
         exp._metrics_store.name = "test"
         exp._metrics_store.tags = [tag1, tag2, tag3]
         type(exp)._session = property(lambda self: _session_of(self))
+        exp._manager = MagicMock()
+        exp._manager.exception = None
         exp._metrics_api = MagicMock()
         # The property re-reads the store from the API; keep the seeded one.
         exp._metrics_api.get_experiment_metrics_by_name.return_value = exp._metrics_store

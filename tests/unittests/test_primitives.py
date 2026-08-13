@@ -470,3 +470,94 @@ class TestWrapMediaFile:
 
         assert isinstance(wrapped, Video)
         assert wrapped.path == "clips/0"
+
+
+class TestReadBarriers:
+    """Queued writes must land before dependent remote reads."""
+
+    def test_enqueue_attaches_read_barrier(self, tmp_path):
+        session = make_session()
+        local = tmp_path / "config.yaml"
+        local.write_text("lr: 0.1")
+        f = File(str(local))
+        f._log_key = "config"
+
+        f.enqueue(session)
+
+        assert f._read_barrier is not None
+
+    def test_save_flushes_queued_writes_first(self, tmp_path):
+        session = make_session()
+        local = tmp_path / "config.yaml"
+        local.write_text("lr: 0.1")
+        f = File(str(local))
+        f._log_key = "config"
+        f.enqueue(session)
+
+        # Simulate the worker: process the queued write, then the download
+        # must observe the completed upload.
+        events = []
+        session.queue.join.side_effect = lambda: events.append("flush")
+        session.artifacts_api.download_file.side_effect = (
+            lambda teamspace, remote_path, local_path, cloud_account=None: (
+                events.append("download"),
+                local_path,
+            )[1]
+        )
+        item = session.queue.put.call_args[0][0]
+        item.primitive.log(session)
+
+        f.save(str(tmp_path / "out.yaml"))
+
+        assert events == ["flush", "download"]
+
+    def test_save_still_requires_remote_context(self):
+        session = make_session()
+        f = File("never-uploaded.txt")
+        f._read_barrier = session.flush
+
+        with pytest.raises(RuntimeError, match="no remote context"):
+            f.save("out.txt")
+
+
+class TestWriteBehindEndToEnd:
+    """A real worker drains queued file writes and finalize-style joins cover them."""
+
+    def test_worker_processes_enqueued_file(self, tmp_path):
+        import queue as queue_module
+
+        from litlogger.background import _BackgroundThread
+
+        session = make_session(queue=queue_module.Queue())
+        local = tmp_path / "report.txt"
+        local.write_text("done")
+        f = File(str(local))
+        f._log_key = "report"
+
+        from threading import Event
+
+        stop_event = Event()
+        worker = _BackgroundThread(
+            teamspace_id="ts-1",
+            metrics_store_id="ms-1",
+            metrics_api=session.metrics_api,
+            metrics_queue=session.queue,
+            is_ready_event=Event(),
+            stop_event=stop_event,
+            done_event=Event(),
+            store_step=True,
+            store_created_at=False,
+            session=session,
+        )
+        worker.start()
+        session.background = worker
+
+        f.enqueue(session)
+        session.queue.join()  # what finalize()/read barriers do
+        stop_event.set()
+        worker.join(timeout=10)
+
+        session.artifacts_api.upload_experiment_file_artifact.assert_called_once()
+        assert f.name == "report"
+        assert f._download_fn is not None
+        assert session.stats.artifacts_logged == 1

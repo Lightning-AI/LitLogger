@@ -10,6 +10,7 @@ from unittest.mock import MagicMock
 import pytest
 from litlogger.experiment import Experiment
 from litlogger.media import File
+from litlogger.primitives import _QueuedWrite
 from litlogger.series import Series
 from litlogger.session import ExperimentSession
 
@@ -53,6 +54,10 @@ def _make_exp(**overrides):
     exp.store_step = True
     exp.store_created_at = False
     exp._metrics_queue = MagicMock()
+    # The dict API queues writes; execute them inline the way the worker would.
+    exp._metrics_queue.put.side_effect = (
+        lambda item: item.primitive.log(exp._session) if isinstance(item, _QueuedWrite) else None
+    )
     exp._stats = MagicMock()
     exp._metrics_api = MagicMock()
     exp._media_api = MagicMock()

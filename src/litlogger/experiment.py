@@ -18,7 +18,7 @@ import contextlib
 import os
 import signal
 import sys
-from multiprocessing import JoinableQueue
+from queue import Queue
 from threading import Event
 from time import sleep
 from types import FrameType
@@ -34,11 +34,11 @@ from litlogger.background import _BackgroundThread
 from litlogger.capture import rerun_and_record
 from litlogger.experiment_legacy import LegacyExperiment, MetadataValue
 from litlogger.media import File, Model
-from litlogger.primitives import Metadata, Metric, Primitive, RestoredFiles, _to_v1_media_type
+from litlogger.primitives import Metadata, Metric, Primitive, QueueItem, RestoredFiles, _to_v1_media_type
 from litlogger.printer import Printer, RunStats
 from litlogger.series import Series
 from litlogger.session import ExperimentSession
-from litlogger.types import MediaType, Metrics
+from litlogger.types import MediaType
 
 
 class Experiment(LegacyExperiment):
@@ -148,10 +148,14 @@ class Experiment(LegacyExperiment):
         )
 
         # Initialize metrics management
-        self._metrics_queue: JoinableQueue[dict[str, Metrics]] = JoinableQueue()
+        self._metrics_queue: Queue[QueueItem] = Queue()
         self._stop_event = Event()
         self._is_ready_event = Event()
         self._resumed_steps = self._metrics_api.get_last_steps(self._teamspace.id, self._metrics_store.id) or {}
+
+        # Shared infrastructure context handed to logging primitives; the
+        # background worker uses it to execute queued non-metric writes.
+        self._session = ExperimentSession.from_experiment(self)
         self._manager = _BackgroundThread(
             teamspace_id=self._teamspace.id,
             metrics_store_id=self._metrics_store.id,
@@ -165,10 +169,9 @@ class Experiment(LegacyExperiment):
             rate_limiting_interval=rate_limiting_interval,
             max_batch_size=max_batch_size,
             last_steps=self._resumed_steps,
+            session=self._session,
         )
-
-        # Shared infrastructure context handed to logging primitives
-        self._session = ExperimentSession.from_experiment(self)
+        self._session.background = self._manager
 
         self._manager.start()
 
@@ -264,13 +267,13 @@ class Experiment(LegacyExperiment):
                 )
             self._key_types[key] = "static_file"
             self._static_files[key] = value
-            self._coerce_static_value(key, value).log(self._session)
+            self._coerce_static_value(key, value).enqueue(self._session)
         elif isinstance(value, str):
             if key in self._key_types and self._key_types[key] != "metadata":
                 raise KeyError(f"Key {key!r} is already used as {self._key_types[key]}. Cannot reassign as metadata.")
             self._key_types[key] = "metadata"
             self._metadata_values[key] = value
-            Metadata(key, value).log(self._session)
+            Metadata(key, value).enqueue(self._session)
         else:
             raise TypeError(f"Can only assign str or File, got {type(value).__name__}")
 
@@ -332,7 +335,7 @@ class Experiment(LegacyExperiment):
         Metric(key, value, step=step).enqueue(self._session)
 
     def _log_file_series_value(self, key: str, value: File, index: int, step: int | None = None) -> None:
-        self._coerce_series_value(key, value, index, step).log(self._session)
+        self._coerce_series_value(key, value, index, step).enqueue(self._session)
 
     def _upload_media(
         self,
@@ -364,6 +367,8 @@ class Experiment(LegacyExperiment):
         if cached is not None or key in self._missing_model_keys:
             return cached
 
+        # Read barrier: queued model uploads must land before the registry lookup.
+        self._session.flush()
         resolved = Model._resolve(self._session, key)
         if resolved is None:
             self._missing_model_keys.add(key)
@@ -448,6 +453,8 @@ class Experiment(LegacyExperiment):
         Returns:
             dict[str, str]: The metadata dictionary with key-value pairs from code-defined tags.
         """
+        # Read barrier: queued metadata writes must land before the remote read.
+        self._session.flush()
         return Metadata._current_tags(self._session)
 
     @property
@@ -508,6 +515,11 @@ class Experiment(LegacyExperiment):
             if self._manager.exception is not None:
                 raise self._manager.exception
             sleep(0.1)
+
+        # A queued write that failed after the worker set the done event would
+        # otherwise be swallowed here; surface it.
+        if self._manager.exception is not None:
+            raise self._manager.exception
 
         if self.save_logs and os.path.exists(self.terminal_logs_path):
             # Uploaded directly (not registered locally, no stats bump) —

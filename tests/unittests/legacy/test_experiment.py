@@ -789,6 +789,8 @@ class TestExperimentLogMetadata:
         exp._metrics_store.name = "test"
         exp._metrics_store.tags = [lr_tag]
         exp._metrics_api = MagicMock()
+        # The metadata write re-reads the store from the API before merging
+        exp._metrics_api.get_experiment_metrics_by_name.return_value = exp._metrics_store
         # _update_metrics_store is called by the metadata property; make it a no-op
         exp._update_metrics_store = lambda: None
         exp._teamspace = MagicMock()
@@ -826,6 +828,7 @@ class TestExperimentLogMetadata:
         exp._metrics_store.name = "test"
         exp._metrics_store.tags = [lr_tag]
         exp._metrics_api = MagicMock()
+        exp._metrics_api.get_experiment_metrics_by_name.return_value = exp._metrics_store
         exp._update_metrics_store = lambda: None
         exp._teamspace = MagicMock()
         exp._teamspace.id = "ts_123"

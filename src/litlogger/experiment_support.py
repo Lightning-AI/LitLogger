@@ -11,7 +11,12 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Internal support classes for experiment state, routing, and metrics."""
+"""Internal support classes for experiment state, routing, and metrics.
+
+This module is transitional: its logic is moving into the logging primitives
+(:mod:`litlogger.primitives` and :mod:`litlogger.media`) and it will be
+deleted once the migration completes.
+"""
 
 import contextlib
 import re
@@ -21,11 +26,42 @@ from typing import TYPE_CHECKING, Callable
 from lightning_sdk.lightning_cloud.openapi import V1MediaType
 
 from litlogger.media import File, Image, Model, Text, Video
+from litlogger.primitives import Metadata, Metric
 from litlogger.series import Series
-from litlogger.types import MediaType, Metrics, MetricValue, PhaseType
+from litlogger.session import ExperimentSession
+from litlogger.types import MediaType
 
 if TYPE_CHECKING:
     from litlogger.experiment import Experiment
+
+
+def _session_for(exp: "Experiment") -> ExperimentSession:
+    """Return the experiment's session, or assemble one from its parts.
+
+    Transitional glue for the support shims: real experiments carry a session;
+    the partially-populated mock experiments used by the legacy unit tests do
+    not, so missing infrastructure degrades to ``None`` for writes that never
+    touch it.
+    """
+    session = getattr(exp, "_session", None)
+    if isinstance(session, ExperimentSession):
+        return session
+
+    metrics_api = getattr(exp, "_metrics_api", None)
+    return ExperimentSession(
+        client=getattr(metrics_api, "client", None),  # type: ignore[arg-type]
+        metrics_api=metrics_api,  # type: ignore[arg-type]
+        media_api=getattr(exp, "_media_api", None),  # type: ignore[arg-type]
+        artifacts_api=getattr(exp, "_artifacts_api", None),  # type: ignore[arg-type]
+        teamspace=getattr(exp, "_teamspace", None),
+        experiment=exp,
+        queue=getattr(exp, "_metrics_queue", None),  # type: ignore[arg-type]
+        stats=getattr(exp, "_stats", None),  # type: ignore[arg-type]
+        store_step=bool(getattr(exp, "store_step", True)),
+        store_created_at=bool(getattr(exp, "store_created_at", False)),
+        last_steps=getattr(exp, "_resumed_steps", None) or {},
+        background=getattr(exp, "_manager", None),
+    )
 
 
 class ExperimentSeriesSupport:
@@ -47,15 +83,7 @@ class ExperimentSeriesSupport:
 
     @staticmethod
     def log_metric_value(exp: "Experiment", key: str, value: float, step: int | None = None) -> None:
-        if exp._manager.exception is not None:
-            raise exp._manager.exception
-
-        created_at = datetime.now() if exp.store_created_at else None
-        actual_step = step if exp.store_step else None
-        mv = MetricValue(value=value, created_at=created_at, step=actual_step)
-        batch: dict[str, Metrics] = {key: Metrics(name=key, values=[mv])}
-        exp._metrics_queue.put(batch)
-        exp._stats.record_metric(key, value)
+        Metric(key, value, step=step).enqueue(_session_for(exp))
 
 
 class ExperimentStateSupport:
@@ -409,14 +437,7 @@ class ExperimentIOSupport:
 
     @staticmethod
     def set_metadata_value(exp: "Experiment", key: str, value: str) -> None:
-        current_tags = ExperimentStateSupport.code_tags(exp)
-        current_tags[key] = value
-        exp._metrics_api.update_experiment_metrics(
-            teamspace_id=exp._teamspace.id,
-            metrics_store_id=exp._metrics_store.id,
-            phase=PhaseType.RUNNING,
-            metadata=current_tags,
-        )
+        Metadata(key, value).log(_session_for(exp))
 
     @staticmethod
     def set_static_file(exp: "Experiment", key: str, value: File) -> None:

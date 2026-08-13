@@ -17,22 +17,27 @@ from litlogger.types import MediaType
 class TestExperimentIOSupport:
     """Targeted routing and metadata tests for ExperimentIOSupport."""
 
-    def test_set_metadata_value_uses_concrete_code_tags(self):
+    def test_set_metadata_value_merges_freshly_read_tags(self):
+        """The write must merge into tags freshly read from the API, not a stale local mirror."""
         exp = MagicMock(spec=Experiment)
         exp._metrics_store = MagicMock()
         exp._metrics_store.id = "store-123"
-        exp._metrics_store.tags = []
+        exp._metrics_store.name = "test"
         exp._metrics_api = MagicMock()
         exp._teamspace = MagicMock()
         exp._teamspace.id = "ts-123"
-        exp._update_metrics_store = MagicMock()
         exp._code_tags.return_value = {"wrong": "value"}
+        exp._metadata_values = {"also-wrong": "value"}
 
         tag = MagicMock()
         tag.name = "lr"
         tag.value = "0.001"
         tag.from_code = True
-        exp._metrics_store.tags = [tag]
+        refreshed_store = MagicMock()
+        refreshed_store.id = "store-123"
+        refreshed_store.name = "test"
+        refreshed_store.tags = [tag]
+        exp._metrics_api.get_experiment_metrics_by_name.return_value = refreshed_store
 
         ExperimentIOSupport.set_metadata_value(exp, "batch_size", "32")
 

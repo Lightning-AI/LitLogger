@@ -118,11 +118,13 @@ class TestAddMetadataApiCall:
         exp = MagicMock(spec=Experiment)
         exp._metrics_store = MagicMock()
         exp._metrics_store.id = "store_123"
+        exp._metrics_store.name = "test"
         exp._metrics_store.tags = []
         exp._metrics_api = MagicMock()
+        # The metadata write re-reads the store from the API before merging
+        exp._metrics_api.get_experiment_metrics_by_name.return_value = exp._metrics_store
         exp._teamspace = MagicMock()
         exp._teamspace.id = "ts_123"
-        exp._update_metrics_store = MagicMock()
 
         # Wire metadata property
         type(exp).metadata = Experiment.metadata

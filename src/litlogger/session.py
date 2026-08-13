@@ -22,6 +22,7 @@ themselves.
 
 from __future__ import annotations
 
+import threading
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -91,6 +92,9 @@ class ExperimentSession:
         self.store_step = store_step
         self.store_created_at = store_created_at
         self.last_steps = last_steps
+        # Serializes synchronous auto-stepping; the background worker keeps its
+        # own single-threaded access to last_steps.
+        self.last_steps_lock = threading.Lock()
         self.background = background
 
     @classmethod

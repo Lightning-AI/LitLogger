@@ -312,3 +312,63 @@ class TestMetricsApi:
         call_args = mock_client.lit_logger_service_update_metrics_stream.call_args
         assert call_args.kwargs["body"].persisted is False
         assert call_args.kwargs["body"].phase == V1PhaseType.RUNNING
+
+
+class TestGetMetricValues:
+    """Test MetricsApi.get_metric_values."""
+
+    def _response(self, named_metrics):
+        response = MagicMock()
+        response.named_metrics = named_metrics
+        return response
+
+    def test_decodes_first_stream_values(self):
+        """Values are decoded from the first (only) stream id per metric name."""
+        mv0, mv1, mv2 = MagicMock(), MagicMock(), MagicMock()
+        mv0.value, mv1.value, mv2.value = 1.0, 0.5, 0.333
+        id_metrics_entry = MagicMock()
+        id_metrics_entry.metrics_values = [mv0, mv1, mv2]
+        named_metric = MagicMock()
+        named_metric.ids_metrics = {"ms-1": id_metrics_entry}
+
+        mock_client = MagicMock()
+        mock_client.lit_logger_service_get_logger_metrics.return_value = self._response(
+            {"train/loss": named_metric}
+        )
+        api = MetricsApi(client=mock_client)
+
+        result = api.get_metric_values("ts-1", "ms-1")
+
+        mock_client.lit_logger_service_get_logger_metrics.assert_called_once_with(
+            project_id="ts-1",
+            ids=["ms-1"],
+        )
+        assert result == {"train/loss": [1.0, 0.5, 0.333]}
+
+    def test_empty_response_returns_empty_dict(self):
+        """No named metrics means no values."""
+        mock_client = MagicMock()
+        mock_client.lit_logger_service_get_logger_metrics.return_value = self._response({})
+        api = MetricsApi(client=mock_client)
+
+        assert api.get_metric_values("ts-1", "ms-1") == {}
+
+    def test_none_named_metrics_returns_empty_dict(self):
+        """A response with named_metrics=None is treated as empty."""
+        mock_client = MagicMock()
+        mock_client.lit_logger_service_get_logger_metrics.return_value = self._response(None)
+        api = MetricsApi(client=mock_client)
+
+        assert api.get_metric_values("ts-1", "ms-1") == {}
+
+    def test_metric_without_streams_is_skipped(self):
+        """A metric name with an empty ids_metrics map contributes no values."""
+        named_metric = MagicMock()
+        named_metric.ids_metrics = {}
+        mock_client = MagicMock()
+        mock_client.lit_logger_service_get_logger_metrics.return_value = self._response(
+            {"orphan": named_metric}
+        )
+        api = MetricsApi(client=mock_client)
+
+        assert api.get_metric_values("ts-1", "ms-1") == {}

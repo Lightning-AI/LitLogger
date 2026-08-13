@@ -129,11 +129,11 @@ class File:
         teamspace: Teamspace,
         experiment_name: str,
         remote_path: str,
-        client: LitRestClient | None = None,
+        client: LitRestClient,
         cloud_account: str | None = None,
     ) -> None:
         """Bind remote artifact download behavior to this file wrapper."""
-        api = ArtifactsApi(client=client or LitRestClient(max_retries=5))
+        api = ArtifactsApi(client=client)
         full_remote_path = f"experiments/{experiment_name}/{remote_path}"
         self.name = remote_path
         self._download_fn = lambda path: api.download_file(
@@ -149,13 +149,13 @@ class File:
         teamspace: Teamspace,
         metrics_store: Any,
         experiment_name: str,
-        client: LitRestClient | None = None,
+        client: LitRestClient,
         remote_path: str | None = None,
     ) -> str:
         """Upload this file as an experiment artifact and bind remote access."""
         upload_path = self._get_upload_path()
         display_path = self._artifact_display_path(remote_path)
-        api = ArtifactsApi(client=client or LitRestClient(max_retries=5))
+        api = ArtifactsApi(client=client)
         api.upload_experiment_file_artifact(
             teamspace=teamspace,
             metrics_store=metrics_store,

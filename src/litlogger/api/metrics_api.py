@@ -266,6 +266,32 @@ class MetricsApi:
             ),
         )
 
+    def get_metric_values(self, teamspace_id: str, metrics_stream_id: str) -> dict[str, list[float]]:
+        """Fetch the logged values for every metric series of an experiment.
+
+        Args:
+            teamspace_id: The teamspace ID.
+            metrics_stream_id: The metrics stream ID.
+
+        Returns:
+            Mapping of metric name to its ordered list of values. Only values
+            are returned (no steps or timestamps); that is all the local series
+            state needs when resuming an experiment.
+        """
+        response = self.client.lit_logger_service_get_logger_metrics(
+            project_id=teamspace_id,
+            ids=[metrics_stream_id],
+        )
+
+        values: dict[str, list[float]] = {}
+        for name, named_metrics in (response.named_metrics or {}).items():
+            id_metrics = named_metrics.ids_metrics
+            if not id_metrics:
+                continue
+            metrics_values = next(iter(id_metrics.values())).metrics_values
+            values[name] = [mv.value for mv in metrics_values]
+        return values
+
     def get_last_steps(self, teamspace_id: str, metrics_stream_id: str) -> dict[str, int] | None:
         """Get the last logged step for each metric in the metrics store.
 

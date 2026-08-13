@@ -39,6 +39,7 @@ from litlogger.experiment_support import ExperimentIOSupport, ExperimentSeriesSu
 from litlogger.media import File, Model
 from litlogger.printer import Printer, RunStats
 from litlogger.series import Series
+from litlogger.session import ExperimentSession
 from litlogger.types import MediaType, Metrics
 
 
@@ -120,7 +121,7 @@ class Experiment(LegacyExperiment):
 
         self._metrics_api = MetricsApi()
         self._media_api = MediaApi(client=self._metrics_api.client)
-        self._artifacts_api = ArtifactsApi()
+        self._artifacts_api = ArtifactsApi(client=self._metrics_api.client)
         self._teamspace = _resolve_teamspace(teamspace)
 
         # Create metrics stream using API
@@ -167,6 +168,9 @@ class Experiment(LegacyExperiment):
             max_batch_size=max_batch_size,
             last_steps=self._resumed_steps,
         )
+
+        # Shared infrastructure context handed to logging primitives
+        self._session = ExperimentSession.from_experiment(self)
 
         self._manager.start()
 
@@ -385,6 +389,15 @@ class Experiment(LegacyExperiment):
             Teamspace: The teamspace object.
         """
         return self._teamspace
+
+    @property
+    def session(self) -> ExperimentSession:
+        """The shared infrastructure session primitives log through.
+
+        Returns:
+            ExperimentSession: The session created for this experiment.
+        """
+        return self._session
 
     @property
     def metadata(self) -> dict[str, str]:

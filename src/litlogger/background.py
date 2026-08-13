@@ -11,10 +11,11 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Internal thread utilities for buffering and uploading metrics to Lightning Cloud.
+"""Internal thread utilities for the experiment's write-behind pipeline.
 
-This module defines the _ManagerThread which reads metrics from a multiprocessing queue,
-persists them locally in a compact binary format, and periodically sends them to the backend.
+This module defines the background worker which drains the experiment queue:
+metric batches are merged, rate-limited, and appended in bulk, while queued
+primitives (files, media, models, metadata) are executed one by one.
 """
 
 import contextlib
@@ -34,16 +35,16 @@ if TYPE_CHECKING:
 
 
 class _BackgroundThread(Thread):
-    """Background worker that drains a queue of metrics and appends them to the metrics store.
+    """Background worker draining the experiment queue.
 
-    This thread batches values, writes a compact binary file for later upload, and pushes
-    data to the Lightning Cloud API with basic rate limiting and batching.
+    Metric values are batched and pushed to the Lightning Cloud API with basic
+    rate limiting; queued primitives perform their own writes via the session.
 
     Args:
         teamspace_id: Project/teamspace identifier in Lightning Cloud.
         metrics_store_id: The metrics store id to append to.
         metrics_api: MetricsApi instance used to communicate with the Lightning Cloud backend.
-        metrics_queue: Source of metrics produced by the Experiment/Logger process.
+        metrics_queue: Source of writes produced by the Experiment/Logger.
         is_ready_event: Event set when the thread finished initialization.
         stop_event: Event that, when set, requests a graceful shutdown.
         done_event: Event set once all pending metrics have been flushed and the upload completed.
@@ -51,6 +52,7 @@ class _BackgroundThread(Thread):
         store_created_at: Whether to persist the timestamp for each value.
         rate_limiting_interval: Minimum seconds between consecutive network sends.
         max_batch_size: Number of metric values to accumulate before sending a batch.
+        session: Shared infrastructure context used to execute queued primitives.
     """
 
     def __init__(

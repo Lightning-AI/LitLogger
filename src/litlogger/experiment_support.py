@@ -18,15 +18,20 @@ This module is transitional: its logic is moving into the logging primitives
 deleted once the migration completes.
 """
 
-import contextlib
 import re
-from datetime import datetime
 from typing import TYPE_CHECKING, Callable
 
 from lightning_sdk.lightning_cloud.openapi import V1MediaType
 
-from litlogger.media import File, Image, Model, Text, Video
-from litlogger.primitives import Metadata, Metric, _to_v1_media_type
+from litlogger.media import File, Model, _media_download_fn, _wrap_media_file
+from litlogger.primitives import (
+    Metadata,
+    Metric,
+    RestoredFiles,
+    _to_v1_media_type,
+    model_version_sort_key,
+    natural_sort_key,
+)
 from litlogger.series import Series
 from litlogger.session import ExperimentSession
 from litlogger.types import MediaType
@@ -91,45 +96,15 @@ class ExperimentStateSupport:
 
     @staticmethod
     def natural_sort_key(value: str | None) -> tuple[object, ...]:
-        if not value:
-            return ("",)
-        parts = re.split(r"(\d+)", value)
-        key: list[object] = []
-        for part in parts:
-            if not part:
-                continue
-            key.append(int(part) if part.isdigit() else part)
-        return tuple(key)
+        return natural_sort_key(value)
 
     @staticmethod
     def model_version_sort_key(version_info: object) -> tuple[object, ...]:
-        index = getattr(version_info, "index", None)
-        if isinstance(index, int):
-            return (0, index)
-
-        created_at = getattr(version_info, "created_at", None)
-        if isinstance(created_at, datetime):
-            return (1, created_at)
-
-        updated_at = getattr(version_info, "updated_at", None)
-        if isinstance(updated_at, datetime):
-            return (2, updated_at)
-
-        version = getattr(version_info, "version", None)
-        return (3, *ExperimentStateSupport.natural_sort_key(version))
+        return model_version_sort_key(version_info)
 
     @staticmethod
     def remote_model_from_version(exp: "Experiment", key: str, model_key: str, version_info: object) -> Model:
-        metadata = getattr(version_info, "metadata", None) or {}
-        kind = "object" if metadata.get("litModels.integration") == "save_model" else "artifact"
-        version = getattr(version_info, "version", None)
-        registry_name = f"{exp._teamspace.owner.name}/{exp._teamspace.name}/{model_key}"
-        if version:
-            registry_name += f":{version}"
-
-        model = Model.from_remote(registry_name, kind, version=version)
-        model._bind_remote_model(key=key, model_name=registry_name)
-        return model
+        return Model._from_version(_session_for(exp), key, model_key, version_info)
 
     @staticmethod
     def resolve_remote_model(exp: "Experiment", key: str) -> Model | Series | None:
@@ -137,149 +112,55 @@ class ExperimentStateSupport:
         if cached is not None or key in exp._missing_model_keys:
             return cached
 
-        model_key = ExperimentStateSupport.model_experiment_name(exp, key)
-        try:
-            models = exp._teamspace.list_models()
-            model_info = next((model for model in models if getattr(model, "name", None) == model_key), None)
-            if model_info is None:
-                exp._missing_model_keys.add(key)
-                return None
-
-            versions = exp._teamspace.list_model_versions(model_key)
-            complete_versions = [version for version in versions if getattr(version, "upload_complete", True)]
-            if not complete_versions:
-                exp._missing_model_keys.add(key)
-                return None
-            complete_versions.sort(key=ExperimentStateSupport.model_version_sort_key)
-
-            if len(complete_versions) == 1:
-                model = ExperimentStateSupport.remote_model_from_version(exp, key, model_key, complete_versions[0])
-                exp._model_lookup_cache[key] = model
-                return model
-
-            series = Series(exp, key)
-            series._type = "file"
-            series._values = [
-                ExperimentStateSupport.remote_model_from_version(exp, key, model_key, version_info)
-                for version_info in complete_versions
-            ]
-            exp._model_lookup_cache[key] = series
-            return series
-        except Exception:
+        resolved = Model._resolve(_session_for(exp), key)
+        if resolved is None:
             exp._missing_model_keys.add(key)
             return None
+
+        if isinstance(resolved, list):
+            series = Series(exp, key)
+            series._type = "file"
+            series._values = list(resolved)
+            exp._model_lookup_cache[key] = series
+            return series
+
+        exp._model_lookup_cache[key] = resolved
+        return resolved
 
     @staticmethod
     def rebuild_state(exp: "Experiment") -> None:
         """Rebuild state from remote metadata, steps, artifacts, and media."""
         # TODO: add BE support for restoring model states as well
-        exp._update_metrics_store()
-        tags = getattr(exp._metrics_store, "tags", None) or []
-        for tag in tags:
-            if tag.from_code:
-                exp._key_types[tag.name] = "metadata"
-                exp._metadata_values[tag.name] = tag.value
+        session = _session_for(exp)
 
-        response = exp._metrics_api.client.lit_logger_service_get_logger_metrics(
-            project_id=exp._teamspace.id, ids=[exp._metrics_store.id]
-        )
+        for name, value in Metadata._current_tags(session).items():
+            exp._key_types[name] = "metadata"
+            exp._metadata_values[name] = value
+
+        metric_values = Metric._restore_values(session)
         for name in exp._resumed_steps:
             exp._key_types[name] = "metric"
             series = Series(exp, name)
             series._type = "metric"
-            if name in response.named_metrics:
-                id_metrics = response.named_metrics[name].ids_metrics
-                metrics_values = next(iter(id_metrics.values())).metrics_values
-                series._values = [mv.value for mv in metrics_values]
+            if name in metric_values:
+                series._values = list(metric_values[name])
             exp._series[name] = series
 
-        artifacts = getattr(exp._metrics_store, "artifacts", None) or []
-        with contextlib.suppress(AttributeError):
-            artifact_response = exp._metrics_api.client.lit_logger_service_list_logger_artifacts(
-                project_id=exp._teamspace.id,
-                metrics_stream_id=exp._metrics_store.id,
-            )
-            listed_artifacts = getattr(artifact_response, "logger_artifacts", None)
-            if isinstance(listed_artifacts, list):
-                artifacts = listed_artifacts
-        artifact_series_entries: dict[str, list[tuple[int, File]]] = {}
-        for artifact in artifacts:
-            name = artifact.path if hasattr(artifact, "path") else str(artifact)
-            wrapped = File(name)
-            wrapped.name = name
-            wrapped._download_fn = exp._create_download_fn(name)
+        ExperimentStateSupport._merge_restored(exp, File._restore_all(session, dict(exp._key_types)))
+        ExperimentStateSupport._merge_restored(exp, File._restore_media(session, dict(exp._key_types)))
 
-            # Treat names like "reports/3" as the 4th entry of a file series keyed by "reports".
-            match = re.match(r"^(?P<key>.+)/(?P<index>\d+)$", name)
-            if match:
-                key = match.group("key")
-                index = int(match.group("index"))
-                if key in exp._key_types and exp._key_types[key] != "file_series":
-                    continue
-                exp._key_types[key] = "file_series"
-                artifact_series_entries.setdefault(key, []).append((index, wrapped))
-                continue
-
-            if name in exp._key_types:
-                continue
-            exp._key_types[name] = "static_file"
-            exp._static_files[name] = wrapped
-
-        for key, file_entries in artifact_series_entries.items():
+    @staticmethod
+    def _merge_restored(exp: "Experiment", restored: RestoredFiles) -> None:
+        """Register one restore pass's results in the experiment's local state."""
+        for key, file in restored.statics.items():
+            exp._key_types[key] = "static_file"
+            exp._static_files[key] = file
+        for key, values in restored.series.items():
+            exp._key_types[key] = "file_series"
             series = Series(exp, key)
             series._type = "file"
-            series._values = [value for _, value in sorted(file_entries)]
+            series._values = values
             exp._series[key] = series
-
-        with contextlib.suppress(AttributeError):
-            media_response = exp._media_api.client.lit_logger_service_list_lit_logger_media(
-                project_id=exp._teamspace.id,
-                metrics_stream_id=exp._metrics_store.id,
-            )
-            media_items = getattr(media_response, "media", None)
-            if not isinstance(media_items, list):
-                media_items = []
-            series_entries: dict[str, list[tuple[int, File]]] = {}
-            direct_media_entries: dict[str, list[tuple[int | None, int, File]]] = {}
-            for position, media in enumerate(media_items):
-                name = media.name or media.storage_path or media.id
-                storage_path = media.storage_path or name
-                wrapped = exp._wrap_media_file(name, media.media_type)
-                wrapped.name = name
-                wrapped._download_fn = exp._create_media_download_fn(storage_path, media.cluster_id)
-
-                # Treat names like "logs/3" as the 4th entry of a media series keyed by "logs".
-                match = re.match(r"^(?P<key>.+)/(?P<index>\d+)$", name)
-                if match:
-                    key = match.group("key")
-                    index = int(match.group("index"))
-                    if key in exp._key_types and exp._key_types[key] != "file_series":
-                        continue
-                    exp._key_types[key] = "file_series"
-                    series_entries.setdefault(key, []).append((index, wrapped))
-                    continue
-
-                direct_media_entries.setdefault(name, []).append((getattr(media, "step", None), position, wrapped))
-
-            for name, media_entries in direct_media_entries.items():
-                if name in exp._key_types:
-                    continue
-                if len(media_entries) == 1 and name not in exp._key_types:
-                    exp._key_types[name] = "static_file"
-                    exp._static_files[name] = media_entries[0][2]
-                    continue
-
-                exp._key_types[name] = "file_series"
-                series_values = series_entries.setdefault(name, [])
-                for step, position, wrapped in media_entries:
-                    sort_index = step if isinstance(step, int) else position
-                    series_values.append((sort_index, wrapped))
-
-            for key, file_entries in series_entries.items():
-                series = Series(exp, key)
-                series._type = "file"
-                series._values = [value for _, value in sorted(file_entries)]
-                exp._series[key] = series
 
     @staticmethod
     def create_download_fn(exp: "Experiment", key: str) -> Callable[[str], str]:
@@ -312,24 +193,11 @@ class ExperimentStateSupport:
     def create_media_download_fn(
         exp: "Experiment", storage_path: str, cloud_account: str | None = None
     ) -> Callable[[str], str]:
-        def _download(path: str) -> str:
-            exp._teamspace.download_file(storage_path, file_path=path, cloud_account=cloud_account)
-            return path
-
-        return _download
+        return _media_download_fn(_session_for(exp), storage_path, cloud_account)
 
     @staticmethod
     def wrap_media_file(exp: "Experiment", media_name: str, media_type: V1MediaType) -> File:
-        if media_type == V1MediaType.IMAGE:
-            return Image(media_name)
-        if media_type == V1MediaType.TEXT:
-            text = Text("")
-            text.path = media_name
-            return text
-
-        if media_type == V1MediaType.VIDEO:
-            return Video(media_name)
-        return File(media_name)
+        return _wrap_media_file(media_name, media_type)
 
     @staticmethod
     def update_metrics_store(exp: "Experiment") -> None:

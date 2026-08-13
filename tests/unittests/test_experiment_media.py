@@ -728,30 +728,41 @@ class TestRetrieveArtifactsProperty:
 class TestRebuildStateFiles:
     """Test that _rebuild_state populates downloadable files."""
 
-    def test_rebuilds_artifacts_with_name_and_download(self):
+    @staticmethod
+    def _make_rebuild_exp():
         exp = MagicMock(spec=Experiment)
+        exp.name = "exp1"
         exp._key_types = {}
         exp._metadata_values = {}
         exp._static_files = {}
         exp._series = {}
-        exp._metrics_store = MagicMock()
-        exp._update_metrics_store = MagicMock()
-        exp._metrics_store.tags = []
-        exp._metrics_api = MagicMock()
         exp._resumed_steps = {}
+        exp._metrics_store = MagicMock()
+        exp._metrics_store.id = "store-1"
+        exp._metrics_store.name = "exp1"
+        exp._metrics_store.tags = []
+        exp._metrics_store.artifacts = []
+        exp._metrics_store.cluster_id = "cloud-1"
         exp._teamspace = MagicMock()
         exp._teamspace.id = "ts-1"
+        exp._metrics_api = MagicMock()
+        # The rebuild re-reads the store from the API first; keep the seeded one.
+        exp._metrics_api.get_experiment_metrics_by_name.return_value = exp._metrics_store
+        exp._metrics_api.get_metric_values.return_value = {}
+        exp._artifacts_api = MagicMock()
+        exp._artifacts_api.list_experiment_artifacts.return_value = None
         exp._media_api = MagicMock()
-        exp._media_api.client.lit_logger_service_list_lit_logger_media.return_value.media = []
-        response = MagicMock()
-        response.named_metrics = {}
-        exp._metrics_api.client.lit_logger_service_get_logger_metrics.return_value = response
-        exp._metrics_store.id = "store-1"
+        exp._media_api.list_media.return_value = []
+        return exp
 
+    def test_rebuilds_artifacts_with_name_and_download(self):
+        exp = self._make_rebuild_exp()
         art = MagicMock()
         art.path = "results.csv"
         exp._metrics_store.artifacts = [art]
-        exp._create_download_fn = lambda key: lambda path: f"dl:{key}:{path}"
+        exp._artifacts_api.download_file.side_effect = (
+            lambda teamspace, remote_path, local_path, cloud_account=None: local_path
+        )
 
         Experiment._rebuild_state(exp)
 
@@ -759,54 +770,28 @@ class TestRebuildStateFiles:
         assert isinstance(f, File)
         assert f.name == "results.csv"
         assert f._download_fn is not None
-        assert f.save("/tmp/out.csv") == "dl:results.csv:/tmp/out.csv"
+        assert f.save("/tmp/out.csv") == "/tmp/out.csv"
+        kwargs = exp._artifacts_api.download_file.call_args.kwargs
+        assert kwargs["remote_path"] == "experiments/exp1/results.csv"
 
     def test_rebuild_loads_artifacts_from_logger_artifacts_api(self):
-        exp = MagicMock(spec=Experiment)
-        exp._key_types = {}
-        exp._metadata_values = {}
-        exp._static_files = {}
-        exp._series = {}
-        exp._metrics_store = MagicMock()
-        exp._metrics_store.id = "store-1"
-        exp._metrics_store.tags = []
-        exp._metrics_store.artifacts = []
-        exp._teamspace = MagicMock()
-        exp._teamspace.id = "ts-1"
-        exp._metrics_api = MagicMock()
+        exp = self._make_rebuild_exp()
         art = MagicMock()
         art.path = "results.csv"
-        exp._metrics_api.client.lit_logger_service_list_logger_artifacts.return_value.logger_artifacts = [art]
-        exp._update_metrics_store = MagicMock()
-        exp._create_download_fn = lambda key: lambda path: f"dl:{key}:{path}"
-        exp._resumed_steps = {}
+        exp._artifacts_api.list_experiment_artifacts.return_value = [art]
 
         Experiment._rebuild_state(exp)
 
         assert "results.csv" in exp._static_files
-        exp._update_metrics_store.assert_called_once()
+        exp._metrics_api.get_experiment_metrics_by_name.assert_called_once()
 
     def test_rebuilds_artifact_series_from_logger_artifacts_api(self):
-        exp = MagicMock(spec=Experiment)
-        exp._key_types = {}
-        exp._metadata_values = {}
-        exp._static_files = {}
-        exp._series = {}
-        exp._metrics_store = MagicMock()
-        exp._metrics_store.id = "store-1"
-        exp._metrics_store.tags = []
-        exp._metrics_store.artifacts = []
-        exp._teamspace = MagicMock()
-        exp._teamspace.id = "ts-1"
-        exp._metrics_api = MagicMock()
+        exp = self._make_rebuild_exp()
         art0 = MagicMock()
         art0.path = "reports/0"
         art1 = MagicMock()
         art1.path = "reports/1"
-        exp._metrics_api.client.lit_logger_service_list_logger_artifacts.return_value.logger_artifacts = [art1, art0]
-        exp._update_metrics_store = MagicMock()
-        exp._create_download_fn = lambda key: lambda path: f"dl:{key}:{path}"
-        exp._resumed_steps = {}
+        exp._artifacts_api.list_experiment_artifacts.return_value = [art1, art0]
 
         Experiment._rebuild_state(exp)
 
@@ -815,29 +800,11 @@ class TestRebuildStateFiles:
         assert [item.name for item in exp._series["reports"]] == ["reports/0", "reports/1"]
 
     def test_rebuild_does_not_overwrite_existing_keys(self):
-        exp = MagicMock(spec=Experiment)
+        exp = self._make_rebuild_exp()
         exp._key_types = {"existing": "metric"}
-        exp._metadata_values = {}
-        exp._static_files = {}
-        exp._series = {}
-        exp._metrics_store = MagicMock()
-        exp._update_metrics_store = MagicMock()
-        exp._metrics_store.tags = []
-        exp._metrics_api = MagicMock()
-        exp._resumed_steps = {}
-        exp._teamspace = MagicMock()
-        exp._teamspace.id = "ts-1"
-        exp._media_api = MagicMock()
-        exp._media_api.client.lit_logger_service_list_lit_logger_media.return_value.media = []
-        response = MagicMock()
-        response.named_metrics = {}
-        exp._metrics_api.client.lit_logger_service_get_logger_metrics.return_value = response
-        exp._metrics_store.id = "store-1"
-
         art = MagicMock()
         art.path = "existing"
         exp._metrics_store.artifacts = [art]
-        exp._create_download_fn = lambda key: lambda path: path
 
         Experiment._rebuild_state(exp)
 
@@ -845,34 +812,21 @@ class TestRebuildStateFiles:
         assert exp._key_types["existing"] == "metric"
         assert "existing" not in exp._static_files
 
-    def test_rebuilds_static_media_with_wrapper(self):
+    @staticmethod
+    def _media_record(name, storage_path, media_type, media_id, step=None):
         media = MagicMock()
-        media.name = "preview"
-        media.storage_path = "media/preview.png"
+        media.name = name
+        media.storage_path = storage_path
         media.cluster_id = "cloud-1"
-        media.media_type = V1MediaType.IMAGE
-        media.id = "media-1"
+        media.media_type = media_type
+        media.id = media_id
+        media.step = step
+        return media
 
-        exp = MagicMock(spec=Experiment)
-        exp._key_types = {}
-        exp._metadata_values = {}
-        exp._static_files = {}
-        exp._series = {}
-        exp._metrics_store = MagicMock()
-        exp._metrics_store.id = "store-1"
-        exp._update_metrics_store = MagicMock()
-        exp._metrics_store.tags = []
-        exp._metrics_store.artifacts = []
-        exp._metrics_api = MagicMock()
-        exp._teamspace = MagicMock()
-        exp._teamspace.id = "ts-1"
-        exp._media_api = MagicMock()
-        exp._media_api.client.lit_logger_service_list_lit_logger_media.return_value.media = [media]
-        exp._wrap_media_file = lambda media_name, media_type: Experiment._wrap_media_file(exp, media_name, media_type)
-        exp._create_media_download_fn = lambda storage_path, cloud_account=None: Experiment._create_media_download_fn(
-            exp, storage_path, cloud_account
-        )
-        exp._resumed_steps = {}
+    def test_rebuilds_static_media_with_wrapper(self):
+        exp = self._make_rebuild_exp()
+        media = self._media_record("preview", "media/preview.png", V1MediaType.IMAGE, "media-1")
+        exp._media_api.list_media.return_value = [media]
 
         Experiment._rebuild_state(exp)
 
@@ -882,33 +836,9 @@ class TestRebuildStateFiles:
         assert wrapped._download_fn is not None
 
     def test_rebuilds_static_video_with_wrapper(self):
-        media = MagicMock()
-        media.name = "preview"
-        media.storage_path = "media/preview.mp4"
-        media.cluster_id = "cloud-1"
-        media.media_type = V1MediaType.VIDEO
-        media.id = "media-1"
-
-        exp = MagicMock(spec=Experiment)
-        exp._key_types = {}
-        exp._metadata_values = {}
-        exp._static_files = {}
-        exp._series = {}
-        exp._metrics_store = MagicMock()
-        exp._metrics_store.id = "store-1"
-        exp._update_metrics_store = MagicMock()
-        exp._metrics_store.tags = []
-        exp._metrics_store.artifacts = []
-        exp._metrics_api = MagicMock()
-        exp._teamspace = MagicMock()
-        exp._teamspace.id = "ts-1"
-        exp._media_api = MagicMock()
-        exp._media_api.client.lit_logger_service_list_lit_logger_media.return_value.media = [media]
-        exp._wrap_media_file = lambda media_name, media_type: Experiment._wrap_media_file(exp, media_name, media_type)
-        exp._create_media_download_fn = lambda storage_path, cloud_account=None: Experiment._create_media_download_fn(
-            exp, storage_path, cloud_account
-        )
-        exp._resumed_steps = {}
+        exp = self._make_rebuild_exp()
+        media = self._media_record("preview", "media/preview.mp4", V1MediaType.VIDEO, "media-1")
+        exp._media_api.list_media.return_value = [media]
 
         Experiment._rebuild_state(exp)
 
@@ -918,40 +848,10 @@ class TestRebuildStateFiles:
         assert wrapped._download_fn is not None
 
     def test_rebuilds_media_series_with_wrapper(self):
-        media0 = MagicMock()
-        media0.name = "logs/0"
-        media0.storage_path = "media/logs-0.txt"
-        media0.cluster_id = "cloud-1"
-        media0.media_type = V1MediaType.TEXT
-        media0.id = "media-0"
-
-        media1 = MagicMock()
-        media1.name = "logs/1"
-        media1.storage_path = "media/logs-1.txt"
-        media1.cluster_id = "cloud-1"
-        media1.media_type = V1MediaType.TEXT
-        media1.id = "media-1"
-
-        exp = MagicMock(spec=Experiment)
-        exp._key_types = {}
-        exp._metadata_values = {}
-        exp._static_files = {}
-        exp._series = {}
-        exp._metrics_store = MagicMock()
-        exp._metrics_store.id = "store-1"
-        exp._update_metrics_store = MagicMock()
-        exp._metrics_store.tags = []
-        exp._metrics_store.artifacts = []
-        exp._metrics_api = MagicMock()
-        exp._teamspace = MagicMock()
-        exp._teamspace.id = "ts-1"
-        exp._media_api = MagicMock()
-        exp._media_api.client.lit_logger_service_list_lit_logger_media.return_value.media = [media1, media0]
-        exp._wrap_media_file = lambda media_name, media_type: Experiment._wrap_media_file(exp, media_name, media_type)
-        exp._create_media_download_fn = lambda storage_path, cloud_account=None: Experiment._create_media_download_fn(
-            exp, storage_path, cloud_account
-        )
-        exp._resumed_steps = {}
+        exp = self._make_rebuild_exp()
+        media0 = self._media_record("logs/0", "media/logs-0.txt", V1MediaType.TEXT, "media-0")
+        media1 = self._media_record("logs/1", "media/logs-1.txt", V1MediaType.TEXT, "media-1")
+        exp._media_api.list_media.return_value = [media1, media0]
 
         Experiment._rebuild_state(exp)
 
@@ -961,42 +861,10 @@ class TestRebuildStateFiles:
         assert all(isinstance(item, Text) for item in exp._series["logs"])
 
     def test_rebuilds_same_name_media_series_with_wrapper(self):
-        media0 = MagicMock()
-        media0.name = "logs"
-        media0.step = 0
-        media0.storage_path = "media/logs-0.txt"
-        media0.cluster_id = "cloud-1"
-        media0.media_type = V1MediaType.TEXT
-        media0.id = "media-0"
-
-        media1 = MagicMock()
-        media1.name = "logs"
-        media1.step = 1
-        media1.storage_path = "media/logs-1.txt"
-        media1.cluster_id = "cloud-1"
-        media1.media_type = V1MediaType.TEXT
-        media1.id = "media-1"
-
-        exp = MagicMock(spec=Experiment)
-        exp._key_types = {}
-        exp._metadata_values = {}
-        exp._static_files = {}
-        exp._series = {}
-        exp._metrics_store = MagicMock()
-        exp._metrics_store.id = "store-1"
-        exp._update_metrics_store = MagicMock()
-        exp._metrics_store.tags = []
-        exp._metrics_store.artifacts = []
-        exp._metrics_api = MagicMock()
-        exp._teamspace = MagicMock()
-        exp._teamspace.id = "ts-1"
-        exp._media_api = MagicMock()
-        exp._media_api.client.lit_logger_service_list_lit_logger_media.return_value.media = [media1, media0]
-        exp._wrap_media_file = lambda media_name, media_type: Experiment._wrap_media_file(exp, media_name, media_type)
-        exp._create_media_download_fn = lambda storage_path, cloud_account=None: Experiment._create_media_download_fn(
-            exp, storage_path, cloud_account
-        )
-        exp._resumed_steps = {}
+        exp = self._make_rebuild_exp()
+        media0 = self._media_record("logs", "media/logs-0.txt", V1MediaType.TEXT, "media-0", step=0)
+        media1 = self._media_record("logs", "media/logs-1.txt", V1MediaType.TEXT, "media-1", step=1)
+        exp._media_api.list_media.return_value = [media1, media0]
 
         Experiment._rebuild_state(exp)
 

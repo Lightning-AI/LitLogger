@@ -137,6 +137,32 @@ class TestExperimentStateSupport:
         assert isinstance(wrapped, Video)
         assert wrapped.path == "clips/0"
 
+    @staticmethod
+    def _make_rebuild_exp():
+        exp = MagicMock(spec=Experiment)
+        exp.name = "exp"
+        exp._key_types = {}
+        exp._metadata_values = {}
+        exp._static_files = {}
+        exp._series = {}
+        exp._resumed_steps = {}
+        exp._metrics_store = MagicMock()
+        exp._metrics_store.id = "store-1"
+        exp._metrics_store.name = "exp"
+        exp._metrics_store.tags = []
+        exp._metrics_store.artifacts = []
+        exp._teamspace = MagicMock()
+        exp._teamspace.id = "ts-1"
+        exp._metrics_api = MagicMock()
+        # The rebuild re-reads the store from the API first; keep the seeded one.
+        exp._metrics_api.get_experiment_metrics_by_name.return_value = exp._metrics_store
+        exp._metrics_api.get_metric_values.return_value = {}
+        exp._artifacts_api = MagicMock()
+        exp._artifacts_api.list_experiment_artifacts.return_value = None
+        exp._media_api = MagicMock()
+        exp._media_api.list_media.return_value = []
+        return exp
+
     def test_rebuild_state_reconstructs_sorted_text_series(self):
         media1 = MagicMock()
         media1.name = "logs/1"
@@ -152,26 +178,8 @@ class TestExperimentStateSupport:
         media0.cluster_id = "acc-1"
         media0.media_type = V1MediaType.TEXT
 
-        exp = MagicMock(spec=Experiment)
-        exp._key_types = {}
-        exp._metadata_values = {}
-        exp._static_files = {}
-        exp._series = {}
-        exp._metrics_store = MagicMock()
-        exp._metrics_store.id = "store-1"
-        exp._metrics_store.tags = []
-        exp._metrics_store.artifacts = []
-        exp._metrics_api = MagicMock()
-        exp._teamspace = MagicMock()
-        exp._teamspace.id = "ts-1"
-        exp._media_api = MagicMock()
-        exp._media_api.client.lit_logger_service_list_lit_logger_media.return_value.media = [media1, media0]
-        exp._wrap_media_file = lambda media_name, media_type: ExperimentStateSupport.wrap_media_file(
-            exp, media_name, media_type
-        )
-        exp._create_media_download_fn = lambda storage_path, cloud_account=None: (
-            ExperimentStateSupport.create_media_download_fn(exp, storage_path, cloud_account)
-        )
+        exp = self._make_rebuild_exp()
+        exp._media_api.list_media.return_value = [media1, media0]
         exp._resumed_steps = {"loss": 10}
 
         ExperimentStateSupport.rebuild_state(exp)
@@ -198,26 +206,8 @@ class TestExperimentStateSupport:
         media0.cluster_id = "acc-1"
         media0.media_type = V1MediaType.TEXT
 
-        exp = MagicMock(spec=Experiment)
-        exp._key_types = {}
-        exp._metadata_values = {}
-        exp._static_files = {}
-        exp._series = {}
-        exp._metrics_store = MagicMock()
-        exp._metrics_store.id = "store-1"
-        exp._metrics_store.tags = []
-        exp._metrics_store.artifacts = []
-        exp._metrics_api = MagicMock()
-        exp._teamspace = MagicMock()
-        exp._teamspace.id = "ts-1"
-        exp._media_api = MagicMock()
-        exp._media_api.client.lit_logger_service_list_lit_logger_media.return_value.media = [media1, media0]
-        exp._wrap_media_file = lambda media_name, media_type: ExperimentStateSupport.wrap_media_file(
-            exp, media_name, media_type
-        )
-        exp._create_media_download_fn = lambda storage_path, cloud_account=None: (
-            ExperimentStateSupport.create_media_download_fn(exp, storage_path, cloud_account)
-        )
+        exp = self._make_rebuild_exp()
+        exp._media_api.list_media.return_value = [media1, media0]
         exp._resumed_steps = {"loss": 10}
 
         ExperimentStateSupport.rebuild_state(exp)
@@ -228,37 +218,8 @@ class TestExperimentStateSupport:
         assert [item.path for item in exp._series["logs"]] == ["logs", "logs"]
 
     def test_rebuild_state_hydrates_metric_values_from_api(self):
-        mv0 = MagicMock()
-        mv0.value = 1.0
-        mv1 = MagicMock()
-        mv1.value = 0.5
-        mv2 = MagicMock()
-        mv2.value = 0.333
-
-        id_metrics_entry = MagicMock()
-        id_metrics_entry.metrics_values = [mv0, mv1, mv2]
-
-        named_metric = MagicMock()
-        named_metric.ids_metrics = {"test-id": id_metrics_entry}
-
-        response = MagicMock()
-        response.named_metrics = {"train/loss": named_metric}
-
-        exp = MagicMock(spec=Experiment)
-        exp._key_types = {}
-        exp._metadata_values = {}
-        exp._static_files = {}
-        exp._series = {}
-        exp._metrics_store = MagicMock()
-        exp._metrics_store.id = "store-1"
-        exp._metrics_store.tags = []
-        exp._metrics_store.artifacts = []
-        exp._metrics_api = MagicMock()
-        exp._metrics_api.client.lit_logger_service_get_logger_metrics.return_value = response
-        exp._teamspace = MagicMock()
-        exp._teamspace.id = "ts-1"
-        exp._media_api = MagicMock()
-        exp._media_api.client.lit_logger_service_list_lit_logger_media.return_value.media = []
+        exp = self._make_rebuild_exp()
+        exp._metrics_api.get_metric_values.return_value = {"train/loss": [1.0, 0.5, 0.333]}
         exp._resumed_steps = {"train/loss": 2}
 
         ExperimentStateSupport.rebuild_state(exp)

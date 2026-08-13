@@ -238,8 +238,11 @@ class TestRebuildStateMetadata:
         non_code_tag.from_code = False
 
         exp._metrics_store = MagicMock()
+        exp._metrics_store.name = "exp"
         exp._metrics_store.tags = [tag, non_code_tag]
         exp._metrics_store.artifacts = []
+        # The rebuild re-reads the store from the API first; keep the seeded one.
+        exp._metrics_api.get_experiment_metrics_by_name.return_value = exp._metrics_store
         exp._create_download_fn = MagicMock()
         exp._resumed_steps = {}
 

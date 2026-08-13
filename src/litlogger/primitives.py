@@ -37,12 +37,49 @@ from lightning_sdk.lightning_cloud.openapi import V1MediaType
 from litlogger.types import MediaType, Metrics, MetricValue, PhaseType
 
 if TYPE_CHECKING:
+    from litlogger.media import File
     from litlogger.session import ExperimentSession
+
+
+#: Remote names like ``reports/3`` are the 4th element of a file series keyed
+#: by ``reports``; anything else is a static file.
+SERIES_NAME_RE = re.compile(r"^(?P<key>.+)/(?P<index>\d+)$")
 
 
 def sanitize_model_key(key: str) -> str:
     """Reduce an experiment key to the registry's allowed model-name alphabet."""
     return re.sub(r"[^A-Za-z0-9._-]+", "-", key).strip("-") or "model"
+
+
+def natural_sort_key(value: str | None) -> tuple[object, ...]:
+    """Sort key treating digit runs numerically (``v2`` before ``v10``)."""
+    if not value:
+        return ("",)
+    parts = re.split(r"(\d+)", value)
+    key: list[object] = []
+    for part in parts:
+        if not part:
+            continue
+        key.append(int(part) if part.isdigit() else part)
+    return tuple(key)
+
+
+def model_version_sort_key(version_info: object) -> tuple[object, ...]:
+    """Order model versions by index, then timestamps, then natural version name."""
+    index = getattr(version_info, "index", None)
+    if isinstance(index, int):
+        return (0, index)
+
+    created_at = getattr(version_info, "created_at", None)
+    if isinstance(created_at, datetime):
+        return (1, created_at)
+
+    updated_at = getattr(version_info, "updated_at", None)
+    if isinstance(updated_at, datetime):
+        return (2, updated_at)
+
+    version = getattr(version_info, "version", None)
+    return (3, *natural_sort_key(version))
 
 
 def _to_v1_media_type(media_type: MediaType) -> V1MediaType:
@@ -80,6 +117,14 @@ class _QueuedWrite:
     """Envelope for a non-batchable primitive handed to the background worker."""
 
     primitive: Primitive
+
+
+@dataclass
+class RestoredFiles:
+    """Result of one bulk file-restore pass: statics plus ordered series values."""
+
+    statics: dict[str, File]
+    series: dict[str, list[File]]
 
 
 def _enqueue_write(primitive: Primitive, session: ExperimentSession) -> None:

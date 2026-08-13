@@ -18,20 +18,69 @@ File wraps a local path, while other media objects can accept Python objects and
 them to temporary files for upload.
 """
 
+import contextlib
 import os
 import tempfile
 from importlib import import_module
-from typing import TYPE_CHECKING, Any, Callable
+from typing import TYPE_CHECKING, Any, Callable, Mapping
 
 from lightning_sdk import Teamspace
+from lightning_sdk.lightning_cloud.openapi import V1MediaType
 from typing_extensions import override
 
 from litlogger.models import download_model, load_model, save_model, upload_model
-from litlogger.primitives import _enqueue_write, _to_v1_media_type, sanitize_model_key
+from litlogger.primitives import (
+    SERIES_NAME_RE,
+    RestoredFiles,
+    _enqueue_write,
+    _to_v1_media_type,
+    model_version_sort_key,
+    sanitize_model_key,
+)
 from litlogger.types import MediaType
 
 if TYPE_CHECKING:
     from litlogger.session import ExperimentSession
+
+
+def _wrap_media_file(media_name: str, media_type: V1MediaType) -> "File":
+    """Build the media wrapper matching a listed record's wire type."""
+    if media_type == V1MediaType.IMAGE:
+        return Image(media_name)
+    if media_type == V1MediaType.TEXT:
+        text = Text("")
+        text.path = media_name
+        return text
+    if media_type == V1MediaType.VIDEO:
+        return Video(media_name)
+    return File(media_name)
+
+
+def _artifact_download_fn(session: "ExperimentSession", key: str) -> Callable[[str], str]:
+    """Build a lazy artifact download closure for a restored file."""
+
+    def _download(path: str) -> str:
+        file = File(path)
+        file._bind_remote(
+            session,
+            remote_path=key,
+            cloud_account=getattr(session.metrics_store, "cluster_id", None),
+        )
+        return file.save(path)
+
+    return _download
+
+
+def _media_download_fn(
+    session: "ExperimentSession", storage_path: str, cloud_account: str | None = None
+) -> Callable[[str], str]:
+    """Build a lazy media download closure for a restored file."""
+
+    def _download(path: str) -> str:
+        session.teamspace.download_file(storage_path, file_path=path, cloud_account=cloud_account)
+        return path
+
+    return _download
 
 
 def _sanitize_version_for_model_name(version: str) -> str:
@@ -190,6 +239,105 @@ class File:
     def enqueue(self, session: "ExperimentSession") -> None:
         """Hand this file to the background pipeline for asynchronous upload."""
         _enqueue_write(self, session)
+
+    @staticmethod
+    def _restore_all(session: "ExperimentSession", existing_key_types: Mapping[str, str]) -> RestoredFiles:
+        """Rebuild static files and file series from the artifact listing.
+
+        ``existing_key_types`` is a snapshot of keys claimed by earlier restore
+        passes; keys already claimed by a different kind are skipped, and this
+        pass tracks its own claims internally.
+        """
+        restored = RestoredFiles(statics={}, series={})
+        claimed: dict[str, str] = dict(existing_key_types)
+
+        artifacts = getattr(session.metrics_store, "artifacts", None) or []
+        with contextlib.suppress(AttributeError):
+            listed = session.artifacts_api.list_experiment_artifacts(
+                session.teamspace.id, session.metrics_store.id
+            )
+            if listed is not None:
+                artifacts = listed
+
+        series_entries: dict[str, list[tuple[int, File]]] = {}
+        for artifact in artifacts:
+            name = artifact.path if hasattr(artifact, "path") else str(artifact)
+            wrapped = File(name)
+            wrapped.name = name
+            wrapped._download_fn = _artifact_download_fn(session, name)
+
+            match = SERIES_NAME_RE.match(name)
+            if match:
+                key = match.group("key")
+                index = int(match.group("index"))
+                if key in claimed and claimed[key] != "file_series":
+                    continue
+                claimed[key] = "file_series"
+                series_entries.setdefault(key, []).append((index, wrapped))
+                continue
+
+            if name in claimed:
+                continue
+            claimed[name] = "static_file"
+            restored.statics[name] = wrapped
+
+        for key, file_entries in series_entries.items():
+            restored.series[key] = [value for _, value in sorted(file_entries)]
+        return restored
+
+    @staticmethod
+    def _restore_media(session: "ExperimentSession", existing_key_types: Mapping[str, str]) -> RestoredFiles:
+        """Rebuild static media and media series from the media listing.
+
+        A name with one direct record is a static file; several records under
+        the same name form a series ordered by step (falling back to listing
+        position). ``{key}/{index}`` names reconstruct indexed series like the
+        artifact pass.
+        """
+        restored = RestoredFiles(statics={}, series={})
+        claimed: dict[str, str] = dict(existing_key_types)
+
+        with contextlib.suppress(AttributeError):
+            media_items = session.media_api.list_media(session.teamspace.id, session.metrics_store.id) or []
+
+            series_entries: dict[str, list[tuple[int, File]]] = {}
+            direct_entries: dict[str, list[tuple[int | None, int, File]]] = {}
+            for position, media in enumerate(media_items):
+                name = media.name or media.storage_path or media.id
+                storage_path = media.storage_path or name
+                wrapped = _wrap_media_file(name, media.media_type)
+                wrapped.name = name
+                wrapped._download_fn = _media_download_fn(session, storage_path, media.cluster_id)
+
+                match = SERIES_NAME_RE.match(name)
+                if match:
+                    key = match.group("key")
+                    index = int(match.group("index"))
+                    if key in claimed and claimed[key] != "file_series":
+                        continue
+                    claimed[key] = "file_series"
+                    series_entries.setdefault(key, []).append((index, wrapped))
+                    continue
+
+                direct_entries.setdefault(name, []).append((getattr(media, "step", None), position, wrapped))
+
+            for name, media_entries in direct_entries.items():
+                if name in claimed:
+                    continue
+                if len(media_entries) == 1:
+                    claimed[name] = "static_file"
+                    restored.statics[name] = media_entries[0][2]
+                    continue
+
+                claimed[name] = "file_series"
+                series_values = series_entries.setdefault(name, [])
+                for step, position, wrapped in media_entries:
+                    sort_index = step if isinstance(step, int) else position
+                    series_values.append((sort_index, wrapped))
+
+            for key, file_entries in series_entries.items():
+                restored.series[key] = [value for _, value in sorted(file_entries)]
+        return restored
 
     @property
     def _media_type(self) -> MediaType:
@@ -664,6 +812,47 @@ class Model(File):
 
         self._cleanup()
         return model_name
+
+    @classmethod
+    def _from_version(cls, session: "ExperimentSession", key: str, model_key: str, version_info: object) -> "Model":
+        """Build a remote-bound model wrapper for one registry version."""
+        metadata = getattr(version_info, "metadata", None) or {}
+        kind = "object" if metadata.get("litModels.integration") == "save_model" else "artifact"
+        version = getattr(version_info, "version", None)
+        registry_name = f"{session.teamspace.owner.name}/{session.teamspace.name}/{model_key}"
+        if version:
+            registry_name += f":{version}"
+
+        model = cls.from_remote(registry_name, kind, version=version)
+        model._bind_remote_model(key=key, model_name=registry_name)
+        return model
+
+    @classmethod
+    def _resolve(cls, session: "ExperimentSession", key: str) -> "Model | list[Model] | None":
+        """Look up an experiment key in the model registry (lazy restore).
+
+        Returns a single bound Model, an ordered list of them (one per
+        complete version), or None when nothing matches — including on any
+        lookup error, which callers negative-cache.
+        """
+        model_key = sanitize_model_key(key)
+        try:
+            models = session.teamspace.list_models()
+            model_info = next((model for model in models if getattr(model, "name", None) == model_key), None)
+            if model_info is None:
+                return None
+
+            versions = session.teamspace.list_model_versions(model_key)
+            complete_versions = [version for version in versions if getattr(version, "upload_complete", True)]
+            if not complete_versions:
+                return None
+            complete_versions.sort(key=model_version_sort_key)
+
+            if len(complete_versions) == 1:
+                return cls._from_version(session, key, model_key, complete_versions[0])
+            return [cls._from_version(session, key, model_key, version_info) for version_info in complete_versions]
+        except Exception:
+            return None
 
     @override
     def log(self, session: "ExperimentSession") -> None:

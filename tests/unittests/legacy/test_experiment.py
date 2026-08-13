@@ -15,14 +15,39 @@ pytestmark = pytest.mark.filterwarnings("ignore::DeprecationWarning")
 import litlogger  # noqa: F401
 from litlogger.background import _BackgroundThread
 from litlogger.experiment import Experiment
+from litlogger.session import ExperimentSession
 from litlogger.types import MediaType, Metrics, MetricValue
 
 experiment_module = sys.modules["litlogger.experiment"]
 legacy_experiment_module = sys.modules["litlogger.experiment_legacy"]
 
 
+def _session_of(exp):
+    """Build a session view over the experiment's current mock infrastructure."""
+
+    def part(name):
+        value = getattr(exp, name, None)
+        return value if value is not None else MagicMock()
+
+    metrics_api = part("_metrics_api")
+    return ExperimentSession(
+        client=metrics_api.client,
+        metrics_api=metrics_api,
+        media_api=part("_media_api"),
+        artifacts_api=part("_artifacts_api"),
+        teamspace=part("_teamspace"),
+        experiment=exp,
+        queue=part("_metrics_queue"),
+        stats=part("_stats"),
+        store_step=bool(getattr(exp, "store_step", True)),
+        store_created_at=bool(getattr(exp, "store_created_at", False) is True),
+        last_steps=getattr(exp, "_resumed_steps", None) or {},
+        background=getattr(exp, "_manager", None),
+    )
+
+
 def _bind_media_upload(exp: MagicMock) -> None:
-    exp._media_type_to_v1 = lambda media_type: Experiment._media_type_to_v1(exp, media_type)
+    type(exp)._session = property(lambda self: _session_of(self))
 
     def _upload_media(name, path, media_type, step=None, epoch=None, caption=None):
         return Experiment._upload_media(exp, name, path, media_type, step=step, epoch=epoch, caption=caption)
@@ -304,6 +329,9 @@ def _make_metric_exp(**overrides):
     exp._ensure_series = lambda key: Experiment._ensure_series(exp, key)
     exp._register_key_type = lambda key, kt: Experiment._register_key_type(exp, key, kt)
     exp._log_metric_value = lambda key, value, step=None: Experiment._log_metric_value(exp, key, value, step=step)
+    exp._coerce_static_value = lambda key, value: Experiment._coerce_static_value(exp, key, value)
+    # Live session view so tests can reseed infrastructure after the factory.
+    type(exp)._session = property(lambda self: _session_of(self))
     # Apply overrides
     for k, v in overrides.items():
         setattr(exp, k, v)
@@ -741,7 +769,12 @@ class TestExperimentMetadataProperty:
         tag3.value = "32"
         tag3.from_code = True
         exp._metrics_store = MagicMock()
+        exp._metrics_store.name = "test"
         exp._metrics_store.tags = [tag1, tag2, tag3]
+        type(exp)._session = property(lambda self: _session_of(self))
+        exp._metrics_api = MagicMock()
+        # The property re-reads the store from the API; keep the seeded one.
+        exp._metrics_api.get_experiment_metrics_by_name.return_value = exp._metrics_store
 
         from litlogger.experiment import Experiment
 
@@ -798,8 +831,6 @@ class TestExperimentLogMetadata:
         # Pre-populate existing metadata in internal state
         exp._key_types["lr"] = "metadata"
         exp._metadata_values["lr"] = "0.001"
-        # Wire _set_metadata_value to use the real implementation
-        exp._set_metadata_value = lambda key, value: Experiment._set_metadata_value(exp, key, value)
         # Wire metadata property via the real Experiment property
         type(exp).metadata = Experiment.metadata
 
@@ -835,57 +866,12 @@ class TestExperimentLogMetadata:
         # Pre-populate existing metadata
         exp._key_types["lr"] = "metadata"
         exp._metadata_values["lr"] = "0.001"
-        exp._set_metadata_value = lambda key, value: Experiment._set_metadata_value(exp, key, value)
         type(exp).metadata = Experiment.metadata
 
         Experiment.log_metadata(exp, {"lr": "0.01"})
 
         call_kwargs = exp._metrics_api.update_experiment_metrics.call_args.kwargs
         assert call_kwargs["metadata"] == {"lr": "0.01"}
-
-
-class TestUpdateMetricsStore:
-    """Test _update_metrics_store method."""
-
-    def test_update_metrics_store_refreshes(self):
-        """Test that _update_metrics_store refreshes from API."""
-        exp = MagicMock()
-        exp._metrics_store = MagicMock()
-        exp._metrics_store.name = "test"
-        exp._metrics_store.version_number = 1
-        exp._teamspace = MagicMock()
-        exp._teamspace.id = "ts_123"
-
-        new_store = MagicMock()
-        exp._metrics_api = MagicMock()
-        exp._metrics_api.get_experiment_metrics_by_name.return_value = new_store
-
-        from litlogger.experiment import Experiment
-
-        Experiment._update_metrics_store(exp)
-
-        exp._metrics_api.get_experiment_metrics_by_name.assert_called_once_with("ts_123", name="test")
-        assert exp._metrics_store is new_store
-
-    def test_update_metrics_store_keeps_old_on_none(self):
-        """Test that _update_metrics_store keeps old store if API returns None."""
-        exp = MagicMock()
-        old_store = MagicMock()
-        exp._metrics_store = old_store
-        exp._metrics_store.name = "test"
-        exp._metrics_store.version_number = 1
-        exp._teamspace = MagicMock()
-        exp._teamspace.id = "ts_123"
-
-        exp._metrics_api = MagicMock()
-        exp._metrics_api.get_experiment_metrics_by_name.return_value = None
-
-        from litlogger.experiment import Experiment
-
-        Experiment._update_metrics_store(exp)
-
-        # Should not overwrite with None
-        assert exp._metrics_store is old_store
 
 
 class TestExperimentLogMetricsKwargs:

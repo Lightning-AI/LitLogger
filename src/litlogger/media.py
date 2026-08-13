@@ -253,9 +253,7 @@ class File:
 
         artifacts = getattr(session.metrics_store, "artifacts", None) or []
         with contextlib.suppress(AttributeError):
-            listed = session.artifacts_api.list_experiment_artifacts(
-                session.teamspace.id, session.metrics_store.id
-            )
+            listed = session.artifacts_api.list_experiment_artifacts(session.teamspace.id, session.metrics_store.id)
             if listed is not None:
                 artifacts = listed
 
@@ -814,7 +812,9 @@ class Model(File):
         return model_name
 
     @classmethod
-    def _from_version(cls, session: "ExperimentSession", key: str, model_key: str, version_info: object) -> "Model":
+    def _from_version(
+        cls: type["Model"], session: "ExperimentSession", key: str, model_key: str, version_info: object
+    ) -> "Model":
         """Build a remote-bound model wrapper for one registry version."""
         metadata = getattr(version_info, "metadata", None) or {}
         kind = "object" if metadata.get("litModels.integration") == "save_model" else "artifact"
@@ -828,7 +828,7 @@ class Model(File):
         return model
 
     @classmethod
-    def _resolve(cls, session: "ExperimentSession", key: str) -> "Model | list[Model] | None":
+    def _resolve(cls: type["Model"], session: "ExperimentSession", key: str) -> "Model | list[Model] | None":
         """Look up an experiment key in the model registry (lazy restore).
 
         Returns a single bound Model, an ordered list of them (one per

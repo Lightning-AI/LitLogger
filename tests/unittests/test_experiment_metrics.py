@@ -11,13 +11,39 @@ import pytest
 from litlogger.experiment import Experiment
 from litlogger.media import File
 from litlogger.series import Series
+from litlogger.session import ExperimentSession
 
 experiment_module = sys.modules["litlogger.experiment"]
+
+
+def _session_of(exp):
+    """Build a session view over the experiment's current mock infrastructure."""
+
+    def part(name):
+        value = getattr(exp, name, None)
+        return value if value is not None else MagicMock()
+
+    metrics_api = part("_metrics_api")
+    return ExperimentSession(
+        client=metrics_api.client,
+        metrics_api=metrics_api,
+        media_api=part("_media_api"),
+        artifacts_api=part("_artifacts_api"),
+        teamspace=part("_teamspace"),
+        experiment=exp,
+        queue=part("_metrics_queue"),
+        stats=part("_stats"),
+        store_step=bool(getattr(exp, "store_step", True)),
+        store_created_at=bool(getattr(exp, "store_created_at", False)),
+        last_steps=getattr(exp, "_resumed_steps", None) or {},
+        background=getattr(exp, "_manager", None),
+    )
 
 
 def _make_exp(**overrides):
     """Create a MagicMock wired for the dict-like experiment API."""
     exp = MagicMock(spec=Experiment)
+    exp.name = "exp"
     exp._series = {}
     exp._key_types = {}
     exp._metadata_values = {}
@@ -28,6 +54,19 @@ def _make_exp(**overrides):
     exp.store_created_at = False
     exp._metrics_queue = MagicMock()
     exp._stats = MagicMock()
+    exp._metrics_api = MagicMock()
+    exp._media_api = MagicMock()
+    exp._artifacts_api = MagicMock()
+    exp._teamspace = MagicMock()
+    exp._metrics_store = MagicMock()
+    exp._metrics_store.id = "store-1"
+    exp._metrics_store.name = "exp"
+    exp._metrics_store.tags = []
+    exp._metrics_store.cluster_id = "acc-1"
+    # Metadata writes re-read the store from the API; keep the seeded one.
+    exp._metrics_api.get_experiment_metrics_by_name.return_value = exp._metrics_store
+    # Live session view so tests can reseed infrastructure after the factory.
+    type(exp)._session = property(lambda self: _session_of(self))
 
     # Wire dunder methods on the type
     type(exp).__getitem__ = lambda self, key: Experiment.__getitem__(self, key)
@@ -38,6 +77,10 @@ def _make_exp(**overrides):
     exp._ensure_series = lambda key: Experiment._ensure_series(exp, key)
     exp._register_key_type = lambda key, kt: Experiment._register_key_type(exp, key, kt)
     exp._log_metric_value = lambda key, value, step=None: Experiment._log_metric_value(exp, key, value, step=step)
+    exp._coerce_static_value = lambda key, value: Experiment._coerce_static_value(exp, key, value)
+    exp._coerce_series_value = lambda key, value, index, step: Experiment._coerce_series_value(
+        exp, key, value, index, step
+    )
 
     for k, v in overrides.items():
         setattr(exp, k, v)

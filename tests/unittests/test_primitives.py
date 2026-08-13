@@ -71,8 +71,10 @@ class TestPrimitiveContract:
         # Typed assignments verified by mypy; runtime smoke check of the same shape.
         _p: Primitive = Metric("loss", 1.0)
         _q: Primitive = Metadata("k", "v")
-        assert callable(_p.log) and callable(_p.enqueue)
-        assert callable(_q.log) and callable(_q.enqueue)
+        assert callable(_p.log)
+        assert callable(_p.enqueue)
+        assert callable(_q.log)
+        assert callable(_q.enqueue)
 
 
 class TestMetricEnqueue:
@@ -431,3 +433,40 @@ class TestModelLog:
 
         assert mock_log_model.call_args.kwargs["key"] == "models-latest"
         assert model.name == "models/latest"
+
+
+class TestMediaTypeConversion:
+    """_to_v1_media_type maps user types to wire types."""
+
+    def test_maps_video(self):
+        from litlogger.primitives import _to_v1_media_type
+        from litlogger.types import MediaType
+
+        assert _to_v1_media_type(MediaType.VIDEO) == V1MediaType.VIDEO
+
+    def test_rejects_non_media_types(self):
+        from litlogger.primitives import _to_v1_media_type
+        from litlogger.types import MediaType
+
+        with pytest.raises(ValueError, match="Unsupported media type"):
+            _to_v1_media_type(MediaType.MODEL)
+
+
+class TestWrapMediaFile:
+    """Restored media records are wrapped by their wire type."""
+
+    def test_wraps_text_with_path(self):
+        from litlogger.media import _wrap_media_file
+
+        wrapped = _wrap_media_file("logs/0", V1MediaType.TEXT)
+
+        assert isinstance(wrapped, Text)
+        assert wrapped.path == "logs/0"
+
+    def test_wraps_video(self):
+        from litlogger.media import Video, _wrap_media_file
+
+        wrapped = _wrap_media_file("clips/0", V1MediaType.VIDEO)
+
+        assert isinstance(wrapped, Video)
+        assert wrapped.path == "clips/0"

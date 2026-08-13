@@ -98,7 +98,7 @@ class ExperimentSession:
         self.background = background
 
     @classmethod
-    def from_experiment(cls, experiment: Experiment) -> ExperimentSession:
+    def from_experiment(cls: type[ExperimentSession], experiment: Experiment) -> ExperimentSession:
         """Build a session from an experiment's already-initialized infrastructure."""
         return cls(
             client=experiment._metrics_api.client,

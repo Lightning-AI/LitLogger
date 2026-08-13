@@ -332,9 +332,7 @@ class TestGetMetricValues:
         named_metric.ids_metrics = {"ms-1": id_metrics_entry}
 
         mock_client = MagicMock()
-        mock_client.lit_logger_service_get_logger_metrics.return_value = self._response(
-            {"train/loss": named_metric}
-        )
+        mock_client.lit_logger_service_get_logger_metrics.return_value = self._response({"train/loss": named_metric})
         api = MetricsApi(client=mock_client)
 
         result = api.get_metric_values("ts-1", "ms-1")
@@ -366,9 +364,7 @@ class TestGetMetricValues:
         named_metric = MagicMock()
         named_metric.ids_metrics = {}
         mock_client = MagicMock()
-        mock_client.lit_logger_service_get_logger_metrics.return_value = self._response(
-            {"orphan": named_metric}
-        )
+        mock_client.lit_logger_service_get_logger_metrics.return_value = self._response({"orphan": named_metric})
         api = MetricsApi(client=mock_client)
 
         assert api.get_metric_values("ts-1", "ms-1") == {}

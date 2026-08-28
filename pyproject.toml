@@ -1,7 +1,7 @@
 [build-system]
 requires = [
     "setuptools>=61.0.0",
-    "setuptools-scm>=8",
+    "setuptools-scm[simple]>=9.2",
     "wheel",
 ]
 build-backend = "setuptools.build_meta"
@@ -65,8 +65,6 @@ tests = [
     "lightning>=2.0.0",
     "torchvision"
 ]
-
-[tool.setuptools_scm]
 
 [tool.setuptools.packages.find]
 where = ["src"]

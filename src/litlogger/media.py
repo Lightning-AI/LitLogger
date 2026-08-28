@@ -561,7 +561,7 @@ class Model(File):
     def _registry_name(self, experiment_name: str, teamspace: Teamspace) -> str:
         """Resolve the registry name for this model."""
         model_name = f"{teamspace.owner.name}/{teamspace.name}/{experiment_name}"
-        if self.version:
+        if self._version_provided:
             model_name += f":{_sanitize_version_for_model_name(self.version)}"
         return model_name
 

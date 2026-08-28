@@ -734,6 +734,19 @@ class TestModelInit:
         assert mock_upload_model.call_args.kwargs["experiment"] is experiment
 
     @patch("litlogger.media.upload_model")
+    def test_log_model_omits_version_when_not_provided(self, mock_upload_model):
+        teamspace = MagicMock()
+        teamspace.name = "teamspace"
+        teamspace.owner.name = "owner"
+        experiment = MagicMock()
+
+        model = Model("checkpoint.ckpt")
+        model._log_model(experiment_name="exp-name", teamspace=teamspace, experiment=experiment)
+
+        assert mock_upload_model.call_args.kwargs["name"] == "owner/teamspace/exp-name"
+        assert mock_upload_model.call_args.kwargs["experiment"] is experiment
+
+    @patch("litlogger.media.upload_model")
     def test_log_model_uses_custom_name_override(self, mock_upload_model):
         teamspace = MagicMock()
         teamspace.name = "teamspace"

@@ -265,6 +265,8 @@ class File:
         except Exception:
             snapshot._cleanup()
             raise
+        if placement is not None:
+            self.name = placement.key
         self._read_barrier = session.flush
 
     def _adopt_remote_state(self, completed: "File") -> None:

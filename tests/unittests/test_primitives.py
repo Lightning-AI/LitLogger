@@ -604,6 +604,16 @@ class TestWrapMediaFile:
 class TestReadBarriers:
     """Queued writes must land before dependent remote reads."""
 
+    def test_enqueue_binds_name_before_worker_runs(self):
+        import queue
+
+        session = make_session(queue=queue.Queue())
+        f = File("config.yaml")
+
+        f.enqueue(session, WritePlacement("config"))
+
+        assert f.name == "config"
+
     def test_enqueue_attaches_read_barrier(self, tmp_path):
         session = make_session()
         local = tmp_path / "config.yaml"

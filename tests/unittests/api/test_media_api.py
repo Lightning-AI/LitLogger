@@ -118,3 +118,39 @@ class TestMediaApi:
                 name="image",
                 media_type=V1MediaType.IMAGE,
             )
+
+
+class TestListMedia:
+    """Test MediaApi.list_media."""
+
+    def test_returns_listed_media(self):
+        """The media list is returned as-is."""
+        item = MagicMock()
+        item.name = "plot.png"
+        mock_client = MagicMock()
+        mock_client.lit_logger_service_list_lit_logger_media.return_value.media = [item]
+        api = MediaApi(client=mock_client)
+
+        result = api.list_media("ts-1", "ms-1")
+
+        mock_client.lit_logger_service_list_lit_logger_media.assert_called_once_with(
+            project_id="ts-1",
+            metrics_stream_id="ms-1",
+        )
+        assert result == [item]
+
+    def test_missing_endpoint_returns_none(self):
+        """Older SDK clients without the endpoint yield None."""
+        mock_client = MagicMock()
+        mock_client.lit_logger_service_list_lit_logger_media.side_effect = AttributeError("no method")
+        api = MediaApi(client=mock_client)
+
+        assert api.list_media("ts-1", "ms-1") is None
+
+    def test_non_list_response_returns_none(self):
+        """A response without a list-shaped media field yields None."""
+        mock_client = MagicMock()
+        mock_client.lit_logger_service_list_lit_logger_media.return_value.media = None
+        api = MediaApi(client=mock_client)
+
+        assert api.list_media("ts-1", "ms-1") is None

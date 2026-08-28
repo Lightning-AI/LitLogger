@@ -1,10 +1,12 @@
 import queue
 from multiprocessing import Event, Queue
+from queue import Queue as ThreadQueue
 from unittest.mock import Mock, patch
 
 import pytest
 from lightning_sdk.lightning_cloud.openapi.rest import ApiException
 from litlogger.background import _BackgroundThread
+from litlogger.primitives import _QueuedWrite
 from litlogger.types import Metrics, MetricValue, PhaseType
 
 
@@ -640,3 +642,83 @@ class TestBackgroundThreadIntegration:
         assert done_event.is_set()
         assert manager.exception is None
         assert mock_metrics_api.update_experiment_metrics.called
+
+
+class TestQueuedWrites:
+    """The worker executes queued non-metric primitives via the session."""
+
+    @staticmethod
+    def _make_manager(session=None):
+        return _BackgroundThread(
+            teamspace_id="ts-1",
+            metrics_store_id="ms-1",
+            metrics_api=Mock(),
+            metrics_queue=ThreadQueue(),
+            is_ready_event=Event(),
+            stop_event=Event(),
+            done_event=Event(),
+            store_step=True,
+            store_created_at=False,
+            session=session,
+        )
+
+    def test_executes_queued_primitive(self):
+        session = Mock()
+        manager = self._make_manager(session=session)
+        primitive = Mock()
+        manager.metrics_queue.put(_QueuedWrite(primitive))
+
+        manager.step()
+
+        primitive.log.assert_called_once_with(session)
+
+    def test_queued_writes_execute_in_arrival_order(self):
+        session = Mock()
+        manager = self._make_manager(session=session)
+        order = []
+        first, second = Mock(), Mock()
+        first.log.side_effect = lambda s: order.append("first")
+        second.log.side_effect = lambda s: order.append("second")
+        manager.metrics_queue.put(_QueuedWrite(first))
+        manager.metrics_queue.put(_QueuedWrite(second))
+
+        manager.step()
+
+        assert order == ["first", "second"]
+
+    def test_metric_batches_still_merge_around_queued_writes(self):
+        session = Mock()
+        manager = self._make_manager(session=session)
+        primitive = Mock()
+        manager.metrics_queue.put({"loss": Metrics(name="loss", values=[MetricValue(value=1.0)])})
+        manager.metrics_queue.put(_QueuedWrite(primitive))
+        manager.metrics_queue.put({"loss": Metrics(name="loss", values=[MetricValue(value=2.0)])})
+
+        with patch.object(manager, "_send"):
+            manager.step()
+
+        primitive.log.assert_called_once_with(session)
+        assert [v.value for v in manager.metrics["loss"].values] == [1.0, 2.0]
+
+    def test_queued_write_without_session_fails(self):
+        manager = self._make_manager(session=None)
+        manager.metrics_queue.put(_QueuedWrite(Mock()))
+
+        with pytest.raises(RuntimeError, match="session-aware"):
+            manager.step()
+
+    def test_failed_queued_write_poisons_worker_and_unblocks_join(self):
+        session = Mock()
+        manager = self._make_manager(session=session)
+        failing, never_run = Mock(), Mock()
+        failing.log.side_effect = RuntimeError("upload failed")
+        manager.metrics_queue.put(_QueuedWrite(failing))
+        manager.metrics_queue.put(_QueuedWrite(never_run))
+
+        manager._run()
+
+        assert isinstance(manager.exception, RuntimeError)
+        assert manager.done_event.is_set()
+        never_run.log.assert_not_called()
+        # join() must not deadlock on the abandoned item
+        manager.metrics_queue.join()

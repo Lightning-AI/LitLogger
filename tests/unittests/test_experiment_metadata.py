@@ -10,14 +10,41 @@ from unittest.mock import MagicMock
 import pytest
 from litlogger.experiment import Experiment
 from litlogger.media import File
+from litlogger.primitives import Metadata, _QueuedWrite
 from litlogger.series import Series
+from litlogger.session import ExperimentSession
 
 experiment_module = sys.modules["litlogger.experiment"]
+
+
+def _session_of(exp):
+    """Build a session view over the experiment's current mock infrastructure."""
+
+    def part(name):
+        value = getattr(exp, name, None)
+        return value if value is not None else MagicMock()
+
+    metrics_api = part("_metrics_api")
+    return ExperimentSession(
+        client=metrics_api.client,
+        metrics_api=metrics_api,
+        media_api=part("_media_api"),
+        artifacts_api=part("_artifacts_api"),
+        teamspace=part("_teamspace"),
+        experiment=exp,
+        queue=part("_metrics_queue"),
+        stats=part("_stats"),
+        store_step=bool(getattr(exp, "store_step", True)),
+        store_created_at=bool(getattr(exp, "store_created_at", False)),
+        last_steps=getattr(exp, "_resumed_steps", None) or {},
+        background=getattr(exp, "_manager", None),
+    )
 
 
 def _make_exp(**overrides):
     """Create a MagicMock wired for the dict-like experiment API."""
     exp = MagicMock(spec=Experiment)
+    exp.name = "exp"
     exp._series = {}
     exp._key_types = {}
     exp._metadata_values = {}
@@ -27,7 +54,24 @@ def _make_exp(**overrides):
     exp.store_step = True
     exp.store_created_at = False
     exp._metrics_queue = MagicMock()
+    # The dict API queues writes; execute them inline the way the worker would.
+    exp._metrics_queue.put.side_effect = (
+        lambda item: item.primitive.log(exp._session) if isinstance(item, _QueuedWrite) else None
+    )
     exp._stats = MagicMock()
+    exp._metrics_api = MagicMock()
+    exp._media_api = MagicMock()
+    exp._artifacts_api = MagicMock()
+    exp._teamspace = MagicMock()
+    exp._metrics_store = MagicMock()
+    exp._metrics_store.id = "store-1"
+    exp._metrics_store.name = "exp"
+    exp._metrics_store.tags = []
+    exp._metrics_store.cluster_id = "acc-1"
+    # Metadata writes re-read the store from the API; keep the seeded one.
+    exp._metrics_api.get_experiment_metrics_by_name.return_value = exp._metrics_store
+    # Live session view so tests can reseed infrastructure after the factory.
+    type(exp)._session = property(lambda self: _session_of(self))
 
     type(exp).__getitem__ = lambda self, key: Experiment.__getitem__(self, key)
     type(exp).__setitem__ = lambda self, key, value: Experiment.__setitem__(self, key, value)
@@ -36,8 +80,10 @@ def _make_exp(**overrides):
     exp._ensure_series = lambda key: Experiment._ensure_series(exp, key)
     exp._register_key_type = lambda key, kt: Experiment._register_key_type(exp, key, kt)
     exp._log_metric_value = lambda key, value, step=None: Experiment._log_metric_value(exp, key, value, step=step)
-    exp._set_metadata_value = MagicMock()
-    exp._set_static_file = MagicMock()
+    exp._coerce_static_value = lambda key, value: Experiment._coerce_static_value(exp, key, value)
+    exp._coerce_series_value = lambda key, value, index, step: Experiment._coerce_series_value(
+        exp, key, value, index, step
+    )
 
     for k, v in overrides.items():
         setattr(exp, k, v)
@@ -58,7 +104,7 @@ class TestAddMetadataSetitem:
 
         assert exp._key_types["model"] == "metadata"
         assert exp._metadata_values["model"] == "resnet50"
-        exp._set_metadata_value.assert_called_once_with("model", "resnet50")
+        exp._metrics_api.update_experiment_metrics.assert_called_once()
 
     def test_setitem_multiple_keys(self):
         exp = _make_exp()
@@ -67,7 +113,7 @@ class TestAddMetadataSetitem:
 
         assert exp._metadata_values["model"] == "resnet50"
         assert exp._metadata_values["dataset"] == "imagenet"
-        assert exp._set_metadata_value.call_count == 2
+        assert exp._metrics_api.update_experiment_metrics.call_count == 2
 
     def test_overwrite_same_type(self):
         """Overwriting a metadata key with another string is allowed."""
@@ -76,7 +122,7 @@ class TestAddMetadataSetitem:
         exp["lr"] = "0.01"
 
         assert exp._metadata_values["lr"] == "0.01"
-        assert exp._set_metadata_value.call_count == 2
+        assert exp._metrics_api.update_experiment_metrics.call_count == 2
 
     def test_empty_string_value(self):
         exp = _make_exp()
@@ -118,16 +164,18 @@ class TestAddMetadataApiCall:
         exp = MagicMock(spec=Experiment)
         exp._metrics_store = MagicMock()
         exp._metrics_store.id = "store_123"
+        exp._metrics_store.name = "test"
         exp._metrics_store.tags = []
         exp._metrics_api = MagicMock()
+        # The metadata write re-reads the store from the API before merging
+        exp._metrics_api.get_experiment_metrics_by_name.return_value = exp._metrics_store
         exp._teamspace = MagicMock()
         exp._teamspace.id = "ts_123"
-        exp._update_metrics_store = MagicMock()
 
         # Wire metadata property
         type(exp).metadata = Experiment.metadata
 
-        Experiment._set_metadata_value(exp, "lr", "0.001")
+        Metadata("lr", "0.001").log(_session_of(exp))
 
         exp._metrics_api.update_experiment_metrics.assert_called_once()
         call_kwargs = exp._metrics_api.update_experiment_metrics.call_args.kwargs
@@ -166,7 +214,8 @@ class TestRetrieveMetadataProperty:
 
     def test_metadata_returns_code_tags(self):
         exp = MagicMock(spec=Experiment)
-        exp._update_metrics_store = MagicMock()
+        type(exp)._session = property(lambda self: _session_of(self))
+        exp._metrics_api = MagicMock()
 
         tag1 = MagicMock()
         tag1.name = "model"
@@ -179,7 +228,9 @@ class TestRetrieveMetadataProperty:
         tag2.from_code = False
 
         exp._metrics_store = MagicMock()
+        exp._metrics_store.name = "exp"
         exp._metrics_store.tags = [tag1, tag2]
+        exp._metrics_api.get_experiment_metrics_by_name.return_value = exp._metrics_store
 
         result = Experiment.metadata.fget(exp)
         assert result == {"model": "resnet50"}
@@ -187,17 +238,23 @@ class TestRetrieveMetadataProperty:
 
     def test_metadata_empty(self):
         exp = MagicMock(spec=Experiment)
-        exp._update_metrics_store = MagicMock()
+        type(exp)._session = property(lambda self: _session_of(self))
+        exp._metrics_api = MagicMock()
         exp._metrics_store = MagicMock()
+        exp._metrics_store.name = "exp"
         exp._metrics_store.tags = []
+        exp._metrics_api.get_experiment_metrics_by_name.return_value = exp._metrics_store
 
         result = Experiment.metadata.fget(exp)
         assert result == {}
 
     def test_metadata_no_tags_attr(self):
         exp = MagicMock(spec=Experiment)
-        exp._update_metrics_store = MagicMock()
-        exp._metrics_store = MagicMock(spec=[])  # no .tags
+        type(exp)._session = property(lambda self: _session_of(self))
+        exp._metrics_api = MagicMock()
+        exp._metrics_store = MagicMock(spec=["name"])  # no .tags
+        exp._metrics_store.name = "exp"
+        exp._metrics_api.get_experiment_metrics_by_name.return_value = exp._metrics_store
 
         result = Experiment.metadata.fget(exp)
         assert result == {}
@@ -218,12 +275,15 @@ class TestRebuildStateMetadata:
         exp._static_files = {}
         exp._series = {}
         exp._metrics_api = MagicMock()
+        type(exp)._session = property(lambda self: _session_of(self))
 
         exp._teamspace = MagicMock()
         exp._teamspace.id = "ts-1"
-        exp._update_metrics_store = MagicMock()
         exp._media_api = MagicMock()
-        exp._media_api.client.lit_logger_service_list_lit_logger_media.return_value.media = []
+        exp._media_api.list_media.return_value = []
+        exp._artifacts_api = MagicMock()
+        exp._artifacts_api.list_experiment_artifacts.return_value = None
+        exp._merge_restored = lambda restored: Experiment._merge_restored(exp, restored)
 
         tag = MagicMock()
         tag.name = "model"
@@ -236,8 +296,11 @@ class TestRebuildStateMetadata:
         non_code_tag.from_code = False
 
         exp._metrics_store = MagicMock()
+        exp._metrics_store.name = "exp"
         exp._metrics_store.tags = [tag, non_code_tag]
         exp._metrics_store.artifacts = []
+        # The rebuild re-reads the store from the API first; keep the seeded one.
+        exp._metrics_api.get_experiment_metrics_by_name.return_value = exp._metrics_store
         exp._create_download_fn = MagicMock()
         exp._resumed_steps = {}
 
@@ -250,26 +313,62 @@ class TestRebuildStateMetadata:
 
     def test_rebuilds_metric_key_types(self):
         exp = MagicMock(spec=Experiment)
+        type(exp)._session = property(lambda self: _session_of(self))
         exp._key_types = {}
         exp._metadata_values = {}
         exp._static_files = {}
         exp._series = {}
         exp._metrics_store = MagicMock()
+        exp._metrics_store.name = "exp"
         exp._metrics_store.tags = []
         exp._metrics_store.artifacts = []
         exp._metrics_api = MagicMock()
-        exp._create_download_fn = MagicMock()
+        exp._metrics_api.get_experiment_metrics_by_name.return_value = exp._metrics_store
+        exp._metrics_api.get_metric_values.return_value = {}
         exp._resumed_steps = {"loss": 10, "acc": 5}
         exp._teamspace = MagicMock()
         exp._teamspace.id = "ts-1"
-        exp._update_metrics_store = MagicMock()
+        exp._artifacts_api = MagicMock()
+        exp._artifacts_api.list_experiment_artifacts.return_value = None
+        exp._merge_restored = lambda restored: Experiment._merge_restored(exp, restored)
         exp._media_api = MagicMock()
-        exp._media_api.client.lit_logger_service_list_lit_logger_media.return_value.media = []
+        exp._media_api.list_media.return_value = []
 
         Experiment._rebuild_state(exp)
 
         assert exp._key_types["loss"] == "metric"
         assert exp._key_types["acc"] == "metric"
+
+    def test_rebuild_hydrates_metric_values(self):
+        exp = MagicMock(spec=Experiment)
+        type(exp)._session = property(lambda self: _session_of(self))
+        exp._key_types = {}
+        exp._metadata_values = {}
+        exp._static_files = {}
+        exp._series = {}
+        exp._metrics_store = MagicMock()
+        exp._metrics_store.name = "exp"
+        exp._metrics_store.tags = []
+        exp._metrics_store.artifacts = []
+        exp._metrics_api = MagicMock()
+        exp._metrics_api.get_experiment_metrics_by_name.return_value = exp._metrics_store
+        exp._metrics_api.get_metric_values.return_value = {"train/loss": [1.0, 0.5, 0.333]}
+        exp._resumed_steps = {"train/loss": 2}
+        exp._teamspace = MagicMock()
+        exp._teamspace.id = "ts-1"
+        exp._artifacts_api = MagicMock()
+        exp._artifacts_api.list_experiment_artifacts.return_value = None
+        exp._merge_restored = lambda restored: Experiment._merge_restored(exp, restored)
+        exp._media_api = MagicMock()
+        exp._media_api.list_media.return_value = []
+
+        Experiment._rebuild_state(exp)
+
+        assert exp._key_types["train/loss"] == "metric"
+        series = exp._series["train/loss"]
+        assert isinstance(series, Series)
+        assert series._type == "metric"
+        assert series._values == [1.0, 0.5, 0.333]
 
     def test_getitem_rebuilds_missing_series_for_metric_key(self):
         exp = _make_exp()

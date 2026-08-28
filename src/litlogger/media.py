@@ -18,18 +18,69 @@ File wraps a local path, while other media objects can accept Python objects and
 them to temporary files for upload.
 """
 
+import contextlib
 import os
 import tempfile
 from importlib import import_module
-from typing import Any, Callable
+from typing import TYPE_CHECKING, Any, Callable, Mapping
 
 from lightning_sdk import Teamspace
+from lightning_sdk.lightning_cloud.openapi import V1MediaType
 from typing_extensions import override
 
-from litlogger.api.artifacts_api import ArtifactsApi
-from litlogger.api.client import LitRestClient
 from litlogger.models import download_model, load_model, save_model, upload_model
+from litlogger.primitives import (
+    SERIES_NAME_RE,
+    RestoredFiles,
+    _enqueue_write,
+    _to_v1_media_type,
+    model_version_sort_key,
+    sanitize_model_key,
+)
 from litlogger.types import MediaType
+
+if TYPE_CHECKING:
+    from litlogger.session import ExperimentSession
+
+
+def _wrap_media_file(media_name: str, media_type: V1MediaType) -> "File":
+    """Build the media wrapper matching a listed record's wire type."""
+    if media_type == V1MediaType.IMAGE:
+        return Image(media_name)
+    if media_type == V1MediaType.TEXT:
+        text = Text("")
+        text.path = media_name
+        return text
+    if media_type == V1MediaType.VIDEO:
+        return Video(media_name)
+    return File(media_name)
+
+
+def _artifact_download_fn(session: "ExperimentSession", key: str) -> Callable[[str], str]:
+    """Build a lazy artifact download closure for a restored file."""
+
+    def _download(path: str) -> str:
+        file = File(path)
+        file._bind_remote(
+            session,
+            remote_path=key,
+            cloud_account=getattr(session.metrics_store, "cluster_id", None),
+        )
+        return file.save(path)
+
+    return _download
+
+
+def _media_download_fn(
+    session: "ExperimentSession", storage_path: str, cloud_account: str | None = None
+) -> Callable[[str], str]:
+    """Build a lazy media download closure for a restored file."""
+
+    def _download(path: str) -> str:
+        session.teamspace.download_file(storage_path, file_path=path, cloud_account=cloud_account)
+        return path
+
+    return _download
 
 
 def _sanitize_version_for_model_name(version: str) -> str:
@@ -51,6 +102,14 @@ class File:
         self.description = description
         self._temp_path: str | None = None
         self._download_fn: Callable[[str], str] | None = None
+        # Placement stamped by the experiment at dispatch time: the experiment
+        # key, and for series elements the index (and step) within the series.
+        self._log_key: str | None = None
+        self._series_index: int | None = None
+        self._series_step: int | None = None
+        # Read barrier attached when the write is queued: reading the remote
+        # side (save/load) first waits for queued writes to land.
+        self._read_barrier: Callable[[], None] | None = None
 
     def _get_upload_path(self) -> str:
         """Get a stable path for upload.
@@ -105,6 +164,8 @@ class File:
         Raises:
             RuntimeError: If the file has no remote download context.
         """
+        if self._read_barrier is not None:
+            self._read_barrier()
         if self._download_fn is None:
             raise RuntimeError("File has no remote context. It must be uploaded to an experiment first.")
         return self._download_fn(path)
@@ -123,18 +184,30 @@ class File:
             return rel_path.replace("\\", "/")
         return os.path.basename(self.path).replace("\\", "/")
 
-    def _bind_remote_artifact(
+    def _remote_path(self) -> str | None:
+        """Resolve the artifact remote path from the stamped placement.
+
+        Static values upload under the experiment key; series elements under
+        ``{key}/{index}``. Without a stamped key (standalone ``log()``), the
+        path is derived from the local file path at write time.
+        """
+        if self._log_key is None:
+            return None
+        if self._series_index is None:
+            return self._log_key
+        return f"{self._log_key}/{self._series_index}"
+
+    def _bind_remote(
         self,
+        session: "ExperimentSession",
         *,
-        teamspace: Teamspace,
-        experiment_name: str,
         remote_path: str,
-        client: LitRestClient | None = None,
         cloud_account: str | None = None,
     ) -> None:
         """Bind remote artifact download behavior to this file wrapper."""
-        api = ArtifactsApi(client=client or LitRestClient(max_retries=5))
-        full_remote_path = f"experiments/{experiment_name}/{remote_path}"
+        api = session.artifacts_api
+        teamspace = session.teamspace
+        full_remote_path = f"experiments/{session.experiment_name}/{remote_path}"
         self.name = remote_path
         self._download_fn = lambda path: api.download_file(
             teamspace=teamspace,
@@ -143,36 +216,132 @@ class File:
             cloud_account=cloud_account,
         )
 
-    def _log_artifact(
-        self,
-        *,
-        teamspace: Teamspace,
-        metrics_store: Any,
-        experiment_name: str,
-        client: LitRestClient | None = None,
-        remote_path: str | None = None,
-    ) -> str:
+    def _upload_artifact(self, session: "ExperimentSession", remote_path: str | None = None) -> str:
         """Upload this file as an experiment artifact and bind remote access."""
         upload_path = self._get_upload_path()
         display_path = self._artifact_display_path(remote_path)
-        api = ArtifactsApi(client=client or LitRestClient(max_retries=5))
-        api.upload_experiment_file_artifact(
-            teamspace=teamspace,
-            metrics_store=metrics_store,
-            experiment_name=experiment_name,
+        session.artifacts_api.upload_experiment_file_artifact(
+            teamspace=session.teamspace,
+            metrics_store=session.metrics_store,
+            experiment_name=session.experiment_name,
             file_path=upload_path,
             remote_path=display_path,
         )
         self._cleanup()
-        cloud_account = getattr(metrics_store, "cluster_id", None)
-        self._bind_remote_artifact(
-            teamspace=teamspace,
-            experiment_name=experiment_name,
+        cloud_account = getattr(session.metrics_store, "cluster_id", None)
+        self._bind_remote(
+            session,
             remote_path=display_path,
-            client=api.client,
             cloud_account=cloud_account if isinstance(cloud_account, str) else None,
         )
         return display_path
+
+    def log(self, session: "ExperimentSession") -> None:
+        """Upload this file as an experiment artifact now, in the caller's thread."""
+        self._upload_artifact(session, remote_path=self._remote_path())
+        session.stats.artifacts_logged += 1
+
+    def enqueue(self, session: "ExperimentSession") -> None:
+        """Hand this file to the background pipeline for asynchronous upload."""
+        self._read_barrier = session.flush
+        _enqueue_write(self, session)
+
+    @staticmethod
+    def _restore_all(session: "ExperimentSession", existing_key_types: Mapping[str, str]) -> RestoredFiles:
+        """Rebuild static files and file series from the artifact listing.
+
+        ``existing_key_types`` is a snapshot of keys claimed by earlier restore
+        passes; keys already claimed by a different kind are skipped, and this
+        pass tracks its own claims internally.
+        """
+        restored = RestoredFiles(statics={}, series={})
+        claimed: dict[str, str] = dict(existing_key_types)
+
+        artifacts = getattr(session.metrics_store, "artifacts", None) or []
+        with contextlib.suppress(AttributeError):
+            listed = session.artifacts_api.list_experiment_artifacts(session.teamspace.id, session.metrics_store.id)
+            if listed is not None:
+                artifacts = listed
+
+        series_entries: dict[str, list[tuple[int, File]]] = {}
+        for artifact in artifacts:
+            name = artifact.path if hasattr(artifact, "path") else str(artifact)
+            wrapped = File(name)
+            wrapped.name = name
+            wrapped._download_fn = _artifact_download_fn(session, name)
+
+            match = SERIES_NAME_RE.match(name)
+            if match:
+                key = match.group("key")
+                index = int(match.group("index"))
+                if key in claimed and claimed[key] != "file_series":
+                    continue
+                claimed[key] = "file_series"
+                series_entries.setdefault(key, []).append((index, wrapped))
+                continue
+
+            if name in claimed:
+                continue
+            claimed[name] = "static_file"
+            restored.statics[name] = wrapped
+
+        for key, file_entries in series_entries.items():
+            restored.series[key] = [value for _, value in sorted(file_entries)]
+        return restored
+
+    @staticmethod
+    def _restore_media(session: "ExperimentSession", existing_key_types: Mapping[str, str]) -> RestoredFiles:
+        """Rebuild static media and media series from the media listing.
+
+        A name with one direct record is a static file; several records under
+        the same name form a series ordered by step (falling back to listing
+        position). ``{key}/{index}`` names reconstruct indexed series like the
+        artifact pass.
+        """
+        restored = RestoredFiles(statics={}, series={})
+        claimed: dict[str, str] = dict(existing_key_types)
+
+        with contextlib.suppress(AttributeError):
+            media_items = session.media_api.list_media(session.teamspace.id, session.metrics_store.id) or []
+
+            series_entries: dict[str, list[tuple[int, File]]] = {}
+            direct_entries: dict[str, list[tuple[int | None, int, File]]] = {}
+            for position, media in enumerate(media_items):
+                name = media.name or media.storage_path or media.id
+                storage_path = media.storage_path or name
+                wrapped = _wrap_media_file(name, media.media_type)
+                wrapped.name = name
+                wrapped._download_fn = _media_download_fn(session, storage_path, media.cluster_id)
+
+                match = SERIES_NAME_RE.match(name)
+                if match:
+                    key = match.group("key")
+                    index = int(match.group("index"))
+                    if key in claimed and claimed[key] != "file_series":
+                        continue
+                    claimed[key] = "file_series"
+                    series_entries.setdefault(key, []).append((index, wrapped))
+                    continue
+
+                direct_entries.setdefault(name, []).append((getattr(media, "step", None), position, wrapped))
+
+            for name, media_entries in direct_entries.items():
+                if name in claimed:
+                    continue
+                if len(media_entries) == 1:
+                    claimed[name] = "static_file"
+                    restored.statics[name] = media_entries[0][2]
+                    continue
+
+                claimed[name] = "file_series"
+                series_values = series_entries.setdefault(name, [])
+                for step, position, wrapped in media_entries:
+                    sort_index = step if isinstance(step, int) else position
+                    series_values.append((sort_index, wrapped))
+
+            for key, file_entries in series_entries.items():
+                restored.series[key] = [value for _, value in sorted(file_entries)]
+        return restored
 
     @property
     def _media_type(self) -> MediaType:
@@ -190,7 +359,32 @@ class File:
         return hash((type(self), self.path))
 
 
-class Image(File):
+class _MediaFile(File):
+    """Base for rendered media (images, videos, text) uploaded through the media API."""
+
+    @override
+    def log(self, session: "ExperimentSession") -> None:
+        """Upload this media now, in the caller's thread.
+
+        Media uploads share one remote name per key: series elements are
+        differentiated by their step, not by an indexed path.
+        """
+        name = self._log_key if self._log_key is not None else (self.name or self._artifact_display_path(None))
+        upload_path = self._get_upload_path()
+        session.media_api.upload_media(
+            experiment_id=session.metrics_store.id,
+            teamspace=session.teamspace,
+            file_path=upload_path,
+            name=name,
+            media_type=_to_v1_media_type(self._media_type),
+            step=self._series_step,
+        )
+        self.name = name
+        self._cleanup()
+        session.stats.media_logged += 1
+
+
+class Image(_MediaFile):
     """Represents an image to be logged.
 
     Can take a file path (str) or a Python object (PIL Image, numpy array,
@@ -282,7 +476,7 @@ class Image(File):
         return MediaType.IMAGE
 
 
-class Video(File):
+class Video(_MediaFile):
     DEFAULT_FPS = 24
 
     """Represents a video to be logged.
@@ -457,7 +651,7 @@ class Video(File):
         return MediaType.VIDEO
 
 
-class Text(File):
+class Text(_MediaFile):
     """Represents text content to be logged.
 
     Takes a string and writes it to a temporary file for upload.
@@ -623,8 +817,75 @@ class Model(File):
         self._cleanup()
         return model_name
 
+    @classmethod
+    def _from_version(
+        cls: type["Model"], session: "ExperimentSession", key: str, model_key: str, version_info: object
+    ) -> "Model":
+        """Build a remote-bound model wrapper for one registry version."""
+        metadata = getattr(version_info, "metadata", None) or {}
+        kind = "object" if metadata.get("litModels.integration") == "save_model" else "artifact"
+        version = getattr(version_info, "version", None)
+        registry_name = f"{session.teamspace.owner.name}/{session.teamspace.name}/{model_key}"
+        if version:
+            registry_name += f":{version}"
+
+        model = cls.from_remote(registry_name, kind, version=version)
+        model._bind_remote_model(key=key, model_name=registry_name)
+        return model
+
+    @classmethod
+    def _resolve(cls: type["Model"], session: "ExperimentSession", key: str) -> "Model | list[Model] | None":
+        """Look up an experiment key in the model registry (lazy restore).
+
+        Returns a single bound Model, an ordered list of them (one per
+        complete version), or None when nothing matches — including on any
+        lookup error, which callers negative-cache.
+        """
+        model_key = sanitize_model_key(key)
+        try:
+            models = session.teamspace.list_models()
+            model_info = next((model for model in models if getattr(model, "name", None) == model_key), None)
+            if model_info is None:
+                return None
+
+            versions = session.teamspace.list_model_versions(model_key)
+            complete_versions = [version for version in versions if getattr(version, "upload_complete", True)]
+            if not complete_versions:
+                return None
+            complete_versions.sort(key=model_version_sort_key)
+
+            if len(complete_versions) == 1:
+                return cls._from_version(session, key, model_key, complete_versions[0])
+            return [cls._from_version(session, key, model_key, version_info) for version_info in complete_versions]
+        except Exception:
+            return None
+
+    @override
+    def log(self, session: "ExperimentSession") -> None:
+        """Upload this model to the registry now, in the caller's thread.
+
+        Series elements without an explicit version are auto-versioned from
+        their position (``v{index + 1}``).
+        """
+        if self._series_index is not None and not self._version_provided:
+            self.version = f"v{self._series_index + 1}"
+
+        key = self._log_key
+        cloud_account = getattr(session.metrics_store, "cluster_id", None)
+        model_name = self._log_model(
+            experiment_name=session.experiment_name,
+            teamspace=session.teamspace,
+            key=sanitize_model_key(key) if key is not None else None,
+            experiment=session.experiment,
+            cloud_account=cloud_account if isinstance(cloud_account, str) else None,
+        )
+        session.stats.models_logged += 1
+        self._bind_remote_model(key=key if key is not None else model_name, model_name=model_name)
+
     def load(self, staging_dir: str | None = None) -> Any:
         """Load a remote model object via the registry helpers."""
+        if self._read_barrier is not None:
+            self._read_barrier()
         if self._load_fn is None:
             raise RuntimeError("Model has no remote load context. It must be uploaded to an experiment first.")
         return self._load_fn(staging_dir)

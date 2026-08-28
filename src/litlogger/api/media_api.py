@@ -15,6 +15,7 @@
 
 import mimetypes
 import os
+from typing import Any
 
 from blake3 import blake3
 from lightning_sdk import Teamspace
@@ -46,6 +47,30 @@ class MediaApi:
             client: Optional pre-configured LitRestClient. If None, creates a new one.
         """
         self.client = client or LitRestClient(max_retries=5)
+
+    def list_media(self, teamspace_id: str, metrics_stream_id: str) -> list[Any] | None:
+        """List the media records attached to a metrics stream.
+
+        Args:
+            teamspace_id: The teamspace ID.
+            metrics_stream_id: The metrics stream ID.
+
+        Returns:
+            The listed media records, or None when the endpoint is unavailable
+            (older SDK client) or the response has no list.
+        """
+        try:
+            response = self.client.lit_logger_service_list_lit_logger_media(
+                project_id=teamspace_id,
+                metrics_stream_id=metrics_stream_id,
+            )
+        except AttributeError:
+            return None
+
+        media = getattr(response, "media", None)
+        if not isinstance(media, list):
+            return None
+        return media
 
     def upload_media(
         self,

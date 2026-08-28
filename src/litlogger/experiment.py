@@ -18,14 +18,12 @@ import contextlib
 import os
 import signal
 import sys
-from multiprocessing import JoinableQueue
+from queue import Queue
 from threading import Event
 from time import sleep
 from types import FrameType
-from typing import Callable
 
 from lightning_sdk import Teamspace
-from lightning_sdk.lightning_cloud.openapi import V1MediaType
 
 from litlogger.api.artifacts_api import ArtifactsApi
 from litlogger.api.auth_api import AuthApi
@@ -35,11 +33,12 @@ from litlogger.api.utils import _resolve_teamspace, build_experiment_url, get_ac
 from litlogger.background import _BackgroundThread
 from litlogger.capture import rerun_and_record
 from litlogger.experiment_legacy import LegacyExperiment, MetadataValue
-from litlogger.experiment_support import ExperimentIOSupport, ExperimentSeriesSupport, ExperimentStateSupport
 from litlogger.media import File, Model
+from litlogger.primitives import Metadata, Metric, Primitive, QueueItem, RestoredFiles, _to_v1_media_type
 from litlogger.printer import Printer, RunStats
 from litlogger.series import Series
-from litlogger.types import MediaType, Metrics
+from litlogger.session import ExperimentSession
+from litlogger.types import MediaType
 
 
 class Experiment(LegacyExperiment):
@@ -120,7 +119,7 @@ class Experiment(LegacyExperiment):
 
         self._metrics_api = MetricsApi()
         self._media_api = MediaApi(client=self._metrics_api.client)
-        self._artifacts_api = ArtifactsApi()
+        self._artifacts_api = ArtifactsApi(client=self._metrics_api.client)
         self._teamspace = _resolve_teamspace(teamspace)
 
         # Create metrics stream using API
@@ -149,10 +148,14 @@ class Experiment(LegacyExperiment):
         )
 
         # Initialize metrics management
-        self._metrics_queue: JoinableQueue[dict[str, Metrics]] = JoinableQueue()
+        self._metrics_queue: Queue[QueueItem] = Queue()
         self._stop_event = Event()
         self._is_ready_event = Event()
         self._resumed_steps = self._metrics_api.get_last_steps(self._teamspace.id, self._metrics_store.id) or {}
+
+        # Shared infrastructure context handed to logging primitives; the
+        # background worker uses it to execute queued non-metric writes.
+        self._session = ExperimentSession.from_experiment(self)
         self._manager = _BackgroundThread(
             teamspace_id=self._teamspace.id,
             metrics_store_id=self._metrics_store.id,
@@ -166,7 +169,9 @@ class Experiment(LegacyExperiment):
             rate_limiting_interval=rate_limiting_interval,
             max_batch_size=max_batch_size,
             last_steps=self._resumed_steps,
+            session=self._session,
         )
+        self._session.background = self._manager
 
         self._manager.start()
 
@@ -262,13 +267,13 @@ class Experiment(LegacyExperiment):
                 )
             self._key_types[key] = "static_file"
             self._static_files[key] = value
-            self._set_static_file(key, value)
+            self._coerce_static_value(key, value).enqueue(self._session)
         elif isinstance(value, str):
             if key in self._key_types and self._key_types[key] != "metadata":
                 raise KeyError(f"Key {key!r} is already used as {self._key_types[key]}. Cannot reassign as metadata.")
             self._key_types[key] = "metadata"
             self._metadata_values[key] = value
-            self._set_metadata_value(key, value)
+            Metadata(key, value).enqueue(self._session)
         else:
             raise TypeError(f"Can only assign str or File, got {type(value).__name__}")
 
@@ -294,40 +299,43 @@ class Experiment(LegacyExperiment):
             else:
                 raise TypeError(f"Unsupported type for key {key!r}: {type(value).__name__}")
 
-    # ---- Internal helpers ----
+    # ---- Coercion and dispatch ----
+
+    def _coerce_static_value(self, key: str, value: File) -> Primitive:
+        """Classify and stamp a static file-like value as a loggable primitive."""
+        if value._media_type == MediaType.MODEL and not isinstance(value, Model):
+            raise TypeError("Model media values must use the Model wrapper.")
+        value._log_key = key
+        value._series_index = None
+        value._series_step = None
+        return value
+
+    def _coerce_series_value(self, key: str, value: File, index: int, step: int | None) -> Primitive:
+        """Classify and stamp a file-like series element as a loggable primitive."""
+        if value._media_type == MediaType.MODEL and not isinstance(value, Model):
+            raise TypeError("Model media values must use the Model wrapper.")
+        value._log_key = key
+        value._series_index = index
+        value._series_step = step
+        return value
 
     def _register_key_type(self, key: str, key_type: str) -> None:
-        ExperimentSeriesSupport.register_key_type(self, key, key_type)
+        if key in self._key_types:
+            if self._key_types[key] != key_type:
+                raise KeyError(f"Key {key!r} is already used as {self._key_types[key]}, cannot use as {key_type}")
+            return
+        self._key_types[key] = key_type
 
-    def _rebuild_state(self) -> None:
-        ExperimentStateSupport.rebuild_state(self)
-
-    def _create_download_fn(self, key: str) -> Callable[[str], str]:
-        return ExperimentStateSupport.create_download_fn(self, key)
-
-    def _resolve_remote_model(self, key: str) -> Model | Series | None:
-        return ExperimentStateSupport.resolve_remote_model(self, key)
-
-    def _bind_remote_model(self, key: str, value: Model, model_name: str) -> None:
-        ExperimentStateSupport.bind_remote_model(self, key, value, model_name)
-
-    def _model_experiment_name(self, key: str) -> str:
-        return ExperimentStateSupport.model_experiment_name(self, key)
-
-    def _code_tags(self) -> dict[str, str]:
-        return ExperimentStateSupport.code_tags(self)
-
-    def _create_media_download_fn(self, storage_path: str, cloud_account: str | None = None) -> Callable[[str], str]:
-        return ExperimentStateSupport.create_media_download_fn(self, storage_path, cloud_account)
-
-    def _wrap_media_file(self, media_name: str, media_type: V1MediaType) -> File:
-        return ExperimentStateSupport.wrap_media_file(self, media_name, media_type)
+    def _ensure_series(self, key: str) -> Series:
+        if key not in self._series:
+            self._series[key] = Series(self, key)
+        return self._series[key]
 
     def _log_metric_value(self, key: str, value: float, step: int | None = None) -> None:
-        ExperimentSeriesSupport.log_metric_value(self, key, value, step=step)
+        Metric(key, value, step=step).enqueue(self._session)
 
-    def _media_type_to_v1(self, media_type: MediaType) -> V1MediaType:
-        return ExperimentIOSupport.media_type_to_v1(self, media_type)
+    def _log_file_series_value(self, key: str, value: File, index: int, step: int | None = None) -> None:
+        self._coerce_series_value(key, value, index, step).enqueue(self._session)
 
     def _upload_media(
         self,
@@ -338,33 +346,76 @@ class Experiment(LegacyExperiment):
         epoch: int | None = None,
         caption: str | None = None,
     ) -> None:
-        ExperimentIOSupport.upload_media(self, name, file_path, media_type, step=step, epoch=epoch, caption=caption)
+        # Keyless media upload used by the legacy log_media API: it registers
+        # nothing locally, so it stays outside the primitive dispatch.
+        self._session.media_api.upload_media(
+            experiment_id=self._session.metrics_store.id,
+            teamspace=self._session.teamspace,
+            file_path=file_path,
+            name=name,
+            media_type=_to_v1_media_type(media_type),
+            step=step,
+            epoch=epoch,
+            caption=caption,
+        )
+        self._stats.media_logged += 1
 
-    def _upload_media_value(
-        self,
-        key: str,
-        value: File,
-        name: str | None = None,
-        step: int | None = None,
-        epoch: int | None = None,
-        caption: str | None = None,
-    ) -> None:
-        ExperimentIOSupport.upload_media_value(self, key, value, name=name, step=step, epoch=epoch, caption=caption)
+    # ---- Resume orchestration ----
 
-    def _upload_model_value(self, key: str, value: Model) -> None:
-        ExperimentIOSupport.upload_model_value(self, key, value)
+    def _resolve_remote_model(self, key: str) -> Model | Series | None:
+        cached = self._model_lookup_cache.get(key)
+        if cached is not None or key in self._missing_model_keys:
+            return cached
 
-    def _log_file_series_value(self, key: str, value: File, index: int, step: int | None = None) -> None:
-        ExperimentIOSupport.log_file_series_value(self, key, value, index, step=step)
+        # Read barrier: queued model uploads must land before the registry lookup.
+        self._session.flush()
+        resolved = Model._resolve(self._session, key)
+        if resolved is None:
+            self._missing_model_keys.add(key)
+            return None
 
-    def _set_metadata_value(self, key: str, value: str) -> None:
-        ExperimentIOSupport.set_metadata_value(self, key, value)
+        if isinstance(resolved, list):
+            series = Series(self, key)
+            series._type = "file"
+            series._values = list(resolved)
+            self._model_lookup_cache[key] = series
+            return series
 
-    def _set_static_file(self, key: str, value: File) -> None:
-        ExperimentIOSupport.set_static_file(self, key, value)
+        self._model_lookup_cache[key] = resolved
+        return resolved
 
-    def _ensure_series(self, key: str) -> Series:
-        return ExperimentSeriesSupport.ensure_series(self, key)
+    def _rebuild_state(self) -> None:
+        """Rebuild local state from remote metadata, metrics, artifacts, and media."""
+        # TODO: add BE support for restoring model states as well
+        session = self._session
+
+        for name, value in Metadata._current_tags(session).items():
+            self._key_types[name] = "metadata"
+            self._metadata_values[name] = value
+
+        metric_values = Metric._restore_values(session)
+        for name in self._resumed_steps:
+            self._key_types[name] = "metric"
+            series = Series(self, name)
+            series._type = "metric"
+            if name in metric_values:
+                series._values = list(metric_values[name])
+            self._series[name] = series
+
+        self._merge_restored(File._restore_all(session, dict(self._key_types)))
+        self._merge_restored(File._restore_media(session, dict(self._key_types)))
+
+    def _merge_restored(self, restored: RestoredFiles) -> None:
+        """Register one restore pass's results in local experiment state."""
+        for key, file in restored.statics.items():
+            self._key_types[key] = "static_file"
+            self._static_files[key] = file
+        for key, values in restored.series.items():
+            self._key_types[key] = "file_series"
+            series = Series(self, key)
+            series._type = "file"
+            series._values = values
+            self._series[key] = series
 
     # ---- Properties ----
 
@@ -387,13 +438,24 @@ class Experiment(LegacyExperiment):
         return self._teamspace
 
     @property
+    def session(self) -> ExperimentSession:
+        """The shared infrastructure session primitives log through.
+
+        Returns:
+            ExperimentSession: The session created for this experiment.
+        """
+        return self._session
+
+    @property
     def metadata(self) -> dict[str, str]:
         """Get the metadata associated with this experiment from the metrics stream.
 
         Returns:
             dict[str, str]: The metadata dictionary with key-value pairs from code-defined tags.
         """
-        return Experiment._code_tags(self)
+        # Read barrier: queued metadata writes must land before the remote read.
+        self._session.flush()
+        return Metadata._current_tags(self._session)
 
     @property
     def metrics(self) -> dict[str, Series]:
@@ -454,14 +516,15 @@ class Experiment(LegacyExperiment):
                 raise self._manager.exception
             sleep(0.1)
 
+        # A queued write that failed after the worker set the done event would
+        # otherwise be swallowed here; surface it.
+        if self._manager.exception is not None:
+            raise self._manager.exception
+
         if self.save_logs and os.path.exists(self.terminal_logs_path):
-            File(self.terminal_logs_path)._log_artifact(
-                teamspace=self._teamspace,
-                metrics_store=self._metrics_store,
-                remote_path="console_output.txt",
-                client=self._artifacts_api.client,
-                experiment_name=self.name,
-            )
+            # Uploaded directly (not registered locally, no stats bump) —
+            # console output is bookkeeping, not experiment data.
+            File(self.terminal_logs_path)._upload_artifact(self._session, remote_path="console_output.txt")
 
         # Print completion summary with stats
         if print_summary:
@@ -479,9 +542,6 @@ class Experiment(LegacyExperiment):
             url=self._url,
             metadata=self.metadata,
         )
-
-    def _update_metrics_store(self) -> None:
-        ExperimentStateSupport.update_metrics_store(self)
 
     def _signal_handler(self, signum: int, frame: FrameType | None) -> None:
         """Handle termination signals by calling finalize().

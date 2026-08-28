@@ -1,6 +1,7 @@
 [build-system]
 requires = [
-    "setuptools>=61.0.0",
+    "setuptools>=80",
+    "setuptools-scm[simple]>=9.2",
     "wheel",
 ]
 build-backend = "setuptools.build_meta"
@@ -64,9 +65,6 @@ tests = [
     "lightning>=2.0.0",
     "torchvision"
 ]
-
-[tool.setuptools.dynamic]
-version = {attr = "litlogger.__version__"}
 
 [tool.setuptools.packages.find]
 where = ["src"]

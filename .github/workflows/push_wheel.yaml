@@ -29,9 +29,6 @@ jobs:
     - name: Install dependencies
       run: pip install -U setuptools wheel build
 
-    - name: Overview Readme for release
-      run: echo "# Lit Logger" > README.md
-
     - name: Build packages
       run: |
         # todo: add sdist once public

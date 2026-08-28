@@ -11,6 +11,8 @@ jobs:
     runs-on: ubuntu-latest
     if: github.event.pull_request.draft == false
     timeout-minutes: 10
+    env:
+      UV_EXCLUDE_NEWER: "2 days"
 
     steps:
     - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -44,6 +46,8 @@ jobs:
     runs-on: ubuntu-latest
     if: github.event.pull_request.draft == false
     timeout-minutes: 10
+    env:
+      UV_EXCLUDE_NEWER: "2 days"
 
     steps:
     - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -69,6 +73,8 @@ jobs:
     runs-on: ubuntu-latest
     if: github.event.pull_request.draft == false
     timeout-minutes: 10
+    env:
+      UV_EXCLUDE_NEWER: "2 days"
 
     steps:
     - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0

@@ -11,51 +11,69 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Contract and queue envelope shared by all logging primitives."""
+"""Primitive contract and immutable commands for the write pipeline."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Protocol, TypeAlias, runtime_checkable
-
-from litlogger.types import Metrics
+from datetime import datetime
+from typing import TYPE_CHECKING, Callable, Protocol, TypeAlias, runtime_checkable
 
 if TYPE_CHECKING:
     from litlogger.session import ExperimentSession
 
 
+@dataclass(frozen=True)
+class WritePlacement:
+    """Immutable location of a primitive within an experiment."""
+
+    key: str
+    index: int | None = None
+    x: float | None = None
+
+    @property
+    def is_series(self) -> bool:
+        """Whether this placement identifies one element of a series."""
+        return self.index is not None
+
+
 @runtime_checkable
 class Primitive(Protocol):
-    """A loggable unit: a synchronous write plus an asynchronous hand-off.
+    """A value that can write synchronously or submit an immutable command."""
 
-    ``log`` performs the remote write in the caller's thread. ``enqueue`` hands
-    the primitive to the experiment's background pipeline, which batches where
-    it can (metrics) and otherwise performs the same write off-thread. Callers
-    need not distinguish between the two mechanisms beyond that timing choice.
-    """
-
-    def log(self, session: ExperimentSession) -> None:
-        """Perform this primitive's remote write now, in the caller's thread."""
+    def log(self, session: ExperimentSession, placement: WritePlacement | None = None) -> None:
+        """Perform this primitive's remote write immediately."""
         ...
 
-    def enqueue(self, session: ExperimentSession) -> None:
-        """Hand this primitive to the background pipeline for asynchronous processing."""
+    def enqueue(self, session: ExperimentSession, placement: WritePlacement | None = None) -> None:
+        """Submit this primitive to the session's background pipeline."""
         ...
 
 
-@dataclass
-class _QueuedWrite:
-    """Envelope for a non-batchable primitive handed to the background worker."""
+@dataclass(frozen=True)
+class MetricWrite:
+    """One metric observation awaiting coordinate resolution and batching."""
 
-    primitive: Primitive
-
-
-#: Items carried by the experiment queue: metric batches (merged and sent in
-#: bulk) or queued primitives (executed one by one by the worker).
-QueueItem: TypeAlias = "dict[str, Metrics] | _QueuedWrite"
+    key: str
+    y: float
+    x: float | None
+    created_at: datetime | None
 
 
-def _enqueue_write(primitive: Primitive, session: ExperimentSession) -> None:
-    """Queue a primitive for the background worker, surfacing prior failures first."""
-    session.raise_if_background_failed()
-    session.queue.put(_QueuedWrite(primitive))
+@dataclass(frozen=True)
+class PrimitiveWrite:
+    """A self-contained sequential write operation."""
+
+    operation: Callable[[ExperimentSession], None]
+
+    def execute(self, session: ExperimentSession) -> None:
+        """Execute the captured operation against its owning session."""
+        self.operation(session)
+
+
+QueueItem: TypeAlias = MetricWrite | PrimitiveWrite
+
+
+def _enqueue_write(operation: Callable[[ExperimentSession], None], session: ExperimentSession) -> None:
+    """Submit a self-contained primitive operation through the session."""
+    session.submit(PrimitiveWrite(operation))

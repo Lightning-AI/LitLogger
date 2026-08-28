@@ -36,9 +36,11 @@ from litlogger.primitives.image import Image as Image
 from litlogger.primitives.metadata import Metadata as Metadata
 from litlogger.primitives.metric import Metric as Metric
 from litlogger.primitives.model import Model as Model
+from litlogger.primitives.primitive import MetricWrite as MetricWrite
 from litlogger.primitives.primitive import Primitive as Primitive
+from litlogger.primitives.primitive import PrimitiveWrite as PrimitiveWrite
 from litlogger.primitives.primitive import QueueItem as QueueItem
+from litlogger.primitives.primitive import WritePlacement as WritePlacement
 from litlogger.primitives.primitive import _enqueue_write as _enqueue_write
-from litlogger.primitives.primitive import _QueuedWrite as _QueuedWrite
 from litlogger.primitives.text import Text as Text
 from litlogger.primitives.video import Video as Video

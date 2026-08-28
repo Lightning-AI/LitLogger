@@ -97,6 +97,7 @@ nitpicky = True
 nitpick_ignore = [
     # External Lightning/PyTorch — mocked, can't resolve
     ("py:class", "pytorch_lightning.loggers.LitLogger"),
+    ("py:class", "pytorch_lightning.loggers.litlogger.LitLogger"),
     ("py:class", "lightning.pytorch.loggers.LitLogger"),
     ("py:class", "lightning.pytorch.loggers.litlogger.LitLogger"),
     ("py:class", "lightning.fabric.loggers.logger.Logger"),
@@ -114,6 +115,7 @@ nitpick_ignore = [
     ("py:class", "enum.Enum"),
     ("py:class", "litlogger.experiment_legacy.LegacyExperiment"),
     ("py:class", "litlogger.api.client.LitRestClient"),
+    ("py:class", "litlogger.primitives._media._MediaFile"),
     # typing.Union — inherited from LitLogger parent class, role mismatch (py:data vs py:class)
     ("py:data", "typing.Union"),
 ]

@@ -20,6 +20,7 @@ import warnings
 from typing import TYPE_CHECKING, Any, overload
 
 from litlogger.primitives import File
+from litlogger.primitives.metric import resolve_x
 
 if TYPE_CHECKING:
     from litlogger.experiment import Experiment
@@ -55,11 +56,7 @@ class Series:
             TypeError: If y's type doesn't match the existing series type or is unsupported.
             ValueError: If both ``x`` and ``step`` are provided.
         """
-        if x is not None and step is not None:
-            raise ValueError("x and step are mutually exclusive.")
-        effective_x = x if x is not None else step
-        if effective_x is not None and not math.isfinite(effective_x):
-            raise ValueError("x must be finite.")
+        effective_x = resolve_x(x=x, step=step)
         if isinstance(y, File):
             if self._type is not None and self._type != "file":
                 raise TypeError(f"Key {self._key!r} is a metric series, cannot append File")
@@ -94,7 +91,7 @@ class Series:
                 self._experiment._register_key_type(self._key, "metric")
                 self._type = "metric"
             try:
-                self._experiment._log_metric_value(self._key, float_val, step=step, x=x)
+                self._experiment._log_metric_value(self._key, float_val, x=effective_x)
             except Exception:
                 if new_series:
                     self._type = None
@@ -122,15 +119,10 @@ class Series:
         Raises:
             ValueError: If both ``start_x`` and ``start_step`` are provided.
         """
-        if start_x is not None and start_step is not None:
-            raise ValueError("start_x and start_step are mutually exclusive.")
-        coordinate = start_x if start_x is not None else start_step
-        if coordinate is not None and not math.isfinite(coordinate):
-            raise ValueError("start_x must be finite.")
+        coordinate = resolve_x(x=start_x, step=start_step)
         for i, v in enumerate(values):
-            step = start_step + i if start_step is not None else None
-            x = start_x + i if start_x is not None else None
-            self.append(v, step=step, x=x)
+            x = coordinate + i if coordinate is not None else None
+            self.append(v, x=x)
 
     def __iter__(self) -> Any:  # noqa: D105
         return iter(self._values)

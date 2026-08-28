@@ -10,7 +10,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from litlogger.experiment import Experiment
-from litlogger.primitives import File, Metadata, _QueuedWrite
+from litlogger.primitives import File, Metadata, PrimitiveWrite
 from litlogger.series import Series
 from litlogger.session import ExperimentSession
 
@@ -25,19 +25,24 @@ def _session_of(exp):
         return value if value is not None else MagicMock()
 
     metrics_api = part("_metrics_api")
-    return ExperimentSession(
-        client=metrics_api.client,
+    background = part("_manager")
+    if not isinstance(background.exception, BaseException):
+        background.exception = None
+    return ExperimentSession._from_components(
+        name=getattr(exp, "name", "exp"),
         metrics_api=metrics_api,
         media_api=part("_media_api"),
         artifacts_api=part("_artifacts_api"),
         teamspace=part("_teamspace"),
+        metrics_store=part("_metrics_store"),
         experiment=exp,
-        queue=part("_metrics_queue"),
+        queue_=part("_metrics_queue"),
         stats=part("_stats"),
+        printer=part("_printer"),
         store_step=bool(getattr(exp, "store_step", True)),
         store_created_at=bool(getattr(exp, "store_created_at", False)),
-        last_steps=getattr(exp, "_resumed_steps", None) or {},
-        background=getattr(exp, "_manager", None),
+        last_x=getattr(exp, "_resumed_steps", None) or {},
+        background=background,
     )
 
 
@@ -56,7 +61,7 @@ def _make_exp(**overrides):
     exp._metrics_queue = MagicMock()
     # The dict API queues writes; execute them inline the way the worker would.
     exp._metrics_queue.put.side_effect = lambda item: (
-        item.primitive.log(exp._session) if isinstance(item, _QueuedWrite) else None
+        item.execute(exp._session) if isinstance(item, PrimitiveWrite) else None
     )
     exp._stats = MagicMock()
     exp._metrics_api = MagicMock()
@@ -79,11 +84,8 @@ def _make_exp(**overrides):
     exp.update = lambda data: Experiment.update(exp, data)
     exp._ensure_series = lambda key: Experiment._ensure_series(exp, key)
     exp._register_key_type = lambda key, kt: Experiment._register_key_type(exp, key, kt)
-    exp._log_metric_value = lambda key, y, step=None, x=None: Experiment._log_metric_value(exp, key, y, step=step, x=x)
-    exp._coerce_static_value = lambda key, value: Experiment._coerce_static_value(exp, key, value)
-    exp._coerce_series_value = lambda key, value, index, step: Experiment._coerce_series_value(
-        exp, key, value, index, step
-    )
+    exp._log_metric_value = lambda key, y, x=None: Experiment._log_metric_value(exp, key, y, x=x)
+    exp._validate_file_primitive = lambda value: Experiment._validate_file_primitive(exp, value)
 
     for k, v in overrides.items():
         setattr(exp, k, v)
@@ -223,8 +225,7 @@ class TestRetrieveMetadataProperty:
     """Test experiment.metadata property."""
 
     def test_metadata_returns_code_tags(self):
-        exp = MagicMock(spec=Experiment)
-        type(exp)._session = property(lambda self: _session_of(self))
+        exp = MagicMock()
         exp._metrics_api = MagicMock()
 
         tag1 = MagicMock()
@@ -241,30 +242,31 @@ class TestRetrieveMetadataProperty:
         exp._metrics_store.name = "exp"
         exp._metrics_store.tags = [tag1, tag2]
         exp._metrics_api.get_experiment_metrics_by_name.return_value = exp._metrics_store
+        exp._session = _session_of(exp)
 
         result = Experiment.metadata.fget(exp)
         assert result == {"model": "resnet50"}
         assert "system_tag" not in result
 
     def test_metadata_empty(self):
-        exp = MagicMock(spec=Experiment)
-        type(exp)._session = property(lambda self: _session_of(self))
+        exp = MagicMock()
         exp._metrics_api = MagicMock()
         exp._metrics_store = MagicMock()
         exp._metrics_store.name = "exp"
         exp._metrics_store.tags = []
         exp._metrics_api.get_experiment_metrics_by_name.return_value = exp._metrics_store
+        exp._session = _session_of(exp)
 
         result = Experiment.metadata.fget(exp)
         assert result == {}
 
     def test_metadata_no_tags_attr(self):
-        exp = MagicMock(spec=Experiment)
-        type(exp)._session = property(lambda self: _session_of(self))
+        exp = MagicMock()
         exp._metrics_api = MagicMock()
         exp._metrics_store = MagicMock(spec=["name"])  # no .tags
         exp._metrics_store.name = "exp"
         exp._metrics_api.get_experiment_metrics_by_name.return_value = exp._metrics_store
+        exp._session = _session_of(exp)
 
         result = Experiment.metadata.fget(exp)
         assert result == {}
@@ -279,13 +281,12 @@ class TestRebuildStateMetadata:
     """Test that _rebuild_state populates metadata from remote tags."""
 
     def test_rebuilds_code_tags(self):
-        exp = MagicMock(spec=Experiment)
+        exp = MagicMock()
         exp._key_types = {}
         exp._metadata_values = {}
         exp._static_files = {}
         exp._series = {}
         exp._metrics_api = MagicMock()
-        type(exp)._session = property(lambda self: _session_of(self))
 
         exp._teamspace = MagicMock()
         exp._teamspace.id = "ts-1"
@@ -313,6 +314,7 @@ class TestRebuildStateMetadata:
         exp._metrics_api.get_experiment_metrics_by_name.return_value = exp._metrics_store
         exp._create_download_fn = MagicMock()
         exp._resumed_steps = {}
+        exp._session = _session_of(exp)
 
         Experiment._rebuild_state(exp)
 
@@ -322,8 +324,7 @@ class TestRebuildStateMetadata:
         assert "system" not in exp._key_types
 
     def test_rebuilds_metric_key_types(self):
-        exp = MagicMock(spec=Experiment)
-        type(exp)._session = property(lambda self: _session_of(self))
+        exp = MagicMock()
         exp._key_types = {}
         exp._metadata_values = {}
         exp._static_files = {}
@@ -343,6 +344,7 @@ class TestRebuildStateMetadata:
         exp._merge_restored = lambda restored: Experiment._merge_restored(exp, restored)
         exp._media_api = MagicMock()
         exp._media_api.list_media.return_value = []
+        exp._session = _session_of(exp)
 
         Experiment._rebuild_state(exp)
 
@@ -350,8 +352,7 @@ class TestRebuildStateMetadata:
         assert exp._key_types["acc"] == "metric"
 
     def test_rebuild_hydrates_metric_values(self):
-        exp = MagicMock(spec=Experiment)
-        type(exp)._session = property(lambda self: _session_of(self))
+        exp = MagicMock()
         exp._key_types = {}
         exp._metadata_values = {}
         exp._static_files = {}
@@ -372,6 +373,7 @@ class TestRebuildStateMetadata:
         exp._merge_restored = lambda restored: Experiment._merge_restored(exp, restored)
         exp._media_api = MagicMock()
         exp._media_api.list_media.return_value = []
+        exp._session = _session_of(exp)
 
         Experiment._rebuild_state(exp)
 

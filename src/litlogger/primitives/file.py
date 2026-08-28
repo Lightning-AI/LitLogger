@@ -13,7 +13,7 @@
 # limitations under the License.
 """File artifact primitive and restore helpers."""
 
-import contextlib
+import copy
 import math
 import os
 import tempfile
@@ -21,8 +21,14 @@ from typing import TYPE_CHECKING, Callable, Mapping
 
 from lightning_sdk.lightning_cloud.openapi import V1MediaType
 
-from litlogger.primitives._utils import SERIES_NAME_RE, RestoredFiles
-from litlogger.primitives.primitive import _enqueue_write
+from litlogger.primitives._utils import (
+    SERIES_NAME_RE,
+    RestoredFiles,
+    parse_storage_name,
+    series_storage_name,
+    static_storage_name,
+)
+from litlogger.primitives.primitive import WritePlacement, _enqueue_write
 from litlogger.types import MediaType
 
 if TYPE_CHECKING:
@@ -73,6 +79,18 @@ def _media_download_fn(
     return _download
 
 
+def _media_sort_index(step: object, position: int) -> float:
+    """Return a finite media x-coordinate or the stable listing position."""
+    if isinstance(step, str | int | float):
+        try:
+            numeric_step = float(step)
+        except ValueError:
+            return float(position)
+        if math.isfinite(numeric_step):
+            return numeric_step
+    return float(position)
+
+
 class File:
     """Represents a file to be logged to the experiment.
 
@@ -86,14 +104,8 @@ class File:
         self.name: str = ""
         self.description = description
         self._temp_path: str | None = None
+        self._prepared_upload_path: str | None = None
         self._download_fn: Callable[[str], str] | None = None
-        # Placement stamped by the experiment at dispatch time: the experiment
-        # key, and for series elements the index (and step) within the series.
-        self._log_key: str | None = None
-        self._series_index: int | None = None
-        self._series_step: float | None = None
-        # Read barrier attached when the write is queued: reading the remote
-        # side (save/load) first waits for queued writes to land.
         self._read_barrier: Callable[[], None] | None = None
 
     def _get_upload_path(self) -> str:
@@ -104,6 +116,8 @@ class File:
         Falls back to a copy if hardlinking is not supported, or returns the
         original path if the file doesn't exist yet.
         """
+        if self._prepared_upload_path is not None:
+            return self._prepared_upload_path
         if not self.path or not os.path.exists(self.path):
             return self.path
         try:
@@ -134,6 +148,7 @@ class File:
                 # Leave the temp path in place so a later cleanup attempt can retry.
                 return
             self._temp_path = None
+        self._prepared_upload_path = None
 
     def save(self, path: str) -> str:
         """Download the remote file to a local path.
@@ -169,31 +184,27 @@ class File:
             return rel_path.replace("\\", "/")
         return os.path.basename(self.path).replace("\\", "/")
 
-    def _remote_path(self) -> str | None:
-        """Resolve the artifact remote path from the stamped placement.
-
-        Static values upload under the experiment key; series elements under
-        ``{key}/{index}``. Without a stamped key (standalone ``log()``), the
-        path is derived from the local file path at write time.
-        """
-        if self._log_key is None:
+    def _remote_path(self, placement: WritePlacement | None) -> str | None:
+        """Resolve an unambiguous artifact storage path."""
+        if placement is None:
             return None
-        if self._series_index is None:
-            return self._log_key
-        return f"{self._log_key}/{self._series_index}"
+        if placement.index is None:
+            return static_storage_name(placement.key)
+        return series_storage_name(placement.key, placement.index)
 
     def _bind_remote(
         self,
         session: "ExperimentSession",
         *,
         remote_path: str,
+        display_name: str | None = None,
         cloud_account: str | None = None,
     ) -> None:
         """Bind remote artifact download behavior to this file wrapper."""
         api = session.artifacts_api
         teamspace = session.teamspace
         full_remote_path = f"experiments/{session.experiment_name}/{remote_path}"
-        self.name = remote_path
+        self.name = display_name if display_name is not None else remote_path
         self._download_fn = lambda path: api.download_file(
             teamspace=teamspace,
             remote_path=full_remote_path,
@@ -201,7 +212,12 @@ class File:
             cloud_account=cloud_account,
         )
 
-    def _upload_artifact(self, session: "ExperimentSession", remote_path: str | None = None) -> str:
+    def _upload_artifact(
+        self,
+        session: "ExperimentSession",
+        remote_path: str | None = None,
+        display_name: str | None = None,
+    ) -> str:
         """Upload this file as an experiment artifact and bind remote access."""
         try:
             upload_path = self._get_upload_path()
@@ -219,19 +235,43 @@ class File:
         self._bind_remote(
             session,
             remote_path=display_path,
+            display_name=display_name,
             cloud_account=cloud_account if isinstance(cloud_account, str) else None,
         )
         return display_path
 
-    def log(self, session: "ExperimentSession") -> None:
+    def log(self, session: "ExperimentSession", placement: WritePlacement | None = None) -> None:
         """Upload this file as an experiment artifact now, in the caller's thread."""
-        self._upload_artifact(session, remote_path=self._remote_path())
+        self._upload_artifact(
+            session,
+            remote_path=self._remote_path(placement),
+            display_name=placement.key if placement is not None else None,
+        )
         session.stats.artifacts_logged += 1
 
-    def enqueue(self, session: "ExperimentSession") -> None:
-        """Hand this file to the background pipeline for asynchronous upload."""
-        _enqueue_write(self, session)
+    def enqueue(self, session: "ExperimentSession", placement: WritePlacement | None = None) -> None:
+        """Snapshot this wrapper and submit an immutable background operation."""
+        snapshot = copy.copy(self)
+        snapshot._read_barrier = None
+        snapshot._download_fn = None
+        snapshot._prepared_upload_path = snapshot._get_upload_path()
+
+        def _write(active_session: "ExperimentSession") -> None:
+            snapshot.log(active_session, placement)
+            self._adopt_remote_state(snapshot)
+
+        try:
+            _enqueue_write(_write, session)
+        except Exception:
+            snapshot._cleanup()
+            raise
         self._read_barrier = session.flush
+
+    def _adopt_remote_state(self, completed: "File") -> None:
+        """Copy completed remote binding without copying queued placement state."""
+        self.name = completed.name
+        self._download_fn = completed._download_fn
+        self._read_barrier = None
 
     @staticmethod
     def _restore_all(session: "ExperimentSession", existing_key_types: Mapping[str, str]) -> RestoredFiles:
@@ -245,19 +285,36 @@ class File:
         claimed: dict[str, str] = dict(existing_key_types)
 
         artifacts = getattr(session.metrics_store, "artifacts", None) or []
-        with contextlib.suppress(AttributeError):
-            listed = session.artifacts_api.list_experiment_artifacts(session.teamspace.id, session.metrics_store.id)
-            if listed is not None:
-                artifacts = listed
+        listed = session.artifacts_api.list_experiment_artifacts(session.teamspace.id, session.metrics_store.id)
+        if listed is not None:
+            artifacts = listed
 
         series_entries: dict[str, list[tuple[int, File]]] = {}
         for artifact in artifacts:
-            name = artifact.path if hasattr(artifact, "path") else str(artifact)
-            wrapped = File(name)
-            wrapped.name = name
-            wrapped._download_fn = _artifact_download_fn(session, name)
+            storage_name = artifact.path if hasattr(artifact, "path") else str(artifact)
+            explicit = parse_storage_name(storage_name)
+            display_name = explicit[1] if explicit is not None else storage_name
+            wrapped = File(display_name)
+            wrapped.name = display_name
+            wrapped._download_fn = _artifact_download_fn(session, storage_name)
 
-            match = SERIES_NAME_RE.match(name)
+            if explicit is not None:
+                kind, key, index = explicit
+                if kind == "series":
+                    if index is None:
+                        continue
+                    if key in claimed and claimed[key] != "file_series":
+                        continue
+                    claimed[key] = "file_series"
+                    series_entries.setdefault(key, []).append((index, wrapped))
+                elif key not in claimed:
+                    claimed[key] = "static_file"
+                    restored.statics[key] = wrapped
+                continue
+
+            # Compatibility for artifacts written before explicit placement
+            # names were introduced. These names remain inherently ambiguous.
+            match = SERIES_NAME_RE.match(storage_name)
             if match:
                 key = match.group("key")
                 index = int(match.group("index"))
@@ -267,10 +324,10 @@ class File:
                 series_entries.setdefault(key, []).append((index, wrapped))
                 continue
 
-            if name in claimed:
+            if storage_name in claimed:
                 continue
-            claimed[name] = "static_file"
-            restored.statics[name] = wrapped
+            claimed[storage_name] = "static_file"
+            restored.statics[storage_name] = wrapped
 
         for key, file_entries in series_entries.items():
             restored.series[key] = [value for _, value in sorted(file_entries, key=lambda item: item[0])]
@@ -288,51 +345,63 @@ class File:
         restored = RestoredFiles(statics={}, series={})
         claimed: dict[str, str] = dict(existing_key_types)
 
-        with contextlib.suppress(AttributeError):
-            media_items = session.media_api.list_media(session.teamspace.id, session.metrics_store.id) or []
+        media_items = session.media_api.list_media(session.teamspace.id, session.metrics_store.id) or []
 
-            series_entries: dict[str, list[tuple[float, File]]] = {}
-            direct_entries: dict[str, list[tuple[object, int, File]]] = {}
-            for position, media in enumerate(media_items):
-                name = media.name or media.storage_path or media.id
-                storage_path = media.storage_path or name
-                wrapped = _wrap_media_file(name, media.media_type)
-                wrapped.name = name
-                wrapped._download_fn = _media_download_fn(session, storage_path, media.cluster_id)
+        series_entries: dict[str, list[tuple[float, File]]] = {}
+        direct_entries: dict[str, list[tuple[object, int, File]]] = {}
+        for position, media in enumerate(media_items):
+            wire_name = media.name or media.storage_path or media.id
+            storage_path = media.storage_path or wire_name
+            explicit = parse_storage_name(wire_name)
+            display_name = explicit[1] if explicit is not None else wire_name
+            wrapped = _wrap_media_file(display_name, media.media_type)
+            wrapped.name = display_name
+            wrapped._download_fn = _media_download_fn(session, storage_path, media.cluster_id)
 
-                match = SERIES_NAME_RE.match(name)
-                if match:
-                    key = match.group("key")
-                    index = int(match.group("index"))
-                    if key in claimed and claimed[key] != "file_series":
-                        continue
-                    claimed[key] = "file_series"
-                    series_entries.setdefault(key, []).append((index, wrapped))
+            if explicit is not None:
+                kind, key, index = explicit
+                if kind == "static":
+                    if key not in claimed:
+                        claimed[key] = "static_file"
+                        restored.statics[key] = wrapped
                     continue
-
-                direct_entries.setdefault(name, []).append((getattr(media, "step", None), position, wrapped))
-
-            for name, media_entries in direct_entries.items():
-                if name in claimed:
+                if key in claimed and claimed[key] != "file_series":
                     continue
-                if len(media_entries) == 1:
-                    claimed[name] = "static_file"
-                    restored.statics[name] = media_entries[0][2]
+                claimed[key] = "file_series"
+                sort_index = _media_sort_index(getattr(media, "step", None), position)
+                if index is not None:
+                    sort_index = float(index)
+                series_entries.setdefault(key, []).append((sort_index, wrapped))
+                continue
+
+            # Compatibility for indexed media names from older clients.
+            match = SERIES_NAME_RE.match(wire_name)
+            if match:
+                key = match.group("key")
+                index = int(match.group("index"))
+                if key in claimed and claimed[key] != "file_series":
                     continue
+                claimed[key] = "file_series"
+                series_entries.setdefault(key, []).append((index, wrapped))
+                continue
 
-                claimed[name] = "file_series"
-                series_values = series_entries.setdefault(name, [])
-                for step, position, wrapped in media_entries:
-                    sort_index = float(position)
-                    if isinstance(step, str | int | float):
-                        with contextlib.suppress(ValueError):
-                            numeric_step = float(step)
-                            if math.isfinite(numeric_step):
-                                sort_index = numeric_step
-                    series_values.append((sort_index, wrapped))
+            direct_entries.setdefault(wire_name, []).append((getattr(media, "step", None), position, wrapped))
 
-            for key, file_entries in series_entries.items():
-                restored.series[key] = [value for _, value in sorted(file_entries, key=lambda item: item[0])]
+        for name, media_entries in direct_entries.items():
+            if name in claimed:
+                continue
+            if len(media_entries) == 1:
+                claimed[name] = "static_file"
+                restored.statics[name] = media_entries[0][2]
+                continue
+
+            claimed[name] = "file_series"
+            series_values = series_entries.setdefault(name, [])
+            for step, position, wrapped in media_entries:
+                series_values.append((_media_sort_index(step, position), wrapped))
+
+        for key, file_entries in series_entries.items():
+            restored.series[key] = [value for _, value in sorted(file_entries, key=lambda item: item[0])]
         return restored
 
     @property

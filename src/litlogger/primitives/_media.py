@@ -17,8 +17,9 @@ from typing import TYPE_CHECKING
 
 from typing_extensions import override
 
-from litlogger.primitives._utils import _to_v1_media_type
+from litlogger.primitives._utils import _to_v1_media_type, series_storage_name, static_storage_name
 from litlogger.primitives.file import File
+from litlogger.primitives.primitive import WritePlacement
 
 if TYPE_CHECKING:
     from litlogger.session import ExperimentSession
@@ -28,13 +29,20 @@ class _MediaFile(File):
     """Base for rendered media (images, videos, text) uploaded through the media API."""
 
     @override
-    def log(self, session: "ExperimentSession") -> None:
+    def log(self, session: "ExperimentSession", placement: WritePlacement | None = None) -> None:
         """Upload this media now, in the caller's thread.
 
         Media uploads share one remote name per key: series elements are
         differentiated by their step, not by an indexed path.
         """
-        name = self._log_key if self._log_key is not None else (self.name or self._artifact_display_path(None))
+        if placement is None:
+            name = self.name or self._artifact_display_path(None)
+            display_name = name
+            x = None
+        else:
+            name = series_storage_name(placement.key) if placement.is_series else static_storage_name(placement.key)
+            display_name = placement.key
+            x = placement.x
         try:
             upload_path = self._get_upload_path()
             session.media_api.upload_media(
@@ -43,9 +51,9 @@ class _MediaFile(File):
                 file_path=upload_path,
                 name=name,
                 media_type=_to_v1_media_type(self._media_type),
-                step=self._series_step,
+                step=x,
             )
         finally:
             self._cleanup()
-        self.name = name
+        self.name = display_name
         session.stats.media_logged += 1

@@ -20,13 +20,24 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import TYPE_CHECKING
 
+from litlogger.primitives.primitive import MetricWrite, WritePlacement
 from litlogger.types import Metrics, MetricValue
 
 if TYPE_CHECKING:
     from litlogger.session import ExperimentSession
 
 
-@dataclass
+def resolve_x(*, x: float | None = None, step: float | None = None) -> float | None:
+    """Normalize the preferred and legacy coordinate arguments."""
+    if x is not None and step is not None:
+        raise ValueError("x and step are mutually exclusive.")
+    coordinate = x if x is not None else step
+    if coordinate is not None and not math.isfinite(coordinate):
+        raise ValueError("x must be finite.")
+    return coordinate
+
+
+@dataclass(frozen=True, init=False)
 class Metric:
     """A single metric observation for a named series.
 
@@ -40,52 +51,53 @@ class Metric:
 
     key: str
     y: float
-    step: float | None = None
-    x: float | None = None
+    x: float | None
 
-    def __post_init__(self) -> None:
-        """Reject ambiguous coordinates before the metric can be queued."""
-        if self.x is not None and self.step is not None:
-            raise ValueError("x and step are mutually exclusive.")
-        coordinate = self.x if self.x is not None else self.step
-        if coordinate is not None and not math.isfinite(coordinate):
-            raise ValueError("x must be finite.")
+    def __init__(
+        self,
+        key: str,
+        y: float,
+        step: float | None = None,
+        x: float | None = None,
+    ) -> None:
+        object.__setattr__(self, "key", key)
+        object.__setattr__(self, "y", y)
+        object.__setattr__(self, "x", resolve_x(x=x, step=step))
 
-    def _x(self, store_step: bool) -> float | None:
-        """Resolve the coordinate that is serialized through the legacy step field."""
-        if not store_step:
-            return None
-        return self.x if self.x is not None else self.step
+    @property
+    def step(self) -> float | None:
+        """Legacy alias for the normalized x-coordinate."""
+        return self.x
 
-    def log(self, session: ExperimentSession) -> None:
+    def log(self, session: ExperimentSession, placement: WritePlacement | None = None) -> None:
         """Append this observation synchronously, bypassing the background batcher.
 
         Auto-stepping mirrors the background worker: a missing step receives
         the next value from the shared per-series sequence.
         """
+        key = placement.key if placement is not None else self.key
+        supplied_x = placement.x if placement is not None else self.x
         created_at = datetime.now() if session.store_created_at else None
-        x = self._x(session.store_step)
-        with session.last_steps_lock:
-            if x is None:
-                x = session.last_steps.get(self.key, -1) + 1
-            session.last_steps[self.key] = x
+        x = session.resolve_x(key, supplied_x)
         session.metrics_api.append_experiment_metrics(
             teamspace_id=session.teamspace.id,
             metrics_store_id=session.metrics_store.id,
-            metrics=[Metrics(name=self.key, values=[MetricValue(value=self.y, created_at=created_at, step=x)])],
+            metrics=[
+                Metrics(
+                    name=key,
+                    values=[MetricValue(value=self.y, created_at=created_at, x=x if session.store_step else None)],
+                )
+            ],
         )
-        session.stats.record_metric(self.key, self.y)
+        session.stats.record_metric(key, self.y)
 
-    def enqueue(self, session: ExperimentSession) -> None:
+    def enqueue(self, session: ExperimentSession, placement: WritePlacement | None = None) -> None:
         """Queue this observation for the background batcher (the default write path)."""
-        session.raise_if_background_failed()
-
+        key = placement.key if placement is not None else self.key
+        x = placement.x if placement is not None else self.x
         created_at = datetime.now() if session.store_created_at else None
-        x = self._x(session.store_step)
-        mv = MetricValue(value=self.y, created_at=created_at, step=x)
-        batch: dict[str, Metrics] = {self.key: Metrics(name=self.key, values=[mv])}
-        session.queue.put(batch)
-        session.stats.record_metric(self.key, self.y)
+        session.submit(MetricWrite(key=key, y=self.y, x=x, created_at=created_at))
+        session.stats.record_metric(key, self.y)
 
     @staticmethod
     def _restore_values(session: ExperimentSession) -> dict[str, list[float]]:

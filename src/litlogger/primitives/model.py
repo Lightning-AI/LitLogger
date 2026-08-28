@@ -22,6 +22,7 @@ from typing_extensions import override
 from litlogger.models import download_model, load_model, save_model, upload_model
 from litlogger.primitives._utils import model_version_sort_key, sanitize_model_key
 from litlogger.primitives.file import File
+from litlogger.primitives.primitive import WritePlacement
 from litlogger.types import MediaType
 
 if TYPE_CHECKING:
@@ -205,26 +206,34 @@ class Model(File):
         return [cls._from_version(session, key, model_key, version_info) for version_info in complete_versions]
 
     @override
-    def log(self, session: "ExperimentSession") -> None:
+    def log(self, session: "ExperimentSession", placement: WritePlacement | None = None) -> None:
         """Upload this model to the registry now, in the caller's thread.
 
         Series elements without an explicit version are auto-versioned from
         their position (``v{index + 1}``).
         """
-        if self._series_index is not None and not self._version_provided:
-            self.version = f"v{self._series_index + 1}"
+        if placement is not None and placement.index is not None and not self._version_provided:
+            self.version = f"v{placement.index + 1}"
 
-        key = self._log_key
+        key = placement.key if placement is not None else None
         cloud_account = getattr(session.metrics_store, "cluster_id", None)
         model_name = self._log_model(
             experiment_name=session.experiment_name,
             teamspace=session.teamspace,
             key=sanitize_model_key(key) if key is not None else None,
-            experiment=session.experiment,
+            experiment=session.experiment_link,
             cloud_account=cloud_account if isinstance(cloud_account, str) else None,
         )
         session.stats.models_logged += 1
         self._bind_remote_model(key=key if key is not None else model_name, model_name=model_name)
+
+    def _adopt_remote_state(self, completed: File) -> None:
+        """Copy completed file and model bindings from the queued snapshot."""
+        super()._adopt_remote_state(completed)
+        if isinstance(completed, Model):
+            self.version = completed.version
+            self._model_name = completed._model_name
+            self._load_fn = completed._load_fn
 
     def load(self, staging_dir: str | None = None) -> Any:
         """Load a remote model object via the registry helpers."""

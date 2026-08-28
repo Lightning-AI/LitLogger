@@ -42,20 +42,43 @@ class MediaType(str, Enum):
     VIDEO = "video"
 
 
-@dataclass
+@dataclass(init=False)
 class MetricValue:
-    """A single metric value with optional step and timestamp.
+    """A single metric value with an optional x-coordinate and timestamp.
 
     Attributes:
         value: The numeric metric value.
-        step: Optional numeric x-coordinate, serialized through the backend's
-            legacy step field.
+        x: Optional numeric x-coordinate. The API serializer maps it to the
+            backend's legacy ``step`` field.
         created_at: Optional datetime when this value was created.
     """
 
     value: float
-    step: float | None = None
-    created_at: datetime | None = None
+    x: float | None
+    created_at: datetime | None
+
+    def __init__(
+        self,
+        value: float,
+        step: float | None = None,
+        created_at: datetime | None = None,
+        *,
+        x: float | None = None,
+    ) -> None:
+        if x is not None and step is not None:
+            raise ValueError("x and step are mutually exclusive.")
+        self.value = value
+        self.x = x if x is not None else step
+        self.created_at = created_at
+
+    @property
+    def step(self) -> float | None:
+        """Legacy alias for the x-coordinate."""
+        return self.x
+
+    @step.setter
+    def step(self, value: float | None) -> None:
+        self.x = value
 
 
 @dataclass

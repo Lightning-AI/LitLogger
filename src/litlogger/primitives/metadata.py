@@ -18,7 +18,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from litlogger.primitives.primitive import _enqueue_write
+from litlogger.primitives.primitive import WritePlacement, _enqueue_write
 from litlogger.types import PhaseType
 
 if TYPE_CHECKING:
@@ -37,10 +37,11 @@ class Metadata:
     key: str
     value: str
 
-    def log(self, session: ExperimentSession) -> None:
+    def log(self, session: ExperimentSession, placement: WritePlacement | None = None) -> None:
         """Write this entry by read-modify-writing the experiment's full code-tag set."""
+        key = placement.key if placement is not None else self.key
         current_tags = self._current_tags(session)
-        current_tags[self.key] = self.value
+        current_tags[key] = self.value
         session.metrics_api.update_experiment_metrics(
             teamspace_id=session.teamspace.id,
             metrics_store_id=session.metrics_store.id,
@@ -48,9 +49,10 @@ class Metadata:
             metadata=current_tags,
         )
 
-    def enqueue(self, session: ExperimentSession) -> None:
+    def enqueue(self, session: ExperimentSession, placement: WritePlacement | None = None) -> None:
         """Queue this entry; the background worker performs the read-modify-write."""
-        _enqueue_write(self, session)
+        snapshot = Metadata(self.key, self.value)
+        _enqueue_write(lambda active_session: snapshot.log(active_session, placement), session)
 
     @staticmethod
     def _current_tags(session: ExperimentSession) -> dict[str, str]:

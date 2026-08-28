@@ -27,7 +27,7 @@ class TestSeriesAppend:
         assert series[0] == 0.5
         assert series._type == "metric"
         exp._register_key_type.assert_called_once_with("loss", "metric")
-        exp._log_metric_value.assert_called_once_with("loss", 0.5, step=None, x=None)
+        exp._log_metric_value.assert_called_once_with("loss", 0.5, x=None)
 
     def test_append_int(self):
         """Test appending an int to a series (converted to float)."""
@@ -60,7 +60,7 @@ class TestSeriesAppend:
         series = Series(exp, "loss")
         series.append(0.5, step=10)
 
-        exp._log_metric_value.assert_called_once_with("loss", 0.5, step=10, x=None)
+        exp._log_metric_value.assert_called_once_with("loss", 0.5, x=10)
 
     def test_append_x_and_step_are_mutually_exclusive(self):
         exp = MagicMock(spec=Experiment)
@@ -188,9 +188,9 @@ class TestSeriesExtend:
 
         calls = exp._log_metric_value.call_args_list
         assert len(calls) == 3
-        assert calls[0] == (("loss", 0.5), {"step": 100, "x": None})
-        assert calls[1] == (("loss", 0.3), {"step": 101, "x": None})
-        assert calls[2] == (("loss", 0.1), {"step": 102, "x": None})
+        assert calls[0] == (("loss", 0.5), {"x": 100})
+        assert calls[1] == (("loss", 0.3), {"x": 101})
+        assert calls[2] == (("loss", 0.1), {"x": 102})
 
     def test_extend_without_start_step(self):
         """Test extending without start_step passes step=None."""
@@ -200,8 +200,8 @@ class TestSeriesExtend:
         series.extend([1.0, 2.0])
 
         calls = exp._log_metric_value.call_args_list
-        assert calls[0] == (("loss", 1.0), {"step": None, "x": None})
-        assert calls[1] == (("loss", 2.0), {"step": None, "x": None})
+        assert calls[0] == (("loss", 1.0), {"x": None})
+        assert calls[1] == (("loss", 2.0), {"x": None})
 
     def test_extend_start_x_and_start_step_are_mutually_exclusive(self):
         exp = MagicMock(spec=Experiment)

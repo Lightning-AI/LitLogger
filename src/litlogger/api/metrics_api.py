@@ -46,8 +46,8 @@ def _to_v1_metric_value(value: MetricValue) -> V1MetricValue:
 
     # Build kwargs, excluding None values that the API might not accept
     kwargs: dict[str, float | int | str] = {"value": value.value}
-    if value.step is not None:
-        kwargs["step"] = value.step
+    if value.x is not None:
+        kwargs["step"] = value.x
     if created_at_str is not None:
         kwargs["created_at"] = created_at_str
 
@@ -213,7 +213,7 @@ class MetricsApi:
         self,
         teamspace_id: str,
         metrics_store_id: str,
-        metrics: list[Metrics],
+        metrics: list[Metrics | V1Metrics],
     ) -> None:
         """Append metrics to an existing experiment metrics store.
 
@@ -223,7 +223,7 @@ class MetricsApi:
             metrics: List of metrics to append.
         """
         # Convert user-facing metrics to V1 metrics
-        v1_metrics = [_to_v1_metrics(m) for m in metrics]
+        v1_metrics = [metric if isinstance(metric, V1Metrics) else _to_v1_metrics(metric) for metric in metrics]
 
         self.client.lit_logger_service_append_logger_metrics(
             project_id=teamspace_id,

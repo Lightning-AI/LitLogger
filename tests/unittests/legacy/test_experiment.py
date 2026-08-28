@@ -1,7 +1,7 @@
 # Import the module from sys.modules to avoid the shadowing issue
 # (litlogger.experiment variable shadows the module)
 import sys
-from multiprocessing import Event, Queue
+from queue import Queue
 from time import sleep
 from unittest.mock import MagicMock, patch
 
@@ -15,9 +15,9 @@ pytestmark = pytest.mark.filterwarnings("ignore::DeprecationWarning")
 import litlogger  # noqa: F401
 from litlogger.background import _BackgroundThread
 from litlogger.experiment import Experiment
-from litlogger.primitives import _QueuedWrite
+from litlogger.primitives import MetricWrite, PrimitiveWrite
 from litlogger.session import ExperimentSession
-from litlogger.types import MediaType, Metrics, MetricValue
+from litlogger.types import MediaType
 
 experiment_module = sys.modules["litlogger.experiment"]
 legacy_experiment_module = sys.modules["litlogger.experiment_legacy"]
@@ -31,18 +31,20 @@ def _session_of(exp):
         return value if value is not None else MagicMock()
 
     metrics_api = part("_metrics_api")
-    return ExperimentSession(
-        client=metrics_api.client,
+    return ExperimentSession._from_components(
+        name=exp.name,
         metrics_api=metrics_api,
         media_api=part("_media_api"),
         artifacts_api=part("_artifacts_api"),
         teamspace=part("_teamspace"),
+        metrics_store=part("_metrics_store"),
         experiment=exp,
-        queue=part("_metrics_queue"),
+        queue_=part("_metrics_queue"),
         stats=part("_stats"),
+        printer=part("_printer"),
         store_step=bool(getattr(exp, "store_step", True)),
         store_created_at=bool(getattr(exp, "store_created_at", False) is True),
-        last_steps=getattr(exp, "_resumed_steps", None) or {},
+        last_x=getattr(exp, "_resumed_steps", None) or {},
         background=getattr(exp, "_manager", None),
     )
 
@@ -83,67 +85,49 @@ class BackgroundThreadFixture(_BackgroundThread):
 
 def test_experiment_sender_queue():
     """Test that the background thread processes metrics from the queue correctly."""
-    metrics_queue = Queue()
-    is_ready_event = Event()
-    stop_event = Event()
-    done_event = Event()
-
-    # Create a mock MetricsApi
     mock_metrics_api = MagicMock()
-
-    sender = BackgroundThreadFixture(
-        teamspace_id="project_id",
-        metrics_store_id="id",
+    mock_metrics_api.client = MagicMock()
+    session = ExperimentSession._from_components(
+        name="exp",
         metrics_api=mock_metrics_api,
-        metrics_queue=metrics_queue,
-        is_ready_event=is_ready_event,
-        stop_event=stop_event,
-        done_event=done_event,
+        media_api=MagicMock(),
+        artifacts_api=MagicMock(),
+        teamspace=MagicMock(id="project_id"),
+        metrics_store=MagicMock(id="id", name="exp"),
+        queue_=Queue(),
+        stats=MagicMock(),
+        printer=MagicMock(),
+        background=MagicMock(exception=None),
         store_step=False,
-        store_created_at=False,
     )
+    sender = BackgroundThreadFixture(session=session)
+    session.background = sender
     sender.start()
 
     for _ in range(10):
-        values = [MetricValue(value=i) for i in range(10)]
-        metrics_queue.put({"loss": Metrics(name="loss", values=values)})
+        for i in range(10):
+            session.submit(MetricWrite("loss", i, None, None))
         sleep(0.2)
 
-    stop_event.set()
+    session.stop_event.set()
 
-    while not done_event.is_set():
+    while not session.done_event.is_set():
         sleep(0.2)
 
 
 def test_finalize_is_idempotent():
     """Test that finalize() can be called multiple times safely."""
-    # Create a minimal mock experiment to test idempotency
     exp = MagicMock()
     exp._finalized = False
-    exp._done_event = MagicMock()
-    exp._done_event.is_set.return_value = True
-    exp._stop_event = MagicMock()
-    exp._metrics = [[]]
+    exp._session = MagicMock()
     exp.save_logs = False
 
-    # Copy the actual finalize implementation
-    def finalize(status=None):
-        if exp._finalized:
-            return
-        exp._finalized = True
-        exp._stop_event.set()
+    Experiment.finalize(exp, print_summary=False)
+    Experiment.finalize(exp, print_summary=False)
+    Experiment.finalize(exp, print_summary=False)
 
-    exp.finalize = finalize
-
-    # Call finalize() three times - should not raise errors
-    exp.finalize()
-    exp.finalize()
-    exp.finalize()
-
-    # Verify finalized flag is set
     assert exp._finalized is True
-    # Verify stop event was only set once
-    assert exp._stop_event.set.call_count == 1
+    exp._session.finalize.assert_called_once_with()
 
 
 def test_finalize_with_status():
@@ -159,8 +143,8 @@ def test_finalize_with_status():
 def test_failed_finalize_remains_retryable():
     exp = MagicMock()
     exp._finalized = False
-    exp._done_event.is_set.return_value = True
-    exp._manager.exception = RuntimeError("upload failed")
+    exp._session = MagicMock()
+    exp._session.finalize.side_effect = RuntimeError("upload failed")
     exp.save_logs = False
 
     with pytest.raises(RuntimeError, match="upload failed"):
@@ -168,7 +152,7 @@ def test_failed_finalize_remains_retryable():
 
     assert exp._finalized is False
 
-    exp._manager.exception = None
+    exp._session.finalize.side_effect = None
     Experiment.finalize(exp, print_summary=False)
 
     assert exp._finalized is True
@@ -341,7 +325,7 @@ def _make_metric_exp(**overrides):
     exp._metrics_queue = MagicMock()
     # The dict API queues writes; execute them inline the way the worker would.
     exp._metrics_queue.put.side_effect = lambda item: (
-        item.primitive.log(exp._session) if isinstance(item, _QueuedWrite) else None
+        item.execute(exp._session) if isinstance(item, PrimitiveWrite) else None
     )
     exp._stats = MagicMock()
     # Wire dunder methods on the *type* so MagicMock dispatches them
@@ -351,8 +335,8 @@ def _make_metric_exp(**overrides):
     exp.update = lambda data: Experiment.update(exp, data)
     exp._ensure_series = lambda key: Experiment._ensure_series(exp, key)
     exp._register_key_type = lambda key, kt: Experiment._register_key_type(exp, key, kt)
-    exp._log_metric_value = lambda key, y, step=None, x=None: Experiment._log_metric_value(exp, key, y, step=step, x=x)
-    exp._coerce_static_value = lambda key, value: Experiment._coerce_static_value(exp, key, value)
+    exp._log_metric_value = lambda key, y, x=None: Experiment._log_metric_value(exp, key, y, x=x)
+    exp._validate_file_primitive = lambda value: Experiment._validate_file_primitive(exp, value)
     # Live session view so tests can reseed infrastructure after the factory.
     type(exp)._session = property(lambda self: _session_of(self))
     # Apply overrides
@@ -374,9 +358,8 @@ class TestExperimentLogMetrics:
 
         # Verify metrics were pushed to queue via _log_metric_value
         assert exp._metrics_queue.put.call_count == 2
-        # Collect all batches pushed
-        all_batches = [c[0][0] for c in exp._metrics_queue.put.call_args_list]
-        keys_logged = {k for batch in all_batches for k in batch}
+        commands = [call.args[0] for call in exp._metrics_queue.put.call_args_list]
+        keys_logged = {command.key for command in commands}
         assert keys_logged == {"loss", "accuracy"}
 
         # Verify values from series
@@ -386,9 +369,9 @@ class TestExperimentLogMetrics:
         assert exp._series["accuracy"][0] == 0.9
 
         # Verify step was passed through to queue
-        loss_batch = next(b for b in all_batches if "loss" in b)
-        assert loss_batch["loss"].values[0].step == 1
-        assert loss_batch["loss"].values[0].value == 0.5
+        loss_command = next(command for command in commands if command.key == "loss")
+        assert loss_command.x == 1
+        assert loss_command.y == 0.5
 
     def test_log_metrics_without_step(self):
         """Test metrics logging without step when store_step=False."""
@@ -398,9 +381,10 @@ class TestExperimentLogMetrics:
 
         Experiment.log_metrics(exp, {"loss": 0.5}, step=10)
 
-        # Verify step is None because store_step=False
-        batch = exp._metrics_queue.put.call_args[0][0]
-        assert batch["loss"].values[0].step is None
+        # The write command retains x so auto-increment remains correct; the
+        # background worker controls whether the legacy backend field is stored.
+        command = exp._metrics_queue.put.call_args[0][0]
+        assert command.x == 10
 
     def test_log_metrics_with_created_at(self):
         """Test metrics logging with store_created_at=True."""
@@ -411,8 +395,8 @@ class TestExperimentLogMetrics:
         Experiment.log_metrics(exp, {"loss": 0.5}, step=1)
 
         # Verify created_at is set
-        batch = exp._metrics_queue.put.call_args[0][0]
-        assert batch["loss"].values[0].created_at is not None
+        command = exp._metrics_queue.put.call_args[0][0]
+        assert command.created_at is not None
 
     def test_log_metrics_raises_on_background_exception(self):
         """Test that log_metrics raises if background thread has exception."""
@@ -915,11 +899,11 @@ class TestExperimentLogMetricsKwargs:
         assert exp._series["accuracy"][0] == 0.9
 
         # Verify values were pushed to queue
-        all_batches = [c[0][0] for c in exp._metrics_queue.put.call_args_list]
-        loss_batch = next(b for b in all_batches if "loss" in b)
-        acc_batch = next(b for b in all_batches if "accuracy" in b)
-        assert loss_batch["loss"].values[0].value == 0.5
-        assert acc_batch["accuracy"].values[0].value == 0.9
+        commands = [call.args[0] for call in exp._metrics_queue.put.call_args_list]
+        loss_command = next(command for command in commands if command.key == "loss")
+        accuracy_command = next(command for command in commands if command.key == "accuracy")
+        assert loss_command.y == 0.5
+        assert accuracy_command.y == 0.9
 
     def test_log_metrics_kwargs_override_dict(self):
         """Test that kwargs override dict values for same key."""
@@ -931,8 +915,8 @@ class TestExperimentLogMetricsKwargs:
 
         # kwargs override dict, so only 0.3 should be logged
         assert exp._series["loss"][0] == 0.3
-        batch = exp._metrics_queue.put.call_args[0][0]
-        assert batch["loss"].values[0].value == 0.3
+        command = exp._metrics_queue.put.call_args[0][0]
+        assert command.y == 0.3
 
 
 class TestExperimentStatsTracking:
@@ -1020,6 +1004,8 @@ class TestExperimentPrintUrl:
         exp._teamspace = MagicMock()
         exp._teamspace.name = "my-teamspace"
         exp._url = "https://lightning.ai/my-experiment"
+        exp._session.teamspace.name = "my-teamspace"
+        exp._session.url = "https://lightning.ai/my-experiment"
 
         # Set up metadata property to return dict
         tag = MagicMock()
@@ -1052,8 +1038,8 @@ class TestExperimentLogMetricsBatchCreatedAt:
         metrics = {"loss": [{"step": 0, "value": 1.0}]}
         Experiment.log_metrics_batch(exp, metrics)
 
-        batch = exp._metrics_queue.put.call_args[0][0]
-        assert batch["loss"].values[0].created_at is not None
+        command = exp._metrics_queue.put.call_args[0][0]
+        assert command.created_at is not None
 
     def test_log_metrics_batch_without_store_created_at(self):
         """Test that log_metrics_batch does not set created_at when store_created_at=False."""
@@ -1064,8 +1050,8 @@ class TestExperimentLogMetricsBatchCreatedAt:
         metrics = {"loss": [{"step": 0, "value": 1.0}]}
         Experiment.log_metrics_batch(exp, metrics)
 
-        batch = exp._metrics_queue.put.call_args[0][0]
-        assert batch["loss"].values[0].created_at is None
+        command = exp._metrics_queue.put.call_args[0][0]
+        assert command.created_at is None
 
     def test_log_metrics_batch_without_step_key(self):
         """Test that log_metrics_batch handles missing step key (step=None in _log_metric_value)."""
@@ -1076,5 +1062,5 @@ class TestExperimentLogMetricsBatchCreatedAt:
         metrics = {"loss": [{"value": 1.0}]}
         Experiment.log_metrics_batch(exp, metrics)
 
-        batch = exp._metrics_queue.put.call_args[0][0]
-        assert batch["loss"].values[0].step is None
+        command = exp._metrics_queue.put.call_args[0][0]
+        assert command.x is None

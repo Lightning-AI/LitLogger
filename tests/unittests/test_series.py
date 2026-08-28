@@ -7,8 +7,9 @@
 from unittest.mock import MagicMock
 
 import pytest
+
 from litlogger.experiment import Experiment
-from litlogger.media import File
+from litlogger.primitives import File
 from litlogger.series import Series
 
 
@@ -26,7 +27,7 @@ class TestSeriesAppend:
         assert series[0] == 0.5
         assert series._type == "metric"
         exp._register_key_type.assert_called_once_with("loss", "metric")
-        exp._log_metric_value.assert_called_once_with("loss", 0.5, step=None)
+        exp._log_metric_value.assert_called_once_with("loss", 0.5, x=None)
 
     def test_append_int(self):
         """Test appending an int to a series (converted to float)."""
@@ -59,7 +60,17 @@ class TestSeriesAppend:
         series = Series(exp, "loss")
         series.append(0.5, step=10)
 
-        exp._log_metric_value.assert_called_once_with("loss", 0.5, step=10)
+        exp._log_metric_value.assert_called_once_with("loss", 0.5, x=10)
+
+    def test_append_x_and_step_are_mutually_exclusive(self):
+        exp = MagicMock(spec=Experiment)
+        exp._key_types = {}
+        series = Series(exp, "loss")
+
+        with pytest.raises(ValueError, match="mutually exclusive"):
+            series.append(y=0.5, step=10, x=1.5)
+
+        exp._log_metric_value.assert_not_called()
 
     def test_append_file_passes_step_through(self):
         """Test that file-like series preserve the provided step."""
@@ -177,9 +188,9 @@ class TestSeriesExtend:
 
         calls = exp._log_metric_value.call_args_list
         assert len(calls) == 3
-        assert calls[0] == (("loss", 0.5), {"step": 100})
-        assert calls[1] == (("loss", 0.3), {"step": 101})
-        assert calls[2] == (("loss", 0.1), {"step": 102})
+        assert calls[0] == (("loss", 0.5), {"x": 100})
+        assert calls[1] == (("loss", 0.3), {"x": 101})
+        assert calls[2] == (("loss", 0.1), {"x": 102})
 
     def test_extend_without_start_step(self):
         """Test extending without start_step passes step=None."""
@@ -189,8 +200,18 @@ class TestSeriesExtend:
         series.extend([1.0, 2.0])
 
         calls = exp._log_metric_value.call_args_list
-        assert calls[0] == (("loss", 1.0), {"step": None})
-        assert calls[1] == (("loss", 2.0), {"step": None})
+        assert calls[0] == (("loss", 1.0), {"x": None})
+        assert calls[1] == (("loss", 2.0), {"x": None})
+
+    def test_extend_start_x_and_start_step_are_mutually_exclusive(self):
+        exp = MagicMock(spec=Experiment)
+        exp._key_types = {}
+        series = Series(exp, "loss")
+
+        with pytest.raises(ValueError, match="mutually exclusive"):
+            series.extend([0.5, 0.3], start_step=100, start_x=0.5)
+
+        exp._log_metric_value.assert_not_called()
 
     def test_extend_empty_list(self):
         """Test extending with empty list is a no-op."""

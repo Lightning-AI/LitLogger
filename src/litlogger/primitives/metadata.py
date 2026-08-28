@@ -1,0 +1,62 @@
+# Copyright The Lightning AI team.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+"""Metadata logging primitive."""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import TYPE_CHECKING
+
+from litlogger.primitives.primitive import WritePlacement, _enqueue_write
+from litlogger.types import PhaseType
+
+if TYPE_CHECKING:
+    from litlogger.session import ExperimentSession
+
+
+@dataclass
+class Metadata:
+    """A single metadata entry (code tag) on the experiment.
+
+    Args:
+        key: The metadata key.
+        value: The metadata value.
+    """
+
+    key: str
+    value: str
+
+    def log(self, session: ExperimentSession, placement: WritePlacement | None = None) -> None:
+        """Write this entry by read-modify-writing the experiment's full code-tag set."""
+        key = placement.key if placement is not None else self.key
+        current_tags = self._current_tags(session)
+        current_tags[key] = self.value
+        session.metrics_api.update_experiment_metrics(
+            teamspace_id=session.teamspace.id,
+            metrics_store_id=session.metrics_store.id,
+            phase=PhaseType.RUNNING,
+            metadata=current_tags,
+        )
+
+    def enqueue(self, session: ExperimentSession, placement: WritePlacement | None = None) -> None:
+        """Queue this entry; the background worker performs the read-modify-write."""
+        snapshot = Metadata(self.key, self.value)
+        _enqueue_write(lambda active_session: snapshot.log(active_session, placement), session)
+
+    @staticmethod
+    def _current_tags(session: ExperimentSession) -> dict[str, str]:
+        """Read the experiment's code tags from a freshly refreshed metrics stream."""
+        session.refresh_metrics_store()
+        tags = getattr(session.metrics_store, "tags", None) or []
+        return {tag.name: tag.value for tag in tags if tag.from_code}

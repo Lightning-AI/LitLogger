@@ -59,6 +59,14 @@ Experiment
    :members:
    :inherited-members:
 
+Experiment Session
+==================
+
+.. currentmodule:: litlogger.session
+
+.. autoclass:: ExperimentSession
+   :members:
+
 Media Wrappers
 ==============
 

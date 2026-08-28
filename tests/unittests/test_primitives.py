@@ -10,8 +10,19 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from lightning_sdk.lightning_cloud.openapi import V1MediaType
-from litlogger.media import File, Model, Text
-from litlogger.primitives import Metadata, Metric, Primitive, _QueuedWrite
+
+from litlogger.primitives import (
+    File,
+    Metadata,
+    Metric,
+    MetricWrite,
+    Model,
+    Primitive,
+    PrimitiveWrite,
+    Text,
+    WritePlacement,
+)
+from litlogger.primitives._utils import natural_sort_key, series_storage_name, static_storage_name
 from litlogger.session import ExperimentSession
 from litlogger.types import PhaseType
 
@@ -34,22 +45,27 @@ def make_session(**overrides):
     stats.artifacts_logged = 0
     stats.media_logged = 0
     stats.models_logged = 0
-    session = ExperimentSession(
-        client=MagicMock(),
+    session = ExperimentSession._from_components(
+        name="exp",
         metrics_api=MagicMock(),
         media_api=MagicMock(),
         artifacts_api=MagicMock(),
         teamspace=teamspace,
+        metrics_store=store,
         experiment=experiment,
-        queue=MagicMock(),
+        queue_=MagicMock(),
         stats=stats,
+        printer=MagicMock(),
         store_step=True,
         store_created_at=False,
-        last_steps={},
+        last_x={},
         background=background,
     )
     for key, value in overrides.items():
-        setattr(session, key, value)
+        if key == "last_steps":
+            session.last_x = value
+        else:
+            setattr(session, key, value)
     return session
 
 
@@ -80,37 +96,48 @@ class TestPrimitiveContract:
 class TestMetricEnqueue:
     """Metric.enqueue feeds the background batching path."""
 
-    def test_puts_single_value_batch(self):
+    def test_puts_single_metric_command(self):
         session = make_session()
 
         Metric("loss", 0.5, step=3).enqueue(session)
 
         session.queue.put.assert_called_once()
-        batch = session.queue.put.call_args[0][0]
-        assert list(batch.keys()) == ["loss"]
-        metrics = batch["loss"]
-        assert metrics.name == "loss"
-        assert len(metrics.values) == 1
-        assert metrics.values[0].value == 0.5
-        assert metrics.values[0].step == 3
-        assert metrics.values[0].created_at is None
+        command = session.queue.put.call_args[0][0]
+        assert command == MetricWrite(key="loss", y=0.5, x=3, created_at=None)
         session.stats.record_metric.assert_called_once_with("loss", 0.5)
 
-    def test_store_step_false_drops_step(self):
+    def test_x_and_step_are_mutually_exclusive(self):
+        session = make_session()
+
+        with pytest.raises(ValueError, match="mutually exclusive"):
+            Metric("loss", 0.5, step=3, x=1.5).enqueue(session)
+
+        session.queue.put.assert_not_called()
+
+    @pytest.mark.parametrize("x", [float("nan"), float("inf"), float("-inf")])
+    def test_rejects_non_finite_x(self, x):
+        session = make_session()
+
+        with pytest.raises(ValueError, match="finite"):
+            Metric("loss", 0.5, x=x).enqueue(session)
+
+        session.queue.put.assert_not_called()
+
+    def test_store_step_false_retains_x_for_worker_sequence(self):
         session = make_session(store_step=False)
 
         Metric("loss", 0.5, step=3).enqueue(session)
 
-        batch = session.queue.put.call_args[0][0]
-        assert batch["loss"].values[0].step is None
+        command = session.queue.put.call_args[0][0]
+        assert command.x == 3
 
     def test_store_created_at_sets_timestamp(self):
         session = make_session(store_created_at=True)
 
         Metric("loss", 0.5).enqueue(session)
 
-        batch = session.queue.put.call_args[0][0]
-        assert isinstance(batch["loss"].values[0].created_at, datetime)
+        command = session.queue.put.call_args[0][0]
+        assert isinstance(command.created_at, datetime)
 
     def test_raises_before_put_on_background_failure(self):
         session = make_session()
@@ -150,24 +177,26 @@ class TestMetricLog:
         assert kwargs["metrics"][0].values[0].step == 5
         assert session.last_steps["loss"] == 5
 
-    def test_explicit_step_does_not_update_sequence(self):
-        # Mirrors the background worker: only auto-assigned steps advance last_steps.
+    def test_explicit_x_updates_sequence(self):
         session = make_session(last_steps={"loss": 4})
 
-        Metric("loss", 0.5, step=100).log(session)
+        Metric("loss", 0.5, x=1.5).log(session)
 
-        assert session.last_steps["loss"] == 4
+        assert session.last_steps["loss"] == 1.5
 
-    def test_store_step_false_still_auto_steps(self):
-        # store_step=False means "ignore user-provided steps"; the worker then
-        # auto-assigns, and the synchronous path mirrors that.
+        Metric("loss", 0.4).log(session)
+
+        kwargs = session.metrics_api.append_experiment_metrics.call_args.kwargs
+        assert kwargs["metrics"][0].values[0].step == 2.5
+
+    def test_store_step_false_uses_explicit_x_for_sequence_without_persisting_it(self):
         session = make_session(store_step=False)
 
         Metric("loss", 0.5, step=100).log(session)
 
         kwargs = session.metrics_api.append_experiment_metrics.call_args.kwargs
-        assert kwargs["metrics"][0].values[0].step == 0
-        assert session.last_steps["loss"] == 0
+        assert kwargs["metrics"][0].values[0].step is None
+        assert session.last_steps["loss"] == 100
 
 
 class TestMetricRestore:
@@ -248,8 +277,9 @@ class TestMetadataEnqueue:
 
         session.queue.put.assert_called_once()
         item = session.queue.put.call_args[0][0]
-        assert isinstance(item, _QueuedWrite)
-        assert item.primitive is entry
+        assert isinstance(item, PrimitiveWrite)
+        item.execute(session)
+        session.metrics_api.update_experiment_metrics.assert_called_once()
 
     def test_raises_before_put_on_background_failure(self):
         session = make_session()
@@ -269,9 +299,7 @@ class TestFileLog:
         local = tmp_path / "config.yaml"
         local.write_text("lr: 0.1")
         f = File(str(local))
-        f._log_key = "config"
-
-        f.log(session)
+        f.log(session, WritePlacement("config"))
 
         session.artifacts_api.upload_experiment_file_artifact.assert_called_once()
         kwargs = session.artifacts_api.upload_experiment_file_artifact.call_args.kwargs
@@ -286,14 +314,23 @@ class TestFileLog:
         local = tmp_path / "frame.png"
         local.write_bytes(b"png")
         f = File(str(local))
-        f._log_key = "frames"
-        f._series_index = 5
-
-        f.log(session)
+        f.log(session, WritePlacement("frames", index=5))
 
         kwargs = session.artifacts_api.upload_experiment_file_artifact.call_args.kwargs
-        assert kwargs["remote_path"] == "frames/5"
-        assert f.name == "frames/5"
+        assert kwargs["remote_path"] == series_storage_name("frames", 5)
+        assert f.name == "frames"
+
+    def test_numeric_static_key_uses_explicit_storage_name(self, tmp_path):
+        session = make_session()
+        local = tmp_path / "report.txt"
+        local.write_text("done")
+        file = File(str(local))
+
+        file.log(session, WritePlacement("reports/2024"))
+
+        kwargs = session.artifacts_api.upload_experiment_file_artifact.call_args.kwargs
+        assert kwargs["remote_path"] == static_storage_name("reports/2024")
+        assert file.name == "reports/2024"
 
     def test_unstamped_upload_derives_path_from_file(self, tmp_path, monkeypatch):
         session = make_session()
@@ -315,9 +352,7 @@ class TestFileLog:
         local = tmp_path / "config.yaml"
         local.write_text("lr: 0.1")
         f = File(str(local))
-        f._log_key = "config"
-
-        f.log(session)
+        f.log(session, WritePlacement("config"))
 
         assert f.save(str(tmp_path / "out.yaml")) == str(tmp_path / "out.yaml")
         kwargs = session.artifacts_api.download_file.call_args.kwargs
@@ -328,11 +363,107 @@ class TestFileLog:
         session = make_session()
         f = File("config.yaml")
 
-        f.enqueue(session)
+        f.enqueue(session, WritePlacement("config"))
 
         item = session.queue.put.call_args[0][0]
-        assert isinstance(item, _QueuedWrite)
-        assert item.primitive is f
+        assert isinstance(item, PrimitiveWrite)
+
+    def test_reusing_wrapper_does_not_change_queued_placement(self, tmp_path):
+        session = make_session()
+        local = tmp_path / "artifact.txt"
+        local.write_text("content")
+        file = File(str(local))
+
+        file.enqueue(session, WritePlacement("first"))
+        first = session.queue.put.call_args_list[0].args[0]
+        file.enqueue(session, WritePlacement("second"))
+        second = session.queue.put.call_args_list[1].args[0]
+        first.execute(session)
+
+        kwargs = session.artifacts_api.upload_experiment_file_artifact.call_args.kwargs
+        assert kwargs["remote_path"] == "first"
+        assert file.name == "first"
+        second.execute(session)
+        assert file.name == "second"
+
+    def test_failed_enqueue_cleans_prepared_snapshot(self, tmp_path, monkeypatch):
+        session = make_session()
+        session.queue.put.side_effect = RuntimeError("queue failed")
+        source = tmp_path / "artifact.txt"
+        source.write_text("content")
+        snapshot = tmp_path / "snapshot.txt"
+
+        def prepare(file):
+            snapshot.write_text(source.read_text())
+            file._temp_path = str(snapshot)
+            return str(snapshot)
+
+        monkeypatch.setattr(File, "_get_upload_path", prepare)
+        file = File(str(source))
+
+        with pytest.raises(RuntimeError, match="queue failed"):
+            file.enqueue(session, WritePlacement("artifact"))
+
+        assert not snapshot.exists()
+        assert file._read_barrier is None
+
+    def test_failed_upload_cleans_temporary_copy(self, tmp_path):
+        source = tmp_path / "artifact.txt"
+        source.write_text("content")
+        session = make_session()
+        session.artifacts_api.upload_experiment_file_artifact.side_effect = RuntimeError("upload failed")
+        file = File(str(source))
+
+        with pytest.raises(RuntimeError, match="upload failed"):
+            file.log(session)
+
+        assert file._temp_path is None
+
+    def test_failed_copy_fallback_cleans_placeholder(self, tmp_path):
+        source = tmp_path / "artifact.txt"
+        source.write_text("content")
+        session = make_session()
+        file = File(str(source))
+
+        with (
+            patch("os.link", side_effect=OSError("hard links unavailable")),
+            patch("shutil.copy2", side_effect=OSError("copy failed")),
+            pytest.raises(OSError, match="copy failed"),
+        ):
+            file.log(session)
+
+        assert file._temp_path is None
+
+    def test_duplicate_restored_indices_remain_stable(self):
+        session = make_session()
+        first = MagicMock(path="frames/0")
+        second = MagicMock(path="frames/0")
+        session.metrics_store.artifacts = [first, second]
+        session.artifacts_api.list_experiment_artifacts.return_value = None
+
+        restored = File._restore_all(session, {})
+
+        assert [file.name for file in restored.series["frames"]] == ["frames/0", "frames/0"]
+
+    def test_explicit_numeric_static_key_is_not_restored_as_series(self):
+        session = make_session()
+        artifact = MagicMock(path=static_storage_name("reports/2024"))
+        session.artifacts_api.list_experiment_artifacts.return_value = [artifact]
+
+        restored = File._restore_all(session, {})
+
+        assert restored.series == {}
+        assert restored.statics["reports/2024"].name == "reports/2024"
+
+    def test_explicit_series_is_restored_in_index_order(self):
+        session = make_session()
+        first = MagicMock(path=series_storage_name("frames", 0))
+        second = MagicMock(path=series_storage_name("frames", 1))
+        session.artifacts_api.list_experiment_artifacts.return_value = [second, first]
+
+        restored = File._restore_all(session, {})
+
+        assert [file.name for file in restored.series["frames"]] == ["frames", "frames"]
 
 
 class TestMediaLog:
@@ -341,9 +472,7 @@ class TestMediaLog:
     def test_static_media_uploads_without_step(self):
         session = make_session()
         text = Text("hello")
-        text._log_key = "notes"
-
-        text.log(session)
+        text.log(session, WritePlacement("notes"))
 
         session.media_api.upload_media.assert_called_once()
         kwargs = session.media_api.upload_media.call_args.kwargs
@@ -357,42 +486,49 @@ class TestMediaLog:
     def test_series_media_uploads_bare_key_with_step(self):
         session = make_session()
         text = Text("hello")
-        text._log_key = "logs"
-        text._series_index = 2
-        text._series_step = 7
-
-        text.log(session)
+        text.log(session, WritePlacement("logs", index=2, x=7))
 
         kwargs = session.media_api.upload_media.call_args.kwargs
-        assert kwargs["name"] == "logs"  # never "logs/2"
+        assert kwargs["name"] == series_storage_name("logs")
         assert kwargs["step"] == 7
 
     def test_media_upload_cleans_up_rendered_temp(self):
         session = make_session()
         text = Text("hello")
-        text._log_key = "notes"
-
-        text.log(session)
+        text.log(session, WritePlacement("notes"))
 
         assert text._temp_path is None or not os.path.exists(text._temp_path)
+
+    def test_failed_media_upload_cleans_up_rendered_temp(self):
+        session = make_session()
+        session.media_api.upload_media.side_effect = RuntimeError("upload failed")
+        text = Text("hello")
+
+        with pytest.raises(RuntimeError, match="upload failed"):
+            text.log(session)
+
+        assert text._temp_path is None
 
 
 class TestModelLog:
     """Model.log uploads through the registry and binds remote access."""
 
+    def test_natural_version_sort_handles_mixed_prefixes(self):
+        versions = ["v10", "2v", "v2", "10v"]
+
+        assert sorted(versions, key=natural_sort_key) == ["2v", "10v", "v2", "v10"]
+
     @patch.object(Model, "_log_model", return_value="owner/team/checkpoint:latest")
     def test_static_model_upload(self, mock_log_model):
         session = make_session()
         model = Model("model.ckpt")
-        model._log_key = "checkpoint"
-
-        model.log(session)
+        model.log(session, WritePlacement("checkpoint"))
 
         mock_log_model.assert_called_once_with(
             experiment_name="exp",
             teamspace=session.teamspace,
             key="checkpoint",
-            experiment=session.experiment,
+            experiment=session.experiment_link,
             cloud_account="acc-1",
         )
         assert model.name == "checkpoint"
@@ -404,10 +540,7 @@ class TestModelLog:
     def test_series_model_auto_versions(self, mock_log_model):
         session = make_session()
         model = Model("model.ckpt")
-        model._log_key = "models"
-        model._series_index = 2
-
-        model.log(session)
+        model.log(session, WritePlacement("models", index=2))
 
         assert model.version == "v3"
         assert model.name == "models"
@@ -416,10 +549,7 @@ class TestModelLog:
     def test_series_model_explicit_version_wins(self, mock_log_model):
         session = make_session()
         model = Model("model.ckpt", version="v9")
-        model._log_key = "models"
-        model._series_index = 2
-
-        model.log(session)
+        model.log(session, WritePlacement("models", index=2))
 
         assert model.version == "v9"
 
@@ -427,9 +557,7 @@ class TestModelLog:
     def test_key_is_sanitized_for_registry(self, mock_log_model):
         session = make_session()
         model = Model("model.ckpt")
-        model._log_key = "models/latest"
-
-        model.log(session)
+        model.log(session, WritePlacement("models/latest"))
 
         assert mock_log_model.call_args.kwargs["key"] == "models-latest"
         assert model.name == "models/latest"
@@ -456,7 +584,7 @@ class TestWrapMediaFile:
     """Restored media records are wrapped by their wire type."""
 
     def test_wraps_text_with_path(self):
-        from litlogger.media import _wrap_media_file
+        from litlogger.primitives.file import _wrap_media_file
 
         wrapped = _wrap_media_file("logs/0", V1MediaType.TEXT)
 
@@ -464,7 +592,8 @@ class TestWrapMediaFile:
         assert wrapped.path == "logs/0"
 
     def test_wraps_video(self):
-        from litlogger.media import Video, _wrap_media_file
+        from litlogger.primitives import Video
+        from litlogger.primitives.file import _wrap_media_file
 
         wrapped = _wrap_media_file("clips/0", V1MediaType.VIDEO)
 
@@ -475,14 +604,22 @@ class TestWrapMediaFile:
 class TestReadBarriers:
     """Queued writes must land before dependent remote reads."""
 
+    def test_enqueue_binds_name_before_worker_runs(self):
+        import queue
+
+        session = make_session(queue=queue.Queue())
+        f = File("config.yaml")
+
+        f.enqueue(session, WritePlacement("config"))
+
+        assert f.name == "config"
+
     def test_enqueue_attaches_read_barrier(self, tmp_path):
         session = make_session()
         local = tmp_path / "config.yaml"
         local.write_text("lr: 0.1")
         f = File(str(local))
-        f._log_key = "config"
-
-        f.enqueue(session)
+        f.enqueue(session, WritePlacement("config"))
 
         assert f._read_barrier is not None
 
@@ -491,8 +628,7 @@ class TestReadBarriers:
         local = tmp_path / "config.yaml"
         local.write_text("lr: 0.1")
         f = File(str(local))
-        f._log_key = "config"
-        f.enqueue(session)
+        f.enqueue(session, WritePlacement("config"))
 
         # Simulate the worker: process the queued write, then the download
         # must observe the completed upload.
@@ -505,11 +641,11 @@ class TestReadBarriers:
             )[1]
         )
         item = session.queue.put.call_args[0][0]
-        item.primitive.log(session)
+        item.execute(session)
 
         f.save(str(tmp_path / "out.yaml"))
 
-        assert events == ["flush", "download"]
+        assert events == ["download"]
 
     def test_save_still_requires_remote_context(self):
         session = make_session()
@@ -532,29 +668,13 @@ class TestWriteBehindEndToEnd:
         local = tmp_path / "report.txt"
         local.write_text("done")
         f = File(str(local))
-        f._log_key = "report"
-
-        from threading import Event
-
-        stop_event = Event()
-        worker = _BackgroundThread(
-            teamspace_id="ts-1",
-            metrics_store_id="ms-1",
-            metrics_api=session.metrics_api,
-            metrics_queue=session.queue,
-            is_ready_event=Event(),
-            stop_event=stop_event,
-            done_event=Event(),
-            store_step=True,
-            store_created_at=False,
-            session=session,
-        )
+        worker = _BackgroundThread(session=session)
         worker.start()
         session.background = worker
 
-        f.enqueue(session)
+        f.enqueue(session, WritePlacement("report"))
         session.queue.join()  # what finalize()/read barriers do
-        stop_event.set()
+        session.stop_event.set()
         worker.join(timeout=10)
 
         session.artifacts_api.upload_experiment_file_artifact.assert_called_once()

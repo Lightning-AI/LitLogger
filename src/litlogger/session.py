@@ -78,7 +78,7 @@ class ExperimentSession:
         stats: RunStats,
         store_step: bool,
         store_created_at: bool,
-        last_steps: dict[str, int],
+        last_steps: dict[str, float],
         background: _BackgroundThread | None = None,
     ) -> None:
         self.client = client

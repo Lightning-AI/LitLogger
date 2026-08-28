@@ -56,7 +56,7 @@ def _bind_media_upload(exp: MagicMock) -> None:
     exp._upload_media = _upload_media
 
 
-class TestBackgroundThread(_BackgroundThread):
+class BackgroundThreadFixture(_BackgroundThread):
     def run(self):
         super()._run()
         # The API layer translates user-facing types to V1 types before calling the client
@@ -74,9 +74,9 @@ class TestBackgroundThread(_BackgroundThread):
         # Verify all 100 values (10 batches * 10 values each) were sent
         # Each batch sends values [0-9], so we expect 10 copies of [0-9]
         expected_values = [i for _ in range(10) for i in range(10)]
-        assert sorted(all_values) == sorted(
-            expected_values
-        ), f"Expected {len(expected_values)} values, got {len(all_values)}"
+        assert sorted(all_values) == sorted(expected_values), (
+            f"Expected {len(expected_values)} values, got {len(all_values)}"
+        )
 
         self.done_event.set()
 
@@ -91,7 +91,7 @@ def test_experiment_sender_queue():
     # Create a mock MetricsApi
     mock_metrics_api = MagicMock()
 
-    sender = TestBackgroundThread(
+    sender = BackgroundThreadFixture(
         teamspace_id="project_id",
         metrics_store_id="id",
         metrics_api=mock_metrics_api,
@@ -156,6 +156,24 @@ def test_finalize_with_status():
     assert "status" in sig.parameters
 
 
+def test_failed_finalize_remains_retryable():
+    exp = MagicMock()
+    exp._finalized = False
+    exp._done_event.is_set.return_value = True
+    exp._manager.exception = RuntimeError("upload failed")
+    exp.save_logs = False
+
+    with pytest.raises(RuntimeError, match="upload failed"):
+        Experiment.finalize(exp, print_summary=False)
+
+    assert exp._finalized is False
+
+    exp._manager.exception = None
+    Experiment.finalize(exp, print_summary=False)
+
+    assert exp._finalized is True
+
+
 def test_signal_handler_exit_code():
     """Test that signal handler uses correct exit code."""
     exp = MagicMock()
@@ -174,7 +192,7 @@ class TestExperimentArtifactMethods:
     def test_log_file(self):
         """Test log_file delegates to __setitem__ with File."""
         from litlogger.experiment import Experiment
-        from litlogger.media import File
+        from litlogger.primitives import File
 
         exp = MagicMock()
         # log_file delegates to self[remote_path] = File(path)
@@ -190,7 +208,7 @@ class TestExperimentArtifactMethods:
     def test_log_file_with_remote_path(self):
         """Test log_file with custom remote_path delegates correctly."""
         from litlogger.experiment import Experiment
-        from litlogger.media import File
+        from litlogger.primitives import File
 
         exp = MagicMock()
         Experiment.log_file(exp, "/abs/path/to/file.png", verbose=False, remote_path="images/file.png")
@@ -322,8 +340,8 @@ def _make_metric_exp(**overrides):
     exp.store_created_at = False
     exp._metrics_queue = MagicMock()
     # The dict API queues writes; execute them inline the way the worker would.
-    exp._metrics_queue.put.side_effect = (
-        lambda item: item.primitive.log(exp._session) if isinstance(item, _QueuedWrite) else None
+    exp._metrics_queue.put.side_effect = lambda item: (
+        item.primitive.log(exp._session) if isinstance(item, _QueuedWrite) else None
     )
     exp._stats = MagicMock()
     # Wire dunder methods on the *type* so MagicMock dispatches them
@@ -333,7 +351,7 @@ def _make_metric_exp(**overrides):
     exp.update = lambda data: Experiment.update(exp, data)
     exp._ensure_series = lambda key: Experiment._ensure_series(exp, key)
     exp._register_key_type = lambda key, kt: Experiment._register_key_type(exp, key, kt)
-    exp._log_metric_value = lambda key, value, step=None: Experiment._log_metric_value(exp, key, value, step=step)
+    exp._log_metric_value = lambda key, y, step=None, x=None: Experiment._log_metric_value(exp, key, y, step=step, x=x)
     exp._coerce_static_value = lambda key, value: Experiment._coerce_static_value(exp, key, value)
     # Live session view so tests can reseed infrastructure after the factory.
     type(exp)._session = property(lambda self: _session_of(self))
@@ -936,7 +954,7 @@ class TestExperimentStatsTracking:
     def test_log_file_tracks_artifact_count(self):
         """Test log_file delegates to __setitem__ with File."""
         from litlogger.experiment import Experiment
-        from litlogger.media import File
+        from litlogger.primitives import File
 
         exp = MagicMock()
         # log_file now calls self[remote_path] = File(path)

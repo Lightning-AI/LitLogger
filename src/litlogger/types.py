@@ -48,12 +48,13 @@ class MetricValue:
 
     Attributes:
         value: The numeric metric value.
-        step: Optional step number for this value.
+        step: Optional numeric x-coordinate, serialized through the backend's
+            legacy step field.
         created_at: Optional datetime when this value was created.
     """
 
     value: float
-    step: int | None = None
+    step: float | None = None
     created_at: datetime | None = None
 
 

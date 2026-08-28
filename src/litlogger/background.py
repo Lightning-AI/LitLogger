@@ -22,7 +22,7 @@ import contextlib
 import queue
 from threading import Event, Thread
 from time import sleep, time
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, ContextManager, cast
 
 from lightning_sdk.lightning_cloud.openapi.rest import ApiException
 
@@ -68,7 +68,7 @@ class _BackgroundThread(Thread):
         store_created_at: bool,
         rate_limiting_interval: int = 1,
         max_batch_size: int = 1000,
-        last_steps: dict[str, int] | None = None,
+        last_steps: dict[str, float] | None = None,
         session: "ExperimentSession | None" = None,
     ) -> None:
         super().__init__(daemon=True)
@@ -85,7 +85,7 @@ class _BackgroundThread(Thread):
         self.done_event = done_event
         self.metrics: dict[str, Metrics] = {}
         self.exception: Exception | None = None
-        self.last_steps = last_steps or {}
+        self.last_steps = last_steps if last_steps is not None else {}
 
         self.store_step = store_step
         self.store_created_at = store_created_at
@@ -115,12 +115,14 @@ class _BackgroundThread(Thread):
             self.done_event.set()
         except Exception as e:
             print(e)
+            # Publish the failure before signaling completion or draining the
+            # queue so producers and waiters cannot briefly observe success.
+            self.exception = e
             # Unblock queue.join() callers: items left behind will never be
             # processed, and producers stop enqueueing once they observe the
             # exception below.
             self._drain_unprocessed()
             self.done_event.set()
-            self.exception = e
 
     def step(self) -> bool:
         """Read all available metrics from queue, batch them, and send when ready.
@@ -143,9 +145,16 @@ class _BackgroundThread(Thread):
                         self._execute(item)
                         continue
                     for name, values in item.items():
-                        for value_obj in values.values:
-                            if value_obj.step is None:
-                                value_obj.step = self.last_steps.get(name, -1) + 1
+                        last_steps_lock = getattr(self.session, "last_steps_lock", None)
+                        lock_context: ContextManager[None] = (
+                            cast(ContextManager[None], last_steps_lock)
+                            if hasattr(last_steps_lock, "__enter__")
+                            else contextlib.nullcontext()
+                        )
+                        with lock_context:
+                            for value_obj in values.values:
+                                if value_obj.step is None:
+                                    value_obj.step = self.last_steps.get(name, -1) + 1
                                 self.last_steps[name] = value_obj.step
 
                         # Merge with existing metrics for this name

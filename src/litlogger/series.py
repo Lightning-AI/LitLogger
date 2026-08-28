@@ -19,7 +19,7 @@ import math
 import warnings
 from typing import TYPE_CHECKING, Any, overload
 
-from litlogger.media import File
+from litlogger.primitives import File
 
 if TYPE_CHECKING:
     from litlogger.experiment import Experiment
@@ -38,33 +38,50 @@ class Series:
         self._type: str | None = None  # 'metric' or 'file'
         self._values: list[Any] = []
 
-    def append(self, value: float | File, step: int | None = None) -> None:
+    def append(
+        self,
+        y: float | File,
+        step: float | None = None,
+        x: float | None = None,
+    ) -> None:
         """Append a value to the time series.
 
         Args:
-            value: A float/int for metric series, or a File for file series.
-            step: Optional step number for this data point (e.g., training step, epoch).
+            y: A float/int for metric series, or a File for file series.
+            step: Legacy x-coordinate for this data point.
+            x: Preferred x-coordinate. Mutually exclusive with ``step``.
 
         Raises:
-            TypeError: If value type doesn't match existing series type or is unsupported.
+            TypeError: If y's type doesn't match the existing series type or is unsupported.
+            ValueError: If both ``x`` and ``step`` are provided.
         """
-        if isinstance(value, File):
+        if x is not None and step is not None:
+            raise ValueError("x and step are mutually exclusive.")
+        effective_x = x if x is not None else step
+        if effective_x is not None and not math.isfinite(effective_x):
+            raise ValueError("x must be finite.")
+        if isinstance(y, File):
             if self._type is not None and self._type != "file":
                 raise TypeError(f"Key {self._key!r} is a metric series, cannot append File")
-            if self._type is None:
-                self._type = "file"
+            new_series = self._type is None
+            if new_series:
                 self._experiment._register_key_type(self._key, "file_series")
-            self._values.append(value)
-            index = len(self._values) - 1
-            file_step = index if step is None else step
-            self._experiment._log_file_series_value(self._key, value, index, step=file_step)
-        elif isinstance(value, int | float):
+                self._type = "file"
+            index = len(self._values)
+            file_x = index if effective_x is None else effective_x
+            try:
+                self._experiment._log_file_series_value(self._key, y, index, step=file_x)
+            except Exception:
+                if new_series:
+                    self._type = None
+                    if self._experiment._key_types.get(self._key) == "file_series":
+                        self._experiment._key_types.pop(self._key)
+                raise
+            self._values.append(y)
+        elif isinstance(y, int | float):
             if self._type is not None and self._type != "metric":
                 raise TypeError(f"Key {self._key!r} is a file series, cannot append numeric value")
-            if self._type is None:
-                self._type = "metric"
-                self._experiment._register_key_type(self._key, "metric")
-            float_val = float(value)
+            float_val = float(y)
             if math.isnan(float_val) or math.isinf(float_val):
                 # FIXME: Remove this when NaN is handled correctly
                 warnings.warn(
@@ -72,22 +89,48 @@ class Series:
                     stacklevel=2,
                 )
                 return
+            new_series = self._type is None
+            if new_series:
+                self._experiment._register_key_type(self._key, "metric")
+                self._type = "metric"
+            try:
+                self._experiment._log_metric_value(self._key, float_val, step=step, x=x)
+            except Exception:
+                if new_series:
+                    self._type = None
+                    if self._experiment._key_types.get(self._key) == "metric":
+                        self._experiment._key_types.pop(self._key)
+                raise
             self._values.append(float_val)
-            self._experiment._log_metric_value(self._key, float_val, step=step)
         else:
-            raise TypeError(f"Can only append float/int or File, got {type(value).__name__}")
+            raise TypeError(f"Can only append float/int or File, got {type(y).__name__}")
 
-    def extend(self, values: list[float | int | File], start_step: int | None = None) -> None:
+    def extend(
+        self,
+        values: list[float | int | File],
+        start_step: float | None = None,
+        start_x: float | None = None,
+    ) -> None:
         """Extend the time series with multiple values.
 
         Args:
             values: List of values to append.
-            start_step: Optional starting step number. Each subsequent value gets
-                start_step, start_step+1, start_step+2, etc.
+            start_step: Legacy starting x-coordinate.
+            start_x: Preferred starting x-coordinate. Mutually exclusive with
+                ``start_step``. Each subsequent value increments it by one.
+
+        Raises:
+            ValueError: If both ``start_x`` and ``start_step`` are provided.
         """
+        if start_x is not None and start_step is not None:
+            raise ValueError("start_x and start_step are mutually exclusive.")
+        coordinate = start_x if start_x is not None else start_step
+        if coordinate is not None and not math.isfinite(coordinate):
+            raise ValueError("start_x must be finite.")
         for i, v in enumerate(values):
             step = start_step + i if start_step is not None else None
-            self.append(v, step=step)
+            x = start_x + i if start_x is not None else None
+            self.append(v, step=step, x=x)
 
     def __iter__(self) -> Any:  # noqa: D105
         return iter(self._values)

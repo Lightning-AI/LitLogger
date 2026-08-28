@@ -8,9 +8,9 @@ import sys
 from unittest.mock import MagicMock
 
 import pytest
+
 from litlogger.experiment import Experiment
-from litlogger.media import File
-from litlogger.primitives import Metadata, _QueuedWrite
+from litlogger.primitives import File, Metadata, _QueuedWrite
 from litlogger.series import Series
 from litlogger.session import ExperimentSession
 
@@ -55,8 +55,8 @@ def _make_exp(**overrides):
     exp.store_created_at = False
     exp._metrics_queue = MagicMock()
     # The dict API queues writes; execute them inline the way the worker would.
-    exp._metrics_queue.put.side_effect = (
-        lambda item: item.primitive.log(exp._session) if isinstance(item, _QueuedWrite) else None
+    exp._metrics_queue.put.side_effect = lambda item: (
+        item.primitive.log(exp._session) if isinstance(item, _QueuedWrite) else None
     )
     exp._stats = MagicMock()
     exp._metrics_api = MagicMock()
@@ -79,7 +79,7 @@ def _make_exp(**overrides):
     exp.update = lambda data: Experiment.update(exp, data)
     exp._ensure_series = lambda key: Experiment._ensure_series(exp, key)
     exp._register_key_type = lambda key, kt: Experiment._register_key_type(exp, key, kt)
-    exp._log_metric_value = lambda key, value, step=None: Experiment._log_metric_value(exp, key, value, step=step)
+    exp._log_metric_value = lambda key, y, step=None, x=None: Experiment._log_metric_value(exp, key, y, step=step, x=x)
     exp._coerce_static_value = lambda key, value: Experiment._coerce_static_value(exp, key, value)
     exp._coerce_series_value = lambda key, value, index, step: Experiment._coerce_series_value(
         exp, key, value, index, step
@@ -129,6 +129,16 @@ class TestAddMetadataSetitem:
         exp["notes"] = ""
 
         assert exp._metadata_values["notes"] == ""
+
+    def test_queue_failure_does_not_mutate_metadata_state(self):
+        exp = _make_exp()
+        exp._metrics_queue.put.side_effect = RuntimeError("queue failed")
+
+        with pytest.raises(RuntimeError, match="queue failed"):
+            exp["model"] = "resnet50"
+
+        assert "model" not in exp._key_types
+        assert "model" not in exp._metadata_values
 
 
 class TestAddMetadataUpdate:
@@ -353,7 +363,8 @@ class TestRebuildStateMetadata:
         exp._metrics_api = MagicMock()
         exp._metrics_api.get_experiment_metrics_by_name.return_value = exp._metrics_store
         exp._metrics_api.get_metric_values.return_value = {"train/loss": [1.0, 0.5, 0.333]}
-        exp._resumed_steps = {"train/loss": 2}
+        # Streams created with store_step=False have values but no last-step summary.
+        exp._resumed_steps = {}
         exp._teamspace = MagicMock()
         exp._teamspace.id = "ts-1"
         exp._artifacts_api = MagicMock()

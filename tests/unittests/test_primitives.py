@@ -10,8 +10,9 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from lightning_sdk.lightning_cloud.openapi import V1MediaType
-from litlogger.media import File, Model, Text
-from litlogger.primitives import Metadata, Metric, Primitive, _QueuedWrite
+
+from litlogger.primitives import File, Metadata, Metric, Model, Primitive, Text, _QueuedWrite
+from litlogger.primitives._utils import natural_sort_key
 from litlogger.session import ExperimentSession
 from litlogger.types import PhaseType
 
@@ -96,6 +97,23 @@ class TestMetricEnqueue:
         assert metrics.values[0].created_at is None
         session.stats.record_metric.assert_called_once_with("loss", 0.5)
 
+    def test_x_and_step_are_mutually_exclusive(self):
+        session = make_session()
+
+        with pytest.raises(ValueError, match="mutually exclusive"):
+            Metric("loss", 0.5, step=3, x=1.5).enqueue(session)
+
+        session.queue.put.assert_not_called()
+
+    @pytest.mark.parametrize("x", [float("nan"), float("inf"), float("-inf")])
+    def test_rejects_non_finite_x(self, x):
+        session = make_session()
+
+        with pytest.raises(ValueError, match="finite"):
+            Metric("loss", 0.5, x=x).enqueue(session)
+
+        session.queue.put.assert_not_called()
+
     def test_store_step_false_drops_step(self):
         session = make_session(store_step=False)
 
@@ -150,13 +168,17 @@ class TestMetricLog:
         assert kwargs["metrics"][0].values[0].step == 5
         assert session.last_steps["loss"] == 5
 
-    def test_explicit_step_does_not_update_sequence(self):
-        # Mirrors the background worker: only auto-assigned steps advance last_steps.
+    def test_explicit_x_updates_sequence(self):
         session = make_session(last_steps={"loss": 4})
 
-        Metric("loss", 0.5, step=100).log(session)
+        Metric("loss", 0.5, x=1.5).log(session)
 
-        assert session.last_steps["loss"] == 4
+        assert session.last_steps["loss"] == 1.5
+
+        Metric("loss", 0.4).log(session)
+
+        kwargs = session.metrics_api.append_experiment_metrics.call_args.kwargs
+        assert kwargs["metrics"][0].values[0].step == 2.5
 
     def test_store_step_false_still_auto_steps(self):
         # store_step=False means "ignore user-provided steps"; the worker then
@@ -334,6 +356,44 @@ class TestFileLog:
         assert isinstance(item, _QueuedWrite)
         assert item.primitive is f
 
+    def test_failed_upload_cleans_temporary_copy(self, tmp_path):
+        source = tmp_path / "artifact.txt"
+        source.write_text("content")
+        session = make_session()
+        session.artifacts_api.upload_experiment_file_artifact.side_effect = RuntimeError("upload failed")
+        file = File(str(source))
+
+        with pytest.raises(RuntimeError, match="upload failed"):
+            file.log(session)
+
+        assert file._temp_path is None
+
+    def test_failed_copy_fallback_cleans_placeholder(self, tmp_path):
+        source = tmp_path / "artifact.txt"
+        source.write_text("content")
+        session = make_session()
+        file = File(str(source))
+
+        with (
+            patch("os.link", side_effect=OSError("hard links unavailable")),
+            patch("shutil.copy2", side_effect=OSError("copy failed")),
+            pytest.raises(OSError, match="copy failed"),
+        ):
+            file.log(session)
+
+        assert file._temp_path is None
+
+    def test_duplicate_restored_indices_remain_stable(self):
+        session = make_session()
+        first = MagicMock(path="frames/0")
+        second = MagicMock(path="frames/0")
+        session.metrics_store.artifacts = [first, second]
+        session.artifacts_api.list_experiment_artifacts.return_value = None
+
+        restored = File._restore_all(session, {})
+
+        assert [file.name for file in restored.series["frames"]] == ["frames/0", "frames/0"]
+
 
 class TestMediaLog:
     """Image/Video/Text upload through the media API under the bare key."""
@@ -376,9 +436,24 @@ class TestMediaLog:
 
         assert text._temp_path is None or not os.path.exists(text._temp_path)
 
+    def test_failed_media_upload_cleans_up_rendered_temp(self):
+        session = make_session()
+        session.media_api.upload_media.side_effect = RuntimeError("upload failed")
+        text = Text("hello")
+
+        with pytest.raises(RuntimeError, match="upload failed"):
+            text.log(session)
+
+        assert text._temp_path is None
+
 
 class TestModelLog:
     """Model.log uploads through the registry and binds remote access."""
+
+    def test_natural_version_sort_handles_mixed_prefixes(self):
+        versions = ["v10", "2v", "v2", "10v"]
+
+        assert sorted(versions, key=natural_sort_key) == ["2v", "10v", "v2", "v10"]
 
     @patch.object(Model, "_log_model", return_value="owner/team/checkpoint:latest")
     def test_static_model_upload(self, mock_log_model):
@@ -456,7 +531,7 @@ class TestWrapMediaFile:
     """Restored media records are wrapped by their wire type."""
 
     def test_wraps_text_with_path(self):
-        from litlogger.media import _wrap_media_file
+        from litlogger.primitives.file import _wrap_media_file
 
         wrapped = _wrap_media_file("logs/0", V1MediaType.TEXT)
 
@@ -464,7 +539,8 @@ class TestWrapMediaFile:
         assert wrapped.path == "logs/0"
 
     def test_wraps_video(self):
-        from litlogger.media import Video, _wrap_media_file
+        from litlogger.primitives import Video
+        from litlogger.primitives.file import _wrap_media_file
 
         wrapped = _wrap_media_file("clips/0", V1MediaType.VIDEO)
 

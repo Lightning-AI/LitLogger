@@ -33,8 +33,16 @@ from litlogger.api.utils import _resolve_teamspace, build_experiment_url, get_ac
 from litlogger.background import _BackgroundThread
 from litlogger.capture import rerun_and_record
 from litlogger.experiment_legacy import LegacyExperiment, MetadataValue
-from litlogger.media import File, Model
-from litlogger.primitives import Metadata, Metric, Primitive, QueueItem, RestoredFiles, _to_v1_media_type
+from litlogger.primitives import (
+    File,
+    Metadata,
+    Metric,
+    Model,
+    Primitive,
+    QueueItem,
+    RestoredFiles,
+    _to_v1_media_type,
+)
 from litlogger.printer import Printer, RunStats
 from litlogger.series import Series
 from litlogger.session import ExperimentSession
@@ -88,6 +96,11 @@ class Experiment(LegacyExperiment):
             rate_limiting_interval: Minimum seconds between uploads. Defaults to 1.
             verbose: If True, print styled console output. Defaults to True.
         """
+        if max_batch_size <= 0:
+            raise ValueError("max_batch_size must be greater than zero.")
+        if rate_limiting_interval < 0:
+            raise ValueError("rate_limiting_interval must be non-negative.")
+
         self.name = name
         self.save_logs = save_logs
         self._done_event = Event()
@@ -257,23 +270,27 @@ class Experiment(LegacyExperiment):
         # Check for typed (but not yet registered) series
         if key in self._series and self._series[key]._type is not None:
             raise KeyError(f"Key {key!r} is already used as a time series. Cannot assign static value.")
-        # Remove empty (untyped) series proxy if it exists
-        self._series.pop(key, None)
-
         if isinstance(value, File):
             if key in self._key_types and self._key_types[key] != "static_file":
                 raise KeyError(
                     f"Key {key!r} is already used as {self._key_types[key]}. Cannot reassign as static_file."
                 )
+            previous_placement = (value._log_key, value._series_index, value._series_step, value._read_barrier)
+            try:
+                self._coerce_static_value(key, value).enqueue(self._session)
+            except Exception:
+                value._log_key, value._series_index, value._series_step, value._read_barrier = previous_placement
+                raise
+            self._series.pop(key, None)
             self._key_types[key] = "static_file"
             self._static_files[key] = value
-            self._coerce_static_value(key, value).enqueue(self._session)
         elif isinstance(value, str):
             if key in self._key_types and self._key_types[key] != "metadata":
                 raise KeyError(f"Key {key!r} is already used as {self._key_types[key]}. Cannot reassign as metadata.")
+            Metadata(key, value).enqueue(self._session)
+            self._series.pop(key, None)
             self._key_types[key] = "metadata"
             self._metadata_values[key] = value
-            Metadata(key, value).enqueue(self._session)
         else:
             raise TypeError(f"Can only assign str or File, got {type(value).__name__}")
 
@@ -310,7 +327,7 @@ class Experiment(LegacyExperiment):
         value._series_step = None
         return value
 
-    def _coerce_series_value(self, key: str, value: File, index: int, step: int | None) -> Primitive:
+    def _coerce_series_value(self, key: str, value: File, index: int, step: float | None) -> Primitive:
         """Classify and stamp a file-like series element as a loggable primitive."""
         if value._media_type == MediaType.MODEL and not isinstance(value, Model):
             raise TypeError("Model media values must use the Model wrapper.")
@@ -331,18 +348,29 @@ class Experiment(LegacyExperiment):
             self._series[key] = Series(self, key)
         return self._series[key]
 
-    def _log_metric_value(self, key: str, value: float, step: int | None = None) -> None:
-        Metric(key, value, step=step).enqueue(self._session)
+    def _log_metric_value(
+        self,
+        key: str,
+        y: float,
+        step: float | None = None,
+        x: float | None = None,
+    ) -> None:
+        Metric(key, y, step=step, x=x).enqueue(self._session)
 
-    def _log_file_series_value(self, key: str, value: File, index: int, step: int | None = None) -> None:
-        self._coerce_series_value(key, value, index, step).enqueue(self._session)
+    def _log_file_series_value(self, key: str, value: File, index: int, step: float | None = None) -> None:
+        previous_placement = (value._log_key, value._series_index, value._series_step, value._read_barrier)
+        try:
+            self._coerce_series_value(key, value, index, step).enqueue(self._session)
+        except Exception:
+            value._log_key, value._series_index, value._series_step, value._read_barrier = previous_placement
+            raise
 
     def _upload_media(
         self,
         name: str,
         file_path: str,
         media_type: MediaType,
-        step: int | None = None,
+        step: float | None = None,
         epoch: int | None = None,
         caption: str | None = None,
     ) -> None:
@@ -394,7 +422,7 @@ class Experiment(LegacyExperiment):
             self._metadata_values[name] = value
 
         metric_values = Metric._restore_values(session)
-        for name in self._resumed_steps:
+        for name in self._resumed_steps.keys() | metric_values.keys():
             self._key_types[name] = "metric"
             series = Series(self, name)
             series._type = "metric"
@@ -501,9 +529,6 @@ class Experiment(LegacyExperiment):
         if self._finalized:
             return
 
-        # Mark as finalized
-        self._finalized = True
-
         # Wait for the queue to be fully processed
         self._metrics_queue.join()
 
@@ -525,6 +550,10 @@ class Experiment(LegacyExperiment):
             # Uploaded directly (not registered locally, no stats bump) —
             # console output is bookkeeping, not experiment data.
             File(self.terminal_logs_path)._upload_artifact(self._session, remote_path="console_output.txt")
+
+        # Only a successfully completed finalization is idempotent. A failed
+        # attempt must remain retryable and continue surfacing its exception.
+        self._finalized = True
 
         # Print completion summary with stats
         if print_summary:

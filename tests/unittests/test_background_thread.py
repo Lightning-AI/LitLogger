@@ -1,10 +1,11 @@
 import queue
 from multiprocessing import Event, Queue
 from queue import Queue as ThreadQueue
-from unittest.mock import Mock, patch
+from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 from lightning_sdk.lightning_cloud.openapi.rest import ApiException
+
 from litlogger.background import _BackgroundThread
 from litlogger.primitives import _QueuedWrite
 from litlogger.types import Metrics, MetricValue, PhaseType
@@ -71,7 +72,7 @@ class TestBackgroundThreadInit:
 class TestBackgroundThreadLastSteps:
     """Test _BackgroundThread step resumption from last_steps."""
 
-    def _make_manager(self, last_steps=None):
+    def _make_manager(self, last_steps=None, session=None):
         mock_queue = Mock()
         mock_queue.get.side_effect = [
             {"loss": Metrics(name="loss", values=[MetricValue(value=0.5)])},
@@ -91,6 +92,7 @@ class TestBackgroundThreadLastSteps:
             store_created_at=False,
             rate_limiting_interval=100,
             last_steps=last_steps,
+            session=session,
         )
 
     def test_steps_start_at_zero_when_last_steps_is_none(self):
@@ -100,16 +102,45 @@ class TestBackgroundThreadLastSteps:
         assert steps == [0, 1, 2]
 
     def test_steps_start_at_zero_when_last_steps_is_empty(self):
-        manager = self._make_manager(last_steps={})
+        last_steps = {}
+        manager = self._make_manager(last_steps=last_steps)
         manager.step()
         steps = [v.step for v in manager.metrics["loss"].values]
         assert steps == [0, 1, 2]
+        assert manager.last_steps is last_steps
+        assert last_steps == {"loss": 2}
 
     def test_steps_resume_from_last_steps_when_provided(self):
         manager = self._make_manager(last_steps={"loss": 5})
         manager.step()
         steps = [v.step for v in manager.metrics["loss"].values]
         assert steps == [6, 7, 8]
+
+    def test_explicit_fractional_x_drives_next_auto_increment(self):
+        mock_queue = Mock()
+        mock_queue.get.side_effect = [
+            {"loss": Metrics(name="loss", values=[MetricValue(value=0.5, step=1.5)])},
+            {"loss": Metrics(name="loss", values=[MetricValue(value=0.4)])},
+            queue.Empty(),
+        ]
+        manager = self._make_manager(last_steps={})
+        manager.metrics_queue = mock_queue
+
+        manager.step()
+
+        steps = [v.step for v in manager.metrics["loss"].values]
+        assert steps == [1.5, 2.5]
+        assert manager.last_steps["loss"] == 2.5
+
+    def test_auto_steps_use_the_session_lock(self):
+        session = Mock()
+        session.last_steps_lock = MagicMock()
+        manager = self._make_manager(last_steps={}, session=session)
+
+        manager.step()
+
+        assert session.last_steps_lock.__enter__.call_count == 3
+        assert session.last_steps_lock.__exit__.call_count == 3
 
 
 class TestBackgroundThreadStepBatching:
@@ -722,3 +753,18 @@ class TestQueuedWrites:
         never_run.log.assert_not_called()
         # join() must not deadlock on the abandoned item
         manager.metrics_queue.join()
+
+    def test_failure_is_visible_before_done_is_signaled(self):
+        session = Mock()
+        done_event = Mock()
+        manager = self._make_manager(session=session)
+        manager.done_event = done_event
+        failing = Mock()
+        failing.log.side_effect = RuntimeError("upload failed")
+        manager.metrics_queue.put(_QueuedWrite(failing))
+        observed_exceptions = []
+        done_event.set.side_effect = lambda: observed_exceptions.append(manager.exception)
+
+        manager._run()
+
+        assert isinstance(observed_exceptions[0], RuntimeError)

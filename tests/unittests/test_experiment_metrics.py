@@ -8,9 +8,9 @@ import sys
 from unittest.mock import MagicMock
 
 import pytest
+
 from litlogger.experiment import Experiment
-from litlogger.media import File
-from litlogger.primitives import _QueuedWrite
+from litlogger.primitives import File, _QueuedWrite
 from litlogger.series import Series
 from litlogger.session import ExperimentSession
 
@@ -55,8 +55,8 @@ def _make_exp(**overrides):
     exp.store_created_at = False
     exp._metrics_queue = MagicMock()
     # The dict API queues writes; execute them inline the way the worker would.
-    exp._metrics_queue.put.side_effect = (
-        lambda item: item.primitive.log(exp._session) if isinstance(item, _QueuedWrite) else None
+    exp._metrics_queue.put.side_effect = lambda item: (
+        item.primitive.log(exp._session) if isinstance(item, _QueuedWrite) else None
     )
     exp._stats = MagicMock()
     exp._metrics_api = MagicMock()
@@ -81,7 +81,7 @@ def _make_exp(**overrides):
     exp.update = lambda data: Experiment.update(exp, data)
     exp._ensure_series = lambda key: Experiment._ensure_series(exp, key)
     exp._register_key_type = lambda key, kt: Experiment._register_key_type(exp, key, kt)
-    exp._log_metric_value = lambda key, value, step=None: Experiment._log_metric_value(exp, key, value, step=step)
+    exp._log_metric_value = lambda key, y, step=None, x=None: Experiment._log_metric_value(exp, key, y, step=step, x=x)
     exp._coerce_static_value = lambda key, value: Experiment._coerce_static_value(exp, key, value)
     exp._coerce_series_value = lambda key, value, index, step: Experiment._coerce_series_value(
         exp, key, value, index, step
@@ -99,6 +99,17 @@ def _make_exp(**overrides):
 
 class TestAddMetricAppend:
     """Test experiment['key'].append(value) for metrics."""
+
+    @pytest.mark.parametrize(
+        ("kwargs", "message"),
+        [
+            ({"max_batch_size": 0}, "max_batch_size"),
+            ({"rate_limiting_interval": -1}, "rate_limiting_interval"),
+        ],
+    )
+    def test_rejects_invalid_batch_configuration_before_initialization(self, kwargs, message):
+        with pytest.raises(ValueError, match=message):
+            Experiment("invalid", **kwargs)
 
     def test_append_single_value(self):
         exp = _make_exp()
@@ -132,6 +143,25 @@ class TestAddMetricAppend:
         assert batch["loss"].values[0].value == 0.5
         assert batch["loss"].values[0].step == 3
 
+    def test_x_and_step_are_mutually_exclusive(self):
+        exp = _make_exp()
+
+        with pytest.raises(ValueError, match="mutually exclusive"):
+            exp["loss"].append(y=0.5, step=3, x=1.5)
+
+        exp._metrics_queue.put.assert_not_called()
+
+    @pytest.mark.parametrize("x", [float("nan"), float("inf"), float("-inf")])
+    def test_non_finite_x_does_not_mutate_series(self, x):
+        exp = _make_exp()
+
+        with pytest.raises(ValueError, match="finite"):
+            exp["loss"].append(y=0.5, x=x)
+
+        assert list(exp["loss"]) == []
+        assert "loss" not in exp._key_types
+        exp._metrics_queue.put.assert_not_called()
+
     def test_append_respects_store_step_false(self):
         exp = _make_exp(store_step=False)
         exp["loss"].append(0.5, step=99)
@@ -152,6 +182,18 @@ class TestAddMetricAppend:
         with pytest.raises(RuntimeError, match="bg error"):
             exp["loss"].append(0.5)
 
+    def test_queue_failure_does_not_mutate_new_series(self):
+        exp = _make_exp()
+        series = exp["loss"]
+        exp._metrics_queue.put.side_effect = RuntimeError("queue failed")
+
+        with pytest.raises(RuntimeError, match="queue failed"):
+            series.append(0.5)
+
+        assert list(series) == []
+        assert series._type is None
+        assert "loss" not in exp._key_types
+
 
 class TestAddMetricExtend:
     """Test experiment['key'].extend(values) for metrics."""
@@ -170,6 +212,23 @@ class TestAddMetricExtend:
         calls = exp._metrics_queue.put.call_args_list
         assert calls[0][0][0]["loss"].values[0].step == 10
         assert calls[1][0][0]["loss"].values[0].step == 11
+
+    def test_extend_start_x_and_start_step_are_mutually_exclusive(self):
+        exp = _make_exp()
+
+        with pytest.raises(ValueError, match="mutually exclusive"):
+            exp["loss"].extend([1.0, 0.5], start_step=10, start_x=0.5)
+
+        exp._metrics_queue.put.assert_not_called()
+
+    def test_extend_rejects_non_finite_start_x_before_mutation(self):
+        exp = _make_exp()
+
+        with pytest.raises(ValueError, match="finite"):
+            exp["loss"].extend([1.0, 0.5], start_x=float("inf"))
+
+        assert list(exp["loss"]) == []
+        exp._metrics_queue.put.assert_not_called()
 
     def test_extend_empty_list(self):
         exp = _make_exp()

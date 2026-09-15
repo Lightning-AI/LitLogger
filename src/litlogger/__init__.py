@@ -18,7 +18,9 @@ For guides and examples, see https://lightning.ai.
 For reference documentation, see https://github.com/Lightning-AI/litlogger.
 """
 
-__version__ = "2026.08.28"
+from importlib.metadata import version
+
+__version__ = version("litlogger")
 
 # Import core classes
 # Import preinit utilities

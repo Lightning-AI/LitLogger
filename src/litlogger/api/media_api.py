@@ -79,7 +79,7 @@ class MediaApi:
         file_path: str,
         name: str,
         media_type: V1MediaType,
-        step: int | None = None,
+        step: float | None = None,
         epoch: int | None = None,
         caption: str | None = None,
     ) -> V1LitLoggerMedia:

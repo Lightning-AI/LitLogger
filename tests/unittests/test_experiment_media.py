@@ -10,9 +10,10 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from lightning_sdk.lightning_cloud.openapi import V1MediaType
+
 from litlogger.experiment import Experiment
-from litlogger.media import File, Image, Model, Text, Video
-from litlogger.primitives import _QueuedWrite
+from litlogger.primitives import File, Image, Model, PrimitiveWrite, Text, Video, WritePlacement
+from litlogger.primitives._utils import series_storage_name, static_storage_name
 from litlogger.series import Series
 from litlogger.session import ExperimentSession
 
@@ -25,18 +26,20 @@ def _session_of(exp):
         return value if value is not None else MagicMock()
 
     metrics_api = part("_metrics_api")
-    return ExperimentSession(
-        client=metrics_api.client,
+    return ExperimentSession._from_components(
+        name=getattr(exp, "name", "exp"),
         metrics_api=metrics_api,
         media_api=part("_media_api"),
         artifacts_api=part("_artifacts_api"),
         teamspace=part("_teamspace"),
+        metrics_store=part("_metrics_store"),
         experiment=exp,
-        queue=part("_metrics_queue"),
+        queue_=part("_metrics_queue"),
         stats=part("_stats"),
+        printer=part("_printer"),
         store_step=bool(getattr(exp, "store_step", True)),
         store_created_at=bool(getattr(exp, "store_created_at", False)),
-        last_steps=getattr(exp, "_resumed_steps", None) or {},
+        last_x=getattr(exp, "_resumed_steps", None) or {},
         background=getattr(exp, "_manager", None),
     )
 
@@ -49,16 +52,14 @@ def _make_exp(**overrides):
     exp._key_types = {}
     exp._metadata_values = {}
     exp._static_files = {}
-    exp._model_lookup_cache = {}
-    exp._missing_model_keys = set()
     exp._manager = MagicMock()
     exp._manager.exception = None
     exp.store_step = True
     exp.store_created_at = False
     exp._metrics_queue = MagicMock()
     # The dict API queues writes; execute them inline the way the worker would.
-    exp._metrics_queue.put.side_effect = (
-        lambda item: item.primitive.log(exp._session) if isinstance(item, _QueuedWrite) else None
+    exp._metrics_queue.put.side_effect = lambda item: (
+        item.execute(exp._session) if isinstance(item, PrimitiveWrite) else None
     )
     exp._media_api = MagicMock()
     exp._teamspace = MagicMock()
@@ -90,12 +91,9 @@ def _make_exp(**overrides):
     exp.update = lambda data: Experiment.update(exp, data)
     exp._ensure_series = lambda key: Experiment._ensure_series(exp, key)
     exp._register_key_type = lambda key, kt: Experiment._register_key_type(exp, key, kt)
-    exp._log_metric_value = lambda key, value, step=None: Experiment._log_metric_value(exp, key, value, step=step)
-    exp._coerce_static_value = lambda key, value: Experiment._coerce_static_value(exp, key, value)
-    exp._coerce_series_value = lambda key, value, index, step: Experiment._coerce_series_value(
-        exp, key, value, index, step
-    )
-    exp._resolve_remote_model = lambda key: Experiment._resolve_remote_model(exp, key)
+    exp._log_metric_value = lambda key, y, x=None: Experiment._log_metric_value(exp, key, y, x=x)
+    exp._validate_file_primitive = lambda value: Experiment._validate_file_primitive(exp, value)
+    exp.resolve_model = lambda key: Experiment.resolve_model(exp, key)
     exp._log_file_series_value = MagicMock()
 
     for k, v in overrides.items():
@@ -118,7 +116,7 @@ class TestAddStaticFile:
 
         assert exp._key_types["dataset"] == "static_file"
         assert exp._static_files["dataset"] is f
-        assert f._log_key == "dataset"
+        assert f.name == "dataset"
         exp._artifacts_api.upload_experiment_file_artifact.assert_called_once()
 
     def test_setitem_image(self):
@@ -128,7 +126,7 @@ class TestAddStaticFile:
 
         assert exp._key_types["photo"] == "static_file"
         assert exp._static_files["photo"] is img
-        assert img._log_key == "photo"
+        assert img.name == "photo"
         exp._media_api.upload_media.assert_called_once()
 
     def test_setitem_text(self):
@@ -138,7 +136,7 @@ class TestAddStaticFile:
 
         assert exp._key_types["notes"] == "static_file"
         assert exp._static_files["notes"] is t
-        assert t._log_key == "notes"
+        assert t.name == "notes"
         exp._media_api.upload_media.assert_called_once()
 
     def test_setitem_video(self):
@@ -148,7 +146,7 @@ class TestAddStaticFile:
 
         assert exp._key_types["preview"] == "static_file"
         assert exp._static_files["preview"] is video
-        assert video._log_key == "preview"
+        assert video.name == "preview"
         exp._media_api.upload_media.assert_called_once()
 
     def test_overwrite_same_type(self):
@@ -165,6 +163,19 @@ class TestAddStaticFile:
         exp.update({"config": File("config.yaml")})
 
         assert exp._key_types["config"] == "static_file"
+
+    def test_queue_failure_does_not_mutate_static_file_state(self):
+        exp = _make_exp()
+        file = File("data.csv")
+        exp._metrics_queue.put.side_effect = RuntimeError("queue failed")
+
+        with pytest.raises(RuntimeError, match="queue failed"):
+            exp["dataset"] = file
+
+        assert "dataset" not in exp._key_types
+        assert "dataset" not in exp._static_files
+        assert file.name == ""
+        assert file._read_barrier is None
 
 
 class TestAddStaticFileBindings:
@@ -183,7 +194,7 @@ class TestAddStaticFileBindings:
 
         with tempfile.NamedTemporaryFile(suffix=".txt") as tmp:
             f = File(tmp.name)
-            Experiment._coerce_static_value(exp, "remote/key", f).log(_session_of(exp))
+            f.log(_session_of(exp), WritePlacement("remote/key"))
 
             assert f.name == "remote/key"
 
@@ -200,7 +211,7 @@ class TestAddStaticFileBindings:
 
         with tempfile.NamedTemporaryFile(suffix=".txt") as tmp:
             f = File(tmp.name)
-            Experiment._coerce_static_value(exp, "remote/key", f).log(_session_of(exp))
+            f.log(_session_of(exp), WritePlacement("remote/key"))
 
             assert f._download_fn is not None
             assert callable(f._download_fn)
@@ -215,7 +226,7 @@ class TestAddStaticFileBindings:
         exp._stats.media_logged = 0
 
         image = Image("local.png")
-        Experiment._coerce_static_value(exp, "photo", image).log(_session_of(exp))
+        image.log(_session_of(exp), WritePlacement("photo"))
 
         exp._media_api.upload_media.assert_called_once()
         _, kwargs = exp._media_api.upload_media.call_args
@@ -234,7 +245,7 @@ class TestAddStaticFileBindings:
         exp._stats.media_logged = 0
 
         video = Video("preview.mp4")
-        Experiment._coerce_static_value(exp, "preview", video).log(_session_of(exp))
+        video.log(_session_of(exp), WritePlacement("preview"))
 
         exp._media_api.upload_media.assert_called_once()
         _, kwargs = exp._media_api.upload_media.call_args
@@ -243,9 +254,21 @@ class TestAddStaticFileBindings:
         assert kwargs["media_type"] == V1MediaType.VIDEO
         assert exp._stats.media_logged == 1
 
+    def test_numeric_static_media_key_uses_explicit_storage_name(self):
+        exp = MagicMock(spec=Experiment)
+        exp._media_api = MagicMock()
+        exp._metrics_store = MagicMock(id="store-1")
+        exp._teamspace = MagicMock()
+        exp._stats = MagicMock(media_logged=0)
+        image = Image("local.png")
+
+        image.log(_session_of(exp), WritePlacement("reports/2024"))
+
+        assert exp._media_api.upload_media.call_args.kwargs["name"] == static_storage_name("reports/2024")
+
     @patch.object(Model, "_log_model", return_value="owner/team/exp-model:latest")
     def test_model_artifact_uses_litmodels(self, mock_log_model):
-        exp = Experiment.__new__(Experiment)
+        exp = MagicMock()
         exp.name = "exp"
         exp._teamspace = MagicMock()
         exp._metrics_store = MagicMock()
@@ -258,7 +281,7 @@ class TestAddStaticFileBindings:
         exp._stats.models_logged = 0
 
         model = Model("model.ckpt")
-        Experiment._coerce_static_value(exp, "checkpoint", model).log(_session_of(exp))
+        model.log(_session_of(exp), WritePlacement("checkpoint"))
 
         mock_log_model.assert_called_once_with(
             experiment_name="exp",
@@ -273,7 +296,7 @@ class TestAddStaticFileBindings:
 
     @patch.object(Model, "_log_model", return_value="owner/team/exp-model-object:latest")
     def test_model_object_uses_litmodels(self, mock_log_model):
-        exp = Experiment.__new__(Experiment)
+        exp = MagicMock()
         exp.name = "exp"
         exp._teamspace = MagicMock()
         exp._metrics_store = MagicMock()
@@ -286,7 +309,7 @@ class TestAddStaticFileBindings:
         exp._stats.models_logged = 0
 
         model = Model(object())
-        Experiment._coerce_static_value(exp, "model-object", model).log(_session_of(exp))
+        model.log(_session_of(exp), WritePlacement("model-object"))
 
         mock_log_model.assert_called_once_with(
             experiment_name="exp",
@@ -365,6 +388,24 @@ class TestAddFileSeries:
         assert len(exp["clips"]) == 1
         assert exp._key_types["clips"] == "file_series"
 
+    def test_queue_failure_does_not_mutate_file_series(self):
+        exp = _make_exp()
+        exp._log_file_series_value = lambda key, value, index, step=None: Experiment._log_file_series_value(
+            exp, key, value, index, step
+        )
+        series = exp["frames"]
+        file = File("frame.png")
+        exp._metrics_queue.put.side_effect = RuntimeError("queue failed")
+
+        with pytest.raises(RuntimeError, match="queue failed"):
+            series.append(file)
+
+        assert list(series) == []
+        assert series._type is None
+        assert "frames" not in exp._key_types
+        assert file.name == ""
+        assert file._read_barrier is None
+
 
 class TestFileSeriesBindings:
     """Test that _log_file_series_value binds name and _download_fn."""
@@ -382,9 +423,9 @@ class TestFileSeriesBindings:
 
         with tempfile.NamedTemporaryFile(suffix=".png") as tmp:
             f = File(tmp.name)
-            Experiment._coerce_series_value(exp, "images", f, 5, None).log(_session_of(exp))
+            f.log(_session_of(exp), WritePlacement("images", index=5))
 
-            assert f.name == "images/5"
+            assert f.name == "images"
 
     def test_binds_download_fn(self):
         exp = MagicMock(spec=Experiment)
@@ -399,7 +440,7 @@ class TestFileSeriesBindings:
 
         with tempfile.NamedTemporaryFile(suffix=".png") as tmp:
             f = File(tmp.name)
-            Experiment._coerce_series_value(exp, "images", f, 0, None).log(_session_of(exp))
+            f.log(_session_of(exp), WritePlacement("images", index=0))
 
             assert f._download_fn is not None
 
@@ -412,21 +453,21 @@ class TestFileSeriesBindings:
         exp._metrics_store.id = "store-1"
         exp._metrics_store.cluster_id = "acc-1"
         exp._artifacts_api = MagicMock()
-        exp._artifacts_api.download_file.side_effect = (
-            lambda teamspace, remote_path, local_path, cloud_account=None: local_path
+        exp._artifacts_api.download_file.side_effect = lambda teamspace, remote_path, local_path, cloud_account=None: (
+            local_path
         )
         exp._stats = MagicMock()
         exp._stats.artifacts_logged = 0
 
         with tempfile.NamedTemporaryFile(suffix=".png") as tmp, tempfile.TemporaryDirectory() as tmpdir:
             f = File(tmp.name)
-            Experiment._coerce_series_value(exp, "frames", f, 0, None).log(_session_of(exp))
+            f.log(_session_of(exp), WritePlacement("frames", index=0))
 
             download_path = os.path.join(tmpdir, "frame.png")
             result = f.save(download_path)
             assert result == download_path
             kwargs = exp._artifacts_api.download_file.call_args.kwargs
-            assert kwargs["remote_path"] == "experiments/exp1/frames/0"
+            assert kwargs["remote_path"] == "experiments/exp1/.litlogger/series/ZnJhbWVz/0"
 
     def test_non_file_series_uses_media_api(self):
         exp = MagicMock(spec=Experiment)
@@ -438,11 +479,11 @@ class TestFileSeriesBindings:
         exp._stats.media_logged = 0
 
         text = Text("hello world")
-        Experiment._coerce_series_value(exp, "logs", text, 2, 7).log(_session_of(exp))
+        text.log(_session_of(exp), WritePlacement("logs", index=2, x=7))
 
         exp._media_api.upload_media.assert_called_once()
         _, kwargs = exp._media_api.upload_media.call_args
-        assert kwargs["name"] == "logs"
+        assert kwargs["name"] == series_storage_name("logs")
         assert kwargs["step"] == 7
         assert kwargs["media_type"] == V1MediaType.TEXT
         assert exp._stats.media_logged == 1
@@ -457,18 +498,18 @@ class TestFileSeriesBindings:
         exp._stats.media_logged = 0
 
         video = Video("preview.mp4")
-        Experiment._coerce_series_value(exp, "clips", video, 2, 7).log(_session_of(exp))
+        video.log(_session_of(exp), WritePlacement("clips", index=2, x=7))
 
         exp._media_api.upload_media.assert_called_once()
         _, kwargs = exp._media_api.upload_media.call_args
-        assert kwargs["name"] == "clips"
+        assert kwargs["name"] == series_storage_name("clips")
         assert kwargs["step"] == 7
         assert kwargs["media_type"] == V1MediaType.VIDEO
         assert exp._stats.media_logged == 1
 
     @patch.object(Model, "_log_model", return_value="owner/team/exp-model-series:latest")
     def test_model_series_uses_series_key_for_remote_binding(self, mock_log_model):
-        exp = Experiment.__new__(Experiment)
+        exp = MagicMock()
         exp.name = "exp"
         exp._teamspace = MagicMock()
         exp._metrics_store = MagicMock()
@@ -481,7 +522,7 @@ class TestFileSeriesBindings:
         exp._stats.models_logged = 0
 
         model = Model("checkpoint.ckpt")
-        Experiment._coerce_series_value(exp, "models", model, 2, None).log(_session_of(exp))
+        model.log(_session_of(exp), WritePlacement("models", index=2))
 
         mock_log_model.assert_called_once_with(
             experiment_name="exp",
@@ -574,9 +615,18 @@ class TestRetrieveFileSeries:
 
 
 class TestRetrieveRemoteModels:
-    """Test lazy model lookup when a key is missing from rebuilt state."""
+    """Test explicit model lookup without network I/O in generic indexing."""
 
-    def test_getitem_resolves_remote_model_from_teamspace_listing(self):
+    def test_getitem_does_not_query_the_registry(self):
+        exp = _make_exp()
+        exp._teamspace.list_models.side_effect = RuntimeError("registry unavailable")
+
+        result = exp["checkpoint"]
+
+        assert isinstance(result, Series)
+        exp._teamspace.list_models.assert_not_called()
+
+    def test_resolve_model_resolves_remote_model_from_teamspace_listing(self):
         exp = _make_exp()
         exp.name = "exp1"
         exp._teamspace = MagicMock()
@@ -593,7 +643,7 @@ class TestRetrieveRemoteModels:
         version_info.metadata = {"litModels": "1.0.0"}
         exp._teamspace.list_model_versions.return_value = [version_info]
 
-        result = exp["models/latest"]
+        result = exp.resolve_model("models/latest")
 
         assert isinstance(result, Model)
         assert result._model_kind == "artifact"
@@ -601,7 +651,7 @@ class TestRetrieveRemoteModels:
         assert exp._key_types["models/latest"] == "static_file"
         assert exp._static_files["models/latest"] is result
 
-    def test_getitem_resolves_remote_model_series_from_multiple_versions(self):
+    def test_resolve_model_resolves_remote_model_series_from_multiple_versions(self):
         exp = _make_exp()
         exp.name = "exp1"
         exp._teamspace = MagicMock()
@@ -624,7 +674,7 @@ class TestRetrieveRemoteModels:
 
         exp._teamspace.list_model_versions.return_value = [version1, version0]
 
-        result = exp["checkpoints"]
+        result = exp.resolve_model("checkpoints")
 
         assert isinstance(result, Series)
         assert result._type == "file"
@@ -720,8 +770,8 @@ class TestRebuildStateFiles:
         art = MagicMock()
         art.path = "results.csv"
         exp._metrics_store.artifacts = [art]
-        exp._artifacts_api.download_file.side_effect = (
-            lambda teamspace, remote_path, local_path, cloud_account=None: local_path
+        exp._artifacts_api.download_file.side_effect = lambda teamspace, remote_path, local_path, cloud_account=None: (
+            local_path
         )
 
         Experiment._rebuild_state(exp)
@@ -807,6 +857,33 @@ class TestRebuildStateFiles:
         assert wrapped.name == "preview"
         assert wrapped._download_fn is not None
 
+    def test_rebuilds_explicit_numeric_static_media_key(self):
+        exp = self._make_rebuild_exp()
+        media = self._media_record(
+            static_storage_name("reports/2024"),
+            "media/report.png",
+            V1MediaType.IMAGE,
+            "media-1",
+        )
+        exp._media_api.list_media.return_value = [media]
+
+        Experiment._rebuild_state(exp)
+
+        assert exp._key_types["reports/2024"] == "static_file"
+        assert isinstance(exp._static_files["reports/2024"], Image)
+
+    def test_rebuilds_explicit_media_series(self):
+        exp = self._make_rebuild_exp()
+        name = series_storage_name("logs")
+        media0 = self._media_record(name, "media/logs-0.txt", V1MediaType.TEXT, "media-0", step=0)
+        media1 = self._media_record(name, "media/logs-1.txt", V1MediaType.TEXT, "media-1", step=1)
+        exp._media_api.list_media.return_value = [media1, media0]
+
+        Experiment._rebuild_state(exp)
+
+        assert exp._key_types["logs"] == "file_series"
+        assert [item.name for item in exp._series["logs"]] == ["logs", "logs"]
+
     def test_rebuilds_media_series_with_wrapper(self):
         exp = self._make_rebuild_exp()
         media0 = self._media_record("logs/0", "media/logs-0.txt", V1MediaType.TEXT, "media-0")
@@ -832,6 +909,28 @@ class TestRebuildStateFiles:
         assert isinstance(exp._series["logs"], Series)
         assert len(exp._series["logs"]) == 2
         assert [item.path for item in exp._series["logs"]] == ["logs", "logs"]
+
+    def test_rebuilds_same_name_media_series_ordered_by_string_step(self):
+        exp = self._make_rebuild_exp()
+        media10 = self._media_record("logs", "media/logs-10.txt", V1MediaType.TEXT, "media-10", step="10")
+        media2 = self._media_record("logs", "media/logs-2.txt", V1MediaType.TEXT, "media-2", step="2")
+        exp._media_api.list_media.return_value = [media10, media2]
+
+        Experiment._rebuild_state(exp)
+
+        exp._series["logs"][0].save("/tmp/out.txt")
+        assert exp._teamspace.download_file.call_args.args[0] == "media/logs-2.txt"
+
+    def test_rebuilds_same_name_media_series_ordered_by_fractional_step(self):
+        exp = self._make_rebuild_exp()
+        media15 = self._media_record("logs", "media/logs-15.txt", V1MediaType.TEXT, "media-15", step="1.5")
+        media05 = self._media_record("logs", "media/logs-05.txt", V1MediaType.TEXT, "media-05", step="0.5")
+        exp._media_api.list_media.return_value = [media15, media05]
+
+        Experiment._rebuild_state(exp)
+
+        exp._series["logs"][0].save("/tmp/out.txt")
+        assert exp._teamspace.download_file.call_args.args[0] == "media/logs-05.txt"
 
 
 # ---------------------------------------------------------------------------

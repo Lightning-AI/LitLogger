@@ -13,8 +13,9 @@ from lightning_sdk.lightning_cloud.openapi import (
     V1PhaseType,
 )
 from lightning_sdk.lightning_cloud.openapi.rest import ApiException
+
 from litlogger.api.metrics_api import MetricsApi
-from litlogger.types import PhaseType
+from litlogger.types import Metrics, MetricValue, PhaseType
 
 
 class TestMetricsApi:
@@ -277,6 +278,20 @@ class TestMetricsApi:
         # Should still call the client
         mock_client.lit_logger_service_append_logger_metrics.assert_called_once()
 
+    def test_append_maps_fractional_x_to_backend_step(self):
+        mock_client = MagicMock()
+        api = MetricsApi(client=mock_client)
+
+        api.append_experiment_metrics(
+            teamspace_id="ts-123",
+            metrics_store_id="ms-456",
+            metrics=[Metrics(name="loss", values=[MetricValue(value=0.5, step=1.5)])],
+        )
+
+        body = mock_client.lit_logger_service_append_logger_metrics.call_args.kwargs["body"]
+        assert body.metrics[0].values[0].value == 0.5
+        assert body.metrics[0].values[0].step == 1.5
+
     def test_update_experiment_metrics_default_params(self):
         """Test updating experiment metrics with default parameters."""
         mock_client = MagicMock()
@@ -368,3 +383,39 @@ class TestGetMetricValues:
         api = MetricsApi(client=mock_client)
 
         assert api.get_metric_values("ts-1", "ms-1") == {}
+
+
+class TestGetLastSteps:
+    """Test restoration of the effective x-coordinate stored as step."""
+
+    @staticmethod
+    def _summary(last_step):
+        summary = MagicMock()
+        summary.last_step = last_step
+        named_summary = MagicMock()
+        named_summary.summaries_per_id = {"ms-1": summary}
+        response = MagicMock()
+        response.summaries_per_name = {"loss": named_summary}
+        return response
+
+    def test_preserves_fractional_coordinate(self):
+        mock_client = MagicMock()
+        mock_client.lit_logger_service_get_logger_metrics_summary.return_value = self._summary("1.5")
+        api = MetricsApi(client=mock_client)
+
+        assert api.get_last_steps("ts-1", "ms-1") == {"loss": 1.5}
+
+    def test_restores_whole_coordinate_as_int(self):
+        mock_client = MagicMock()
+        mock_client.lit_logger_service_get_logger_metrics_summary.return_value = self._summary("2")
+        api = MetricsApi(client=mock_client)
+
+        assert api.get_last_steps("ts-1", "ms-1") == {"loss": 2}
+
+    @pytest.mark.parametrize("last_step", ["nan", "inf", "-inf"])
+    def test_skips_non_finite_coordinate(self, last_step):
+        mock_client = MagicMock()
+        mock_client.lit_logger_service_get_logger_metrics_summary.return_value = self._summary(last_step)
+        api = MetricsApi(client=mock_client)
+
+        assert api.get_last_steps("ts-1", "ms-1") == {}

@@ -10,7 +10,9 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
-from litlogger.media import File, Image, Model, Text, Video, _sanitize_version_for_model_name
+
+from litlogger.primitives import File, Image, Model, Text, Video
+from litlogger.primitives.model import _sanitize_version_for_model_name
 from litlogger.types import MediaType
 
 
@@ -485,7 +487,7 @@ class TestVideoUploadPath:
 
         frames = np.full((2, 3, 4, 5), 0.5, dtype=np.float32)
         video = Video(frames)
-        with patch("litlogger.media.import_module", side_effect=fake_import_module):
+        with patch("litlogger.primitives.video.import_module", side_effect=fake_import_module):
             clip = video._moviepy_clip_from_array(frames, fps=7)
 
         assert isinstance(clip, FakeImageSequenceClip)
@@ -519,7 +521,7 @@ class TestVideoUploadPath:
 
         frames = np.zeros((2, 6, 7), dtype=np.uint8)
         video = Video(frames)
-        with patch("litlogger.media.import_module", side_effect=fake_import_module):
+        with patch("litlogger.primitives.video.import_module", side_effect=fake_import_module):
             video._moviepy_clip_from_array(frames, fps=5)
 
         rendered_frames = captured["frames"]
@@ -702,7 +704,31 @@ class TestModelInit:
     def test_version_sanitization_replaces_colons(self):
         assert _sanitize_version_for_model_name("2024-01-15:12:30:45") == "2024-01-15-12-30-45"
 
-    @patch("litlogger.media.save_model")
+    @patch("litlogger.primitives.model.upload_model")
+    def test_log_model_snapshots_file_artifacts(self, mock_upload_model, tmp_path):
+        source = tmp_path / "checkpoint.ckpt"
+        source.write_bytes(b"model")
+        observed = {}
+
+        def inspect_upload(**kwargs):
+            upload_path = kwargs["model"]
+            observed["path"] = upload_path
+            with open(upload_path, "rb") as fp:
+                observed["content"] = fp.read()
+
+        mock_upload_model.side_effect = inspect_upload
+        teamspace = MagicMock()
+        teamspace.name = "teamspace"
+        teamspace.owner.name = "owner"
+        model = Model(str(source))
+
+        model._log_model(experiment_name="exp-name", teamspace=teamspace)
+
+        assert observed["path"] != str(source)
+        assert observed["content"] == b"model"
+        assert model._temp_path is None
+
+    @patch("litlogger.primitives.model.save_model")
     def test_log_model_creates_missing_staging_dir(self, mock_save_model):
         teamspace = MagicMock()
         teamspace.name = "teamspace"
@@ -720,7 +746,7 @@ class TestModelInit:
             assert mock_save_model.call_args.kwargs["staging_dir"] == staging_dir
             assert mock_save_model.call_args.kwargs["experiment"] is experiment
 
-    @patch("litlogger.media.upload_model")
+    @patch("litlogger.primitives.model.upload_model")
     def test_log_model_uses_exp_name_by_default(self, mock_upload_model):
         teamspace = MagicMock()
         teamspace.name = "teamspace"
@@ -733,7 +759,7 @@ class TestModelInit:
         assert mock_upload_model.call_args.kwargs["name"] == "owner/teamspace/exp-name:v1"
         assert mock_upload_model.call_args.kwargs["experiment"] is experiment
 
-    @patch("litlogger.media.upload_model")
+    @patch("litlogger.primitives.model.upload_model")
     def test_log_model_uses_custom_name_override(self, mock_upload_model):
         teamspace = MagicMock()
         teamspace.name = "teamspace"

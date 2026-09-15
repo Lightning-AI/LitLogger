@@ -27,8 +27,7 @@ from litlogger.experiment import Experiment
 
 # Import SDK functions
 from litlogger.init import finish, get_metadata, init
-from litlogger.media import File, Image, Model, Text, Video
-from litlogger.primitives import Metadata, Metric, Primitive
+from litlogger.primitives import File, Image, Metadata, Metric, Model, Primitive, Text, Video
 from litlogger.session import ExperimentSession
 
 # Global variables

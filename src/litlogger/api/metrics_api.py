@@ -14,6 +14,7 @@
 """API layer for metrics and experiment operations."""
 
 import contextlib
+import math
 import os
 from typing import Any
 
@@ -37,7 +38,7 @@ from litlogger.types import Metrics, MetricValue, PhaseType
 
 # Translation functions between user-facing models and V1 models
 def _to_v1_metric_value(value: MetricValue) -> V1MetricValue:
-    """Convert user-facing MetricValue to V1MetricValue."""
+    """Convert a metric value, mapping its x-coordinate to the backend step field."""
     created_at_str = None
     if value.created_at:
         # Convert datetime to ISO format string with timezone
@@ -45,8 +46,8 @@ def _to_v1_metric_value(value: MetricValue) -> V1MetricValue:
 
     # Build kwargs, excluding None values that the API might not accept
     kwargs: dict[str, float | int | str] = {"value": value.value}
-    if value.step is not None:
-        kwargs["step"] = value.step
+    if value.x is not None:
+        kwargs["step"] = value.x
     if created_at_str is not None:
         kwargs["created_at"] = created_at_str
 
@@ -212,7 +213,7 @@ class MetricsApi:
         self,
         teamspace_id: str,
         metrics_store_id: str,
-        metrics: list[Metrics],
+        metrics: list[Metrics | V1Metrics],
     ) -> None:
         """Append metrics to an existing experiment metrics store.
 
@@ -222,7 +223,7 @@ class MetricsApi:
             metrics: List of metrics to append.
         """
         # Convert user-facing metrics to V1 metrics
-        v1_metrics = [_to_v1_metrics(m) for m in metrics]
+        v1_metrics = [metric if isinstance(metric, V1Metrics) else _to_v1_metrics(metric) for metric in metrics]
 
         self.client.lit_logger_service_append_logger_metrics(
             project_id=teamspace_id,
@@ -292,7 +293,7 @@ class MetricsApi:
             values[name] = [mv.value for mv in metrics_values]
         return values
 
-    def get_last_steps(self, teamspace_id: str, metrics_stream_id: str) -> dict[str, int] | None:
+    def get_last_steps(self, teamspace_id: str, metrics_stream_id: str) -> dict[str, float] | None:
         """Get the last logged step for each metric in the metrics store.
 
         Args:
@@ -310,11 +311,13 @@ class MetricsApi:
         if not response.summaries_per_name:
             return {}
 
-        result = {}
+        result: dict[str, float] = {}
         for name, s in response.summaries_per_name.items():
             last_step = s.summaries_per_id[metrics_stream_id].last_step
             with contextlib.suppress(TypeError, ValueError):
-                result[name] = int(last_step)
+                numeric_step = float(last_step)
+                if math.isfinite(numeric_step):
+                    result[name] = int(numeric_step) if numeric_step.is_integer() else numeric_step
         return result
 
     @staticmethod

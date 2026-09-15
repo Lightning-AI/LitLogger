@@ -96,10 +96,17 @@ experiment = litlogger.init(name=experiment_name)
 
 print(experiment["artifacts/readme"].save(str(workdir / "downloads" / "readme.txt")))
 print(experiment["media/preview"].save(str(workdir / "downloads" / "preview.png")))
-print(experiment[f"{experiment_name}/models/latest"].save(str(workdir / "downloads" / "artifact")))
-print(experiment[f"{experiment_name}/models/object"].load(str(workdir / "downloads" / "model-cache" / "object")))
+artifact_model = experiment.resolve_model(f"{experiment_name}/models/latest")
+assert isinstance(artifact_model, Model)
+print(artifact_model.save(str(workdir / "downloads" / "artifact")))
 
-checkpoint_series = experiment[f"{experiment_name}/checkpoints"]
+object_model = experiment.resolve_model(f"{experiment_name}/models/object")
+assert isinstance(object_model, Model)
+print(object_model.load(str(workdir / "downloads" / "model-cache" / "object")))
+
+checkpoint_series = experiment.resolve_model(f"{experiment_name}/checkpoints")
+assert checkpoint_series is not None
+assert not isinstance(checkpoint_series, Model)
 print("checkpoint series length:", len(checkpoint_series))
 print(checkpoint_series[0].save(str(workdir / "downloads" / "checkpoints" / "checkpoint-0")))
 print(checkpoint_series[1].save(str(workdir / "downloads" / "checkpoints" / "checkpoint-1")))

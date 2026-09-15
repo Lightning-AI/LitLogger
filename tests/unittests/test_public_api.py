@@ -4,6 +4,11 @@
 #
 """Guards for the public API surface."""
 
+import importlib
+import sys
+
+import pytest
+
 import litlogger
 
 #: The exports that existed before the primitives refactor. These must never
@@ -62,6 +67,16 @@ def test_primitive_exports_are_the_real_classes():
     assert litlogger.Metadata is Metadata
     assert litlogger.Primitive is Primitive
     assert litlogger.ExperimentSession is ExperimentSession
+
+
+def test_media_module_is_a_deprecated_compatibility_facade():
+    from litlogger.primitives import File, Image, Model, Text, Video
+
+    sys.modules.pop("litlogger.media", None)
+    with pytest.warns(DeprecationWarning, match="litlogger.media is deprecated"):
+        media = importlib.import_module("litlogger.media")
+
+    assert (media.File, media.Image, media.Model, media.Text, media.Video) == (File, Image, Model, Text, Video)
 
 
 def test_file_hierarchy_satisfies_primitive_protocol():

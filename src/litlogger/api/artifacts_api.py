@@ -82,6 +82,31 @@ class ArtifactsApi:
             body=LitLoggerServiceCreateLoggerArtifactBody(path=remote_path),
         )
 
+    def list_experiment_artifacts(self, teamspace_id: str, metrics_stream_id: str) -> list[Any] | None:
+        """List the artifact records registered on a metrics stream.
+
+        Args:
+            teamspace_id: The teamspace ID.
+            metrics_stream_id: The metrics stream ID.
+
+        Returns:
+            The listed artifact records, or None when the endpoint is
+            unavailable (older SDK client) or the response has no list —
+            callers fall back to state stored on the metrics stream itself.
+        """
+        try:
+            response = self.client.lit_logger_service_list_logger_artifacts(
+                project_id=teamspace_id,
+                metrics_stream_id=metrics_stream_id,
+            )
+        except AttributeError:
+            return None
+
+        artifacts = getattr(response, "logger_artifacts", None)
+        if not isinstance(artifacts, list):
+            return None
+        return artifacts
+
     def download_experiment_file_artifact(
         self,
         teamspace: Teamspace,

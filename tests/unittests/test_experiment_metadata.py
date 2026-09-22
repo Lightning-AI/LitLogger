@@ -8,7 +8,6 @@ import sys
 from unittest.mock import MagicMock
 
 import pytest
-
 from litlogger.experiment import Experiment
 from litlogger.primitives import File, Metadata, PrimitiveWrite
 from litlogger.series import Series

@@ -5,7 +5,6 @@ import queue
 from unittest.mock import Mock
 
 import pytest
-
 from litlogger.primitives import MetricWrite
 from litlogger.session import ExperimentSession
 

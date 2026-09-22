@@ -76,9 +76,9 @@ class BackgroundThreadFixture(_BackgroundThread):
         # Verify all 100 values (10 batches * 10 values each) were sent
         # Each batch sends values [0-9], so we expect 10 copies of [0-9]
         expected_values = [i for _ in range(10) for i in range(10)]
-        assert sorted(all_values) == sorted(expected_values), (
-            f"Expected {len(expected_values)} values, got {len(all_values)}"
-        )
+        assert sorted(all_values) == sorted(
+            expected_values
+        ), f"Expected {len(expected_values)} values, got {len(all_values)}"
 
         self.done_event.set()
 

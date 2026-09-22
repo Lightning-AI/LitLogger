@@ -7,7 +7,6 @@
 from unittest.mock import MagicMock
 
 import pytest
-
 from litlogger.experiment import Experiment
 from litlogger.primitives import File
 from litlogger.series import Series

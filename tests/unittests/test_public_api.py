@@ -7,9 +7,8 @@
 import importlib
 import sys
 
-import pytest
-
 import litlogger
+import pytest
 
 #: The exports that existed before the primitives refactor. These must never
 #: shrink or change; only additive changes are allowed.

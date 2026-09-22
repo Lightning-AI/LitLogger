@@ -10,7 +10,6 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
-
 from litlogger.primitives import File, Image, Model, Text, Video
 from litlogger.primitives.model import _sanitize_version_for_model_name
 from litlogger.types import MediaType

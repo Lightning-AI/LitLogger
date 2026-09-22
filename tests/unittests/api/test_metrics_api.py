@@ -13,7 +13,6 @@ from lightning_sdk.lightning_cloud.openapi import (
     V1PhaseType,
 )
 from lightning_sdk.lightning_cloud.openapi.rest import ApiException
-
 from litlogger.api.metrics_api import MetricsApi
 from litlogger.types import Metrics, MetricValue, PhaseType
 

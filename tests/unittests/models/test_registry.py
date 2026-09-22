@@ -46,19 +46,24 @@ def test_upload_wrong_model_name(mock_sdk_upload, name, in_studio, monkeypatch):
 
 
 @pytest.mark.parametrize(
-    ("model", "model_path", "verbose"),
+    ("model_factory", "model_path", "verbose"),
     [
-        (torch_jit.script(Module()), f"%s{os.path.sep}RecursiveScriptModule.ts", True),
-        (Module(), f"%s{os.path.sep}Module.pth", True),
-        (PickleModel(), f"%s{os.path.sep}PickleModel.pkl", 1),
+        pytest.param(
+            lambda: torch_jit.script(Module()),
+            f"%s{os.path.sep}RecursiveScriptModule.ts",
+            True,
+            marks=pytest.mark.filterwarnings(r"ignore:`torch\.jit\.script` is deprecated\.:FutureWarning"),
+        ),
+        (Module, f"%s{os.path.sep}Module.pth", True),
+        (PickleModel, f"%s{os.path.sep}PickleModel.pkl", 1),
     ],
 )
 @mock.patch("litlogger.models.cloud.sdk_upload_model")
-def test_save_model(mock_upload_model, tmp_path, model, model_path, verbose):
+def test_save_model(mock_upload_model, tmp_path, model_factory, model_path, verbose):
     mock_upload_model.return_value.name = "org-name/teamspace/model-name"
 
     save_model(
-        model=model,
+        model=model_factory(),
         name="org-name/teamspace/model-name",
         cloud_account="cluster_id",
         staging_dir=str(tmp_path),
@@ -103,6 +108,7 @@ def test_load_model_pickle(mock_download_model, tmp_path):
     assert isinstance(model, PickleModel)
 
 
+@pytest.mark.filterwarnings(r"ignore:`torch\.jit\.(script|load)` is deprecated\.:FutureWarning")
 @mock.patch("litlogger.models.cloud.sdk_download_model")
 def test_load_model_torch_jit(mock_download_model, tmp_path):
     model_file = tmp_path / "dummy_model.ts"

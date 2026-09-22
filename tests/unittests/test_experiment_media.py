@@ -10,7 +10,6 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from lightning_sdk.lightning_cloud.openapi import V1MediaType
-
 from litlogger.experiment import Experiment
 from litlogger.primitives import File, Image, Model, PrimitiveWrite, Text, Video, WritePlacement
 from litlogger.primitives._utils import series_storage_name, static_storage_name

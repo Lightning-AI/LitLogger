@@ -3,7 +3,6 @@ from unittest.mock import Mock, patch
 
 import pytest
 from lightning_sdk.lightning_cloud.openapi.rest import ApiException
-
 from litlogger.background import _BackgroundThread
 from litlogger.primitives import MetricWrite, PrimitiveWrite
 from litlogger.session import ExperimentSession

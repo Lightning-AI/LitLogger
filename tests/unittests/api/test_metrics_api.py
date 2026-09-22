@@ -154,6 +154,57 @@ class TestMetricsApi:
             assert call_args[1]["body"].store_step is True
             assert call_args[1]["body"].store_created_at is False
 
+    def test_create_experiment_metrics_passes_job_id_from_env(self):
+        """Test that LIGHTNING_JOB_ID env var is read and passed as job_id."""
+        mock_client = MagicMock()
+        api = MetricsApi(client=mock_client)
+
+        env = {
+            "LIGHTNING_JOB_ID": "job_abc123",
+            "LIGHTNING_CLOUD_PROJECT_ID": "ts-123",
+            "LIGHTNING_CLOUD_SPACE_ID": "cs-456",
+            "LIGHTNING_CLOUD_APP_ID": "job_abc123",
+        }
+
+        with (
+            patch("litlogger.api.metrics_api._create_colors", return_value=("#abc", "#def")),
+            patch("litlogger.api.metrics_api.collect_system_info", return_value={}),
+            patch.dict("os.environ", env, clear=False),
+        ):
+            api.create_experiment_metrics(
+                teamspace_id="ts-123",
+                name="my-experiment",
+            )
+
+            call_args = mock_client.lit_logger_service_create_metrics_stream.call_args
+            assert call_args[1]["body"].job_id == "job_abc123"
+
+    def test_create_experiment_metrics_job_id_survives_cross_project_guard(self):
+        """Test that job_id is still passed even when the cross-project guard clears app_id."""
+        mock_client = MagicMock()
+        api = MetricsApi(client=mock_client)
+
+        env = {
+            "LIGHTNING_JOB_ID": "job_abc123",
+            "LIGHTNING_CLOUD_APP_ID": "job_abc123",
+        }
+
+        with (
+            patch("litlogger.api.metrics_api._create_colors", return_value=("#abc", "#def")),
+            patch("litlogger.api.metrics_api.collect_system_info", return_value={}),
+            patch.dict("os.environ", env, clear=False),
+        ):
+            api.create_experiment_metrics(
+                teamspace_id="ts-123",
+                name="my-experiment",
+            )
+
+            call_args = mock_client.lit_logger_service_create_metrics_stream.call_args
+            body = call_args[1]["body"]
+            assert body.job_id == "job_abc123"
+            assert body.app_id is None
+            assert body.cloudspace_id is None
+
     def test_create_experiment_metrics_with_metadata(self):
         """Test creating experiment metrics with metadata tags."""
         mock_client = MagicMock()

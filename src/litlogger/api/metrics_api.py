@@ -186,6 +186,7 @@ class MetricsApi:
         cloudspace_id = os.getenv("LIGHTNING_CLOUD_SPACE_ID")
         app_id = os.getenv("LIGHTNING_CLOUD_APP_ID")
         work_id = os.getenv("LIGHTNING_CLOUD_WORK_ID")
+        job_id = os.getenv("LIGHTNING_JOB_ID")
 
         # we're logging to a different teamspace than the one we're logged in to, so we cannot cross-reference
         if teamspace_id != os.getenv("LIGHTNING_CLOUD_PROJECT_ID"):
@@ -200,6 +201,7 @@ class MetricsApi:
                 cloudspace_id=cloudspace_id,
                 app_id=app_id,
                 work_id=work_id,
+                job_id=job_id,
                 light_color=light_color or random_light_color,
                 dark_color=dark_color or random_dark_color,
                 tags=tags,

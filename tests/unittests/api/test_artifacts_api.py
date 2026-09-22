@@ -198,3 +198,39 @@ class TestArtifactsApi:
             )
         finally:
             os.unlink(temp_file)
+
+
+class TestListExperimentArtifacts:
+    """Test ArtifactsApi.list_experiment_artifacts."""
+
+    def test_returns_listed_artifacts(self):
+        """The logger_artifacts list is returned as-is."""
+        art = MagicMock()
+        art.path = "results.csv"
+        mock_client = MagicMock()
+        mock_client.lit_logger_service_list_logger_artifacts.return_value.logger_artifacts = [art]
+        api = ArtifactsApi(client=mock_client)
+
+        result = api.list_experiment_artifacts("ts-1", "ms-1")
+
+        mock_client.lit_logger_service_list_logger_artifacts.assert_called_once_with(
+            project_id="ts-1",
+            metrics_stream_id="ms-1",
+        )
+        assert result == [art]
+
+    def test_missing_endpoint_returns_none(self):
+        """Older SDK clients without the endpoint yield None (caller falls back)."""
+        mock_client = MagicMock()
+        mock_client.lit_logger_service_list_logger_artifacts.side_effect = AttributeError("no method")
+        api = ArtifactsApi(client=mock_client)
+
+        assert api.list_experiment_artifacts("ts-1", "ms-1") is None
+
+    def test_non_list_response_returns_none(self):
+        """A response without a list-shaped logger_artifacts yields None."""
+        mock_client = MagicMock()
+        mock_client.lit_logger_service_list_logger_artifacts.return_value.logger_artifacts = None
+        api = ArtifactsApi(client=mock_client)
+
+        assert api.list_experiment_artifacts("ts-1", "ms-1") is None

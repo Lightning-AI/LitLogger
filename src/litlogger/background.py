@@ -11,79 +11,74 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Internal thread utilities for buffering and uploading metrics to Lightning Cloud.
+"""Internal thread utilities for the experiment's write-behind pipeline.
 
-This module defines the _ManagerThread which reads metrics from a multiprocessing queue,
-persists them locally in a compact binary format, and periodically sends them to the backend.
+This module defines the background worker which drains the experiment queue:
+metric batches are merged, rate-limited, and appended in bulk, while queued
+primitives (files, media, models, metadata) are executed one by one.
 """
 
 import queue
-from multiprocessing import Queue
-from threading import Event, Thread
+from threading import Thread
 from time import sleep, time
+from typing import TYPE_CHECKING
 
 from lightning_sdk.lightning_cloud.openapi.rest import ApiException
 
-from litlogger.api.metrics_api import MetricsApi
-from litlogger.types import Metrics, PhaseType
+from litlogger.primitives import MetricWrite, PrimitiveWrite
+from litlogger.types import Metrics, MetricValue, PhaseType
+
+if TYPE_CHECKING:
+    from litlogger.session import ExperimentSession
 
 
 class _BackgroundThread(Thread):
-    """Background worker that drains a queue of metrics and appends them to the metrics store.
+    """Background worker draining the experiment queue.
 
-    This thread batches values, writes a compact binary file for later upload, and pushes
-    data to the Lightning Cloud API with basic rate limiting and batching.
+    Metric values are batched and pushed to the Lightning Cloud API with basic
+    rate limiting; queued primitives perform their own writes via the session.
 
     Args:
-        teamspace_id: Project/teamspace identifier in Lightning Cloud.
-        metrics_store_id: The metrics store id to append to.
-        metrics_api: MetricsApi instance used to communicate with the Lightning Cloud backend.
-        metrics_queue: Source of metrics produced by the Experiment/Logger process.
-        is_ready_event: Event set when the thread finished initialization.
-        stop_event: Event that, when set, requests a graceful shutdown.
-        done_event: Event set once all pending metrics have been flushed and the upload completed.
-        store_step: Whether to persist the step field with each value.
-        store_created_at: Whether to persist the timestamp for each value.
+        session: Owning session containing the queue, APIs, events, and state.
         rate_limiting_interval: Minimum seconds between consecutive network sends.
         max_batch_size: Number of metric values to accumulate before sending a batch.
     """
 
     def __init__(
         self,
-        teamspace_id: str,
-        metrics_store_id: str,
-        metrics_api: MetricsApi,
-        metrics_queue: "Queue[dict[str, Metrics]]",
-        is_ready_event: Event,
-        stop_event: Event,
-        done_event: Event,
-        store_step: bool,
-        store_created_at: bool,
+        session: "ExperimentSession",
         rate_limiting_interval: int = 1,
         max_batch_size: int = 1000,
-        last_steps: dict[str, int] | None = None,
     ) -> None:
         super().__init__(daemon=True)
-        self.teamspace_id = teamspace_id
-        self.metrics_store_id = metrics_store_id
-        self.metrics_api = metrics_api
-        self.metrics_queue = metrics_queue
+        self.session = session
+        self.teamspace_id = str(session.teamspace.id)
+        self.metrics_store_id = str(session.metrics_store.id)
+        self.metrics_api = session.metrics_api
+        self.metrics_queue = session.queue
         self.last_time = time()
         self.rate_limiting_interval = rate_limiting_interval
         self.max_batch_size = max_batch_size
-        self.is_ready_event = is_ready_event
-        self.stop_event = stop_event
-        self.done_event = done_event
+        self.is_ready_event = session.ready_event
+        self.stop_event = session.stop_event
+        self.done_event = session.done_event
         self.metrics: dict[str, Metrics] = {}
         self.exception: Exception | None = None
-        self.last_steps = last_steps or {}
+        self.last_x = session.last_x
 
-        self.store_step = store_step
-        self.store_created_at = store_created_at
+        self.store_step = session.store_step
+        self.store_created_at = session.store_created_at
+
+    @property
+    def last_steps(self) -> dict[str, float]:
+        """Legacy alias for the session-owned last-x mapping."""
+        return self.last_x
 
     def run(self) -> None:
-        self._run()
-        self.done_event.set()
+        try:
+            self._run()
+        finally:
+            self.done_event.set()
 
     def _run(self) -> None:
         """Drive the worker lifecycle: drain queue until stop, flush, upload, and mark stream completed."""
@@ -103,11 +98,10 @@ class _BackgroundThread(Thread):
 
             self.inform_done()
 
-            self.done_event.set()
         except Exception as e:
             print(e)
-            self.done_event.set()
             self.exception = e
+            self.session._record_background_failure(e)
 
     def step(self) -> bool:
         """Read all available metrics from queue, batch them, and send when ready.
@@ -122,23 +116,17 @@ class _BackgroundThread(Thread):
         # Drain all immediately available items from the queue
         while True:
             try:
-                metrics = self.metrics_queue.get(timeout=0.1)
+                item = self.metrics_queue.get(timeout=0.1)
                 read_any = True
                 try:
-                    for name, values in metrics.items():
-                        for value_obj in values.values:
-                            if value_obj.step is None:
-                                value_obj.step = self.last_steps.get(name, -1) + 1
-                                self.last_steps[name] = value_obj.step
-
-                        # Merge with existing metrics for this name
-                        if name in self.metrics:
-                            self.metrics[name].values.extend(values.values)
-                        else:
-                            self.metrics[name] = values
+                    if isinstance(item, PrimitiveWrite):
+                        item.execute(self.session)
+                    elif isinstance(item, MetricWrite):
+                        self._collect_metric(item)
+                    else:
+                        raise TypeError(f"Unsupported queue command: {type(item).__name__}")
                 finally:
-                    if hasattr(self.metrics_queue, "task_done"):
-                        self.metrics_queue.task_done()
+                    self.metrics_queue.task_done()
             except queue.Empty:
                 break
 
@@ -155,6 +143,19 @@ class _BackgroundThread(Thread):
             self._send()
 
         return read_any
+
+    def _collect_metric(self, item: MetricWrite) -> None:
+        """Resolve one coordinate and add its observation to the current batch."""
+        x = self.session.resolve_x(item.key, item.x)
+        value = MetricValue(
+            value=item.y,
+            x=x if self.store_step else None,
+            created_at=item.created_at,
+        )
+        if item.key in self.metrics:
+            self.metrics[item.key].values.append(value)
+        else:
+            self.metrics[item.key] = Metrics(name=item.key, values=[value])
 
     def _send(self) -> None:
         """Persist buffered metrics to disk and send a batch to the backend; clears the buffer."""
@@ -173,6 +174,10 @@ class _BackgroundThread(Thread):
         self.last_time = time()
 
         self.metrics = {}
+
+    def flush_metrics(self) -> None:
+        """Force-send the metric observations currently buffered by the worker."""
+        self._send()
 
     def _send_metrics(self, metrics: list[Metrics]) -> None:
         """Send metrics to the API, chunking into batches of max_batch_size values per request.

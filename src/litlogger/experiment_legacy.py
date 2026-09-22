@@ -23,8 +23,8 @@ from lightning_sdk import Teamspace
 from typing_extensions import Self
 
 from litlogger.api.media_api import MediaApi
-from litlogger.media import File
-from litlogger.media import Model as MediaModel
+from litlogger.primitives import File
+from litlogger.primitives import Model as MediaModel
 from litlogger.series import Series
 from litlogger.types import MediaType
 
@@ -52,10 +52,15 @@ class MetadataValue(str):
         obj._key = key
         return obj
 
-    def append(self, value: object, step: int | None = None) -> None:
+    def append(self, y: object, step: float | None = None, x: float | None = None) -> None:
         raise KeyError(f"Key {self._key!r} is already used as metadata. Cannot append metric values.")
 
-    def extend(self, values: object, start_step: int | None = None) -> None:
+    def extend(
+        self,
+        values: object,
+        start_step: float | None = None,
+        start_x: float | None = None,
+    ) -> None:
         raise KeyError(f"Key {self._key!r} is already used as metadata. Cannot append metric values.")
 
 
@@ -85,7 +90,7 @@ class LegacyExperiment:
             name: str,
             file_path: str,
             media_type: MediaType,
-            step: int | None = None,
+            step: float | None = None,
             epoch: int | None = None,
             caption: str | None = None,
         ) -> None: ...

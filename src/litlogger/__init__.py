@@ -29,6 +29,7 @@ from litlogger.experiment import Experiment
 
 # Import SDK functions
 from litlogger.init import finish, get_metadata, init
+from litlogger.offline import sync
 from litlogger.primitives import File, Image, Metadata, Metric, Model, Primitive, Text, Video
 from litlogger.session import ExperimentSession
 
@@ -62,6 +63,7 @@ __all__ = [
     "get_metadata",
     "init",
     "log_metadata",
+    "sync",
 ]
 
 try:

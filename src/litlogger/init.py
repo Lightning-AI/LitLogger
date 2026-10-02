@@ -34,6 +34,7 @@ def init(
     save_logs: bool = False,
     print_url: bool = True,
     verbose: bool = True,
+    mode: str = "online",
     **kwargs: Any,
 ) -> Experiment:
     """Initialize a litlogger experiment for standalone usage.
@@ -48,6 +49,10 @@ def init(
         save_logs: If True, capture and upload terminal logs.
         print_url: Whether to print the experiment URL and initialization info.
         verbose: If True, print styled console output. Defaults to True.
+        mode: ``"online"`` (default) streams data to the Lightning.ai cloud
+            in real time.  ``"offline"`` writes all data to a local SQLite
+            database with zero network calls.  Use :func:`litlogger.sync` to
+            upload the offline data later.
         **kwargs: Additional keyword arguments. Will be forwarded to the Experiment constructor.
 
     Returns:
@@ -63,6 +68,17 @@ def init(
             litlogger.log({"loss": 1.0 / (i + 1), "accuracy": i / 100.0}, step=i)
 
         litlogger.finalize()
+
+    Example (offline mode)::
+
+        import litlogger
+
+        exp = litlogger.init(name="my-run", mode="offline")  # no network calls
+        exp["loss"].append(0.5)
+        exp.finalize()
+
+        # Later, when you have internet:
+        litlogger.sync("./lightning_logs/my-run")
     """
     root_dir = root_dir or "./lightning_logs"
     name = name or _create_name()
@@ -97,6 +113,7 @@ def init(
         log_dir=log_dir,
         save_logs=save_logs,
         verbose=verbose,
+        mode=mode,
         **kwargs,
     )
 

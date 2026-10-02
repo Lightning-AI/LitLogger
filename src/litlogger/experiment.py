@@ -47,6 +47,7 @@ if TYPE_CHECKING:
     from litlogger.api.media_api import MediaApi
     from litlogger.api.metrics_api import MetricsApi
     from litlogger.background import _BackgroundThread
+    from litlogger.offline import OfflineSession
     from litlogger.primitives import QueueItem
     from litlogger.printer import Printer, RunStats
 
@@ -81,6 +82,7 @@ class Experiment(LegacyExperiment):
         max_batch_size: int = 1000,
         rate_limiting_interval: int = 1,
         verbose: bool = True,
+        mode: str = "online",
     ) -> None:
         """Initialize an experiment for logging to the https://lightning.ai platform.
 
@@ -97,12 +99,18 @@ class Experiment(LegacyExperiment):
             max_batch_size: Number of metric values to batch before uploading. Defaults to 1000.
             rate_limiting_interval: Minimum seconds between uploads. Defaults to 1.
             verbose: If True, print styled console output. Defaults to True.
+            mode: ``"online"`` (default) streams to the cloud; ``"offline"``
+                writes to a local SQLite database with zero network calls.
         """
+        if mode not in ("online", "offline"):
+            raise ValueError(f"mode must be 'online' or 'offline', got {mode!r}")
+
         self.name = name
         self.save_logs = save_logs
         self._finalized = False
         self.store_step = store_step
         self.store_created_at = store_created_at
+        self.mode = mode
 
         # New dict-like API state tracking
         self._key_types: dict[str, str] = {}  # key -> 'metric' | 'file_series' | 'metadata' | 'static_file'
@@ -116,19 +124,38 @@ class Experiment(LegacyExperiment):
             rerun_and_record(self.terminal_logs_path)
             sys.exit(0)
 
-        self._session = ExperimentSession(
-            name=name,
-            teamspace=teamspace,
-            metadata=metadata,
-            light_color=light_color,
-            dark_color=dark_color,
-            store_step=bool(store_step),
-            store_created_at=bool(store_created_at),
-            rate_limiting_interval=rate_limiting_interval,
-            max_batch_size=max_batch_size,
-            verbose=verbose,
-            experiment=self,
-        )
+        if mode == "offline":
+            from litlogger.offline import OfflineSession
+
+            self._offline_session: OfflineSession | None = OfflineSession(
+                name=name,
+                log_dir=log_dir,
+                store_step=bool(store_step),
+                store_created_at=bool(store_created_at),
+                verbose=verbose,
+                experiment=self,
+            )
+            self._session: ExperimentSession | Any = self._offline_session
+
+            # Replay initial metadata through the offline session
+            if metadata:
+                for k, v in metadata.items():
+                    Metadata(k, v).enqueue(self._session)
+        else:
+            self._offline_session = None
+            self._session = ExperimentSession(
+                name=name,
+                teamspace=teamspace,
+                metadata=metadata,
+                light_color=light_color,
+                dark_color=dark_color,
+                store_step=bool(store_step),
+                store_created_at=bool(store_created_at),
+                rate_limiting_interval=rate_limiting_interval,
+                max_batch_size=max_batch_size,
+                verbose=verbose,
+                experiment=self,
+            )
 
         # Rebuild state from existing experiment
         if not self._session.created:
@@ -282,6 +309,12 @@ class Experiment(LegacyExperiment):
     ) -> None:
         # Keyless media upload used by the legacy log_media API: it registers
         # nothing locally, so it stays outside the primitive dispatch.
+        if self.mode == "offline":
+            if self._offline_session is None:
+                raise RuntimeError("Offline session is not initialized.")
+            self._offline_session.write_artifact(name, file_path, kind="media")
+            self._stats.media_logged += 1
+            return
         self._session.media_api.upload_media(
             experiment_id=self._session.metrics_store.id,
             teamspace=self._session.teamspace,
@@ -322,6 +355,10 @@ class Experiment(LegacyExperiment):
 
     def _rebuild_state(self) -> None:
         """Rebuild local state from remote metadata, metrics, artifacts, and media."""
+        if self.mode == "offline":
+            self._rebuild_state_offline()
+            return
+
         # TODO: add BE support for restoring model states as well
         session = self._session
 
@@ -340,6 +377,45 @@ class Experiment(LegacyExperiment):
 
         self._merge_restored(File._restore_all(session, dict(self._key_types)))
         self._merge_restored(File._restore_media(session, dict(self._key_types)))
+
+    def _rebuild_state_offline(self) -> None:
+        """Rebuild local state from the offline SQLite database."""
+        if self._offline_session is None:
+            raise RuntimeError("Cannot rebuild offline state without an offline session.")
+
+        for name, value in self._offline_session.read_all_metadata().items():
+            self._key_types[name] = "metadata"
+            self._metadata_values[name] = value
+
+        for key, entries in self._offline_session.read_all_metrics().items():
+            self._key_types[key] = "metric"
+            series = Series(self, key)
+            series._type = "metric"
+            series._values = [e["value"] for e in entries]
+            self._series[key] = series
+
+        # Restore file artifacts
+        artifacts = self._offline_session.read_all_artifacts()
+        series_entries: dict[str, list[tuple[int, File]]] = {}
+        for art in artifacts:
+            key = art["key"]
+            local_path = art["local_path"]
+            kind = art["kind"]
+            series_index = art["series_index"]
+            wrapped = File(local_path)
+            wrapped.name = key
+            if series_index is not None:
+                if key not in self._key_types or self._key_types[key] == "file_series":
+                    self._key_types[key] = "file_series"
+                    series_entries.setdefault(key, []).append((series_index, wrapped))
+            elif kind == "static":
+                self._key_types[key] = "static_file"
+                self._static_files[key] = wrapped
+        for key, file_entries in series_entries.items():
+            series = Series(self, key)
+            series._type = "file"
+            series._values = [f for _, f in sorted(file_entries, key=lambda item: item[0])]
+            self._series[key] = series
 
     def _merge_restored(self, restored: RestoredFiles) -> None:
         """Register one restore pass's results in local experiment state."""
@@ -433,6 +509,11 @@ class Experiment(LegacyExperiment):
         Returns:
             dict[str, str]: The metadata dictionary with key-value pairs from code-defined tags.
         """
+        if self.mode == "offline":
+            self._session.flush()
+            if self._offline_session is None:
+                raise RuntimeError("Offline session is not initialized.")
+            return self._offline_session.read_all_metadata()
         # Read barrier: queued metadata writes must land before the remote read.
         self._session.flush()
         return Metadata._current_tags(self._session)
@@ -484,9 +565,16 @@ class Experiment(LegacyExperiment):
         self._session.finalize()
 
         if self.save_logs and os.path.exists(self.terminal_logs_path):
-            # Uploaded directly (not registered locally, no stats bump) —
-            # console output is bookkeeping, not experiment data.
-            File(self.terminal_logs_path)._upload_artifact(self._session, remote_path="console_output.txt")
+            if self.mode == "offline":
+                if self._offline_session is None:
+                    raise RuntimeError("Offline session is not initialized.")
+                self._offline_session.write_artifact(
+                    "console_output", self.terminal_logs_path, kind="logs",
+                )
+            else:
+                # Uploaded directly (not registered locally, no stats bump) —
+                # console output is bookkeeping, not experiment data.
+                File(self.terminal_logs_path)._upload_artifact(self._session, remote_path="console_output.txt")
 
         # Only a successfully completed finalization is idempotent. A failed
         # attempt must remain retryable and continue surfacing its exception.
@@ -502,6 +590,13 @@ class Experiment(LegacyExperiment):
 
     def print_url(self) -> None:
         """Print the experiment URL and initialization info with styled output."""
+        if self.mode == "offline":
+            self._printer.log(
+                f"Experiment {self._printer.name(self.name)} initialized in offline mode"
+            )
+            if self._offline_session is not None:
+                self._printer.log(f"   Data stored at: {self._printer.files(self._offline_session._db_path)}")
+            return
         self._printer.experiment_start(
             name=self.name,
             teamspace=self._session.teamspace.name,

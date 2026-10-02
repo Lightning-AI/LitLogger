@@ -33,6 +33,7 @@ PRIMITIVE_EXPORTS = {
     "Metadata",
     "Metric",
     "Primitive",
+    "sync",
 }
 
 #: Present only when the optional PyTorch Lightning integration imports.

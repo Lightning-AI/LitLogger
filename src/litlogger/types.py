@@ -17,6 +17,8 @@ These classes provide a clean interface that is independent of the Lightning SDK
 implementation details (V1* classes).
 """
 
+from __future__ import annotations
+
 import math
 import statistics
 from dataclasses import dataclass, field

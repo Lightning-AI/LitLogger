@@ -4,13 +4,11 @@
 #
 """Tests for querying and filtering metrics."""
 
-import math
 from unittest.mock import MagicMock
 
 import pytest
 from litlogger.experiment import Experiment
 from litlogger.primitives import File, PrimitiveWrite
-from litlogger.series import Series
 from litlogger.session import ExperimentSession
 from litlogger.types import MetricSummary
 

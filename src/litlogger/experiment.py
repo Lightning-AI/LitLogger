@@ -17,11 +17,12 @@ from __future__ import annotations
 
 import atexit
 import contextlib
+import fnmatch
 import os
 import signal
 import sys
 from types import FrameType
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal, overload
 
 from lightning_sdk import Teamspace
 
@@ -38,7 +39,7 @@ from litlogger.primitives import (
 )
 from litlogger.series import Series
 from litlogger.session import ExperimentSession
-from litlogger.types import MediaType
+from litlogger.types import MediaType, MetricSummary
 
 if TYPE_CHECKING:
     import queue
@@ -445,6 +446,97 @@ class Experiment(LegacyExperiment):
             dict[str, Series]: Mapping of metric names to their series of values.
         """
         return {key: series for key, series in self._series.items() if series._type == "metric"}
+
+    @overload
+    def query_metrics(
+        self,
+        *,
+        name: str | None = ...,
+        min_value: float | None = ...,
+        max_value: float | None = ...,
+        start_index: int | None = ...,
+        end_index: int | None = ...,
+        summary_only: Literal[False] = ...,
+    ) -> dict[str, list[float]]: ...
+
+    @overload
+    def query_metrics(
+        self,
+        *,
+        name: str | None = ...,
+        min_value: float | None = ...,
+        max_value: float | None = ...,
+        start_index: int | None = ...,
+        end_index: int | None = ...,
+        summary_only: Literal[True],
+    ) -> dict[str, MetricSummary]: ...
+
+    def query_metrics(
+        self,
+        *,
+        name: str | None = None,
+        min_value: float | None = None,
+        max_value: float | None = None,
+        start_index: int | None = None,
+        end_index: int | None = None,
+        summary_only: bool = False,
+    ) -> dict[str, list[float]] | dict[str, MetricSummary]:
+        """Query and filter metric series by name pattern and value constraints.
+
+        Selects metric series whose names match the optional glob *name*
+        pattern, then applies value and index filters to each matching series.
+
+        Args:
+            name: Optional glob pattern (e.g. ``"train/*"`` or ``"loss"``).
+                When ``None`` all metric series are included.
+            min_value: Keep only values >= this threshold.
+            max_value: Keep only values <= this threshold.
+            start_index: Slice start (0-based, inclusive).
+            end_index: Slice end (0-based, exclusive).
+            summary_only: If True, return :class:`MetricSummary` objects
+                instead of value lists.  Series whose filtered values are
+                empty are silently omitted from the result.
+
+        Returns:
+            When *summary_only* is ``False`` (default): a mapping of metric
+            names to filtered value lists.
+
+            When *summary_only* is ``True``: a mapping of metric names to
+            :class:`~litlogger.types.MetricSummary` objects computed over
+            the *filtered* values.  Series with no values after filtering
+            are omitted.
+        """
+        matched: dict[str, Series] = {}
+        for key, series in self._series.items():
+            if series._type != "metric":
+                continue
+            if name is not None and not fnmatch.fnmatch(key, name):
+                continue
+            matched[key] = series
+
+        if summary_only:
+            result_summaries: dict[str, MetricSummary] = {}
+            for key, series in matched.items():
+                vals = series.filter(
+                    min_value=min_value,
+                    max_value=max_value,
+                    start_index=start_index,
+                    end_index=end_index,
+                )
+                if not vals:
+                    continue
+                result_summaries[key] = MetricSummary.from_values(key, vals)
+            return result_summaries
+
+        result_values: dict[str, list[float]] = {}
+        for key, series in matched.items():
+            result_values[key] = series.filter(
+                min_value=min_value,
+                max_value=max_value,
+                start_index=start_index,
+                end_index=end_index,
+            )
+        return result_values
 
     @property
     def artifacts(self) -> dict[str, File | Series]:

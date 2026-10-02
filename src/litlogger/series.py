@@ -21,6 +21,7 @@ from typing import TYPE_CHECKING, Any, overload
 
 from litlogger.primitives import File
 from litlogger.primitives.metric import resolve_x
+from litlogger.types import MetricSummary
 
 if TYPE_CHECKING:
     from litlogger.experiment import Experiment
@@ -149,3 +150,58 @@ class Series:
         if isinstance(other, Series):
             return self._values == other._values
         return NotImplemented
+
+    # ---- Query & filter helpers ----
+
+    def _assert_metric_type(self, method: str) -> None:
+        """Raise TypeError if this series has been typed as something other than metric."""
+        if self._type is not None and self._type != "metric":
+            raise TypeError(f"{method} is only supported for metric series, not {self._type!r}")
+
+    def summary(self) -> MetricSummary:
+        """Compute aggregate statistics for this series.
+
+        Returns:
+            MetricSummary with count, min, max, mean, std, median, first,
+            and last values.
+
+        Raises:
+            ValueError: If the series is empty.
+            TypeError: If the series is not a metric series.
+        """
+        self._assert_metric_type("summary()")
+        return MetricSummary.from_values(self._key, self._values)
+
+    def filter(
+        self,
+        *,
+        min_value: float | None = None,
+        max_value: float | None = None,
+        start_index: int | None = None,
+        end_index: int | None = None,
+    ) -> list[float]:
+        """Return values matching the given range constraints.
+
+        All constraints are inclusive. Only the values that satisfy every
+        provided constraint are returned.  An untyped (never-appended-to)
+        series is treated like an empty metric series and returns ``[]``.
+
+        Args:
+            min_value: Keep values >= this threshold.
+            max_value: Keep values <= this threshold.
+            start_index: Slice start (0-based, inclusive).
+            end_index: Slice end (0-based, exclusive, like Python slicing).
+
+        Returns:
+            A new list of matching float values.
+
+        Raises:
+            TypeError: If the series is a file series.
+        """
+        self._assert_metric_type("filter()")
+        vals = self._values[start_index:end_index]
+        if min_value is not None:
+            vals = [v for v in vals if v >= min_value]
+        if max_value is not None:
+            vals = [v for v in vals if v <= max_value]
+        return vals

@@ -17,9 +17,14 @@ These classes provide a clean interface that is independent of the Lightning SDK
 implementation details (V1* classes).
 """
 
+from __future__ import annotations
+
+import math
+import statistics
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
+from typing import Any
 
 
 class PhaseType(str, Enum):
@@ -92,3 +97,72 @@ class Metrics:
 
     name: str
     values: list[MetricValue] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
+class MetricSummary:
+    """Aggregate statistics for a metric series.
+
+    Attributes:
+        name: The metric (series) name.
+        count: Number of observations.
+        min: Minimum observed value.
+        max: Maximum observed value.
+        mean: Arithmetic mean of observed values.
+        std: Population standard deviation of observed values.
+        median: Median of observed values.
+        last: Most recently appended value.
+        first: First appended value.
+    """
+
+    name: str
+    count: int
+    min: float
+    max: float
+    mean: float
+    std: float
+    median: float
+    last: float
+    first: float
+
+    @classmethod
+    def from_values(cls, name: str, values: list[float]) -> MetricSummary:
+        """Construct a summary from a name and a non-empty list of values.
+
+        Args:
+            name: The metric (series) name.
+            values: Non-empty list of observed float values.
+
+        Raises:
+            ValueError: If *values* is empty.
+        """
+        if not values:
+            raise ValueError(f"Cannot compute summary for empty values (metric {name!r})")
+        n = len(values)
+        mean = sum(values) / n
+        variance = sum((v - mean) ** 2 for v in values) / n
+        return cls(
+            name=name,
+            count=n,
+            min=min(values),
+            max=max(values),
+            mean=mean,
+            std=math.sqrt(variance),
+            median=statistics.median(values),
+            last=values[-1],
+            first=values[0],
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        """Return a plain dictionary representation of the summary."""
+        return {
+            "name": self.name,
+            "count": self.count,
+            "min": self.min,
+            "max": self.max,
+            "mean": self.mean,
+            "std": self.std,
+            "median": self.median,
+            "last": self.last,
+            "first": self.first,
+        }

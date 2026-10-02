@@ -32,6 +32,7 @@ PRIMITIVE_EXPORTS = {
     "ExperimentSession",
     "Metadata",
     "Metric",
+    "MetricSummary",
     "Primitive",
 }
 

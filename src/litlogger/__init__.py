@@ -31,6 +31,7 @@ from litlogger.experiment import Experiment
 from litlogger.init import finish, get_metadata, init
 from litlogger.primitives import File, Image, Metadata, Metric, Model, Primitive, Text, Video
 from litlogger.session import ExperimentSession
+from litlogger.types import MetricSummary
 
 # Global variables
 experiment: Experiment | None = None
@@ -52,6 +53,7 @@ __all__ = [
     "Image",
     "Metadata",
     "Metric",
+    "MetricSummary",
     "Model",
     "Primitive",
     "Text",

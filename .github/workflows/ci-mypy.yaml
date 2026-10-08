@@ -17,6 +17,7 @@ jobs:
     if: github.event.pull_request.draft == false
     timeout-minutes: 10
     env:
+      UV_EXCLUDE_NEWER: "2 days"
       UV_TORCH_BACKEND: cpu
     strategy:
       fail-fast: false

@@ -50,6 +50,7 @@ jobs:
     timeout-minutes: 15
     env:
       LIGHTNING_CLOUD_URL: https://staging.gridai.dev
+      UV_EXCLUDE_NEWER: "2 days"
       UV_TORCH_BACKEND: cpu
 
     steps:

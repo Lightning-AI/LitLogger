@@ -223,6 +223,12 @@ _DARK_THEME_COLORS = [
 ]
 
 
+assert len(_LIGHT_THEME_COLORS) == len(_DARK_THEME_COLORS), (
+    f"Light and dark theme color lists must have the same length, "
+    f"got {len(_LIGHT_THEME_COLORS)=} and {len(_DARK_THEME_COLORS)=}"
+)
+
+
 def _create_colors(name: str | None = None) -> tuple[str, str]:
     """Return a pair of (light_mode_color, dark_mode_color).
 
